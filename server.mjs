@@ -402,6 +402,21 @@ async function handleApi(req, res, url) {
     return json(res, 200, await currentProfile(url));
   }
 
+  if (path === "/profile" && method === "PUT") {
+    const profile = await currentProfile(url);
+    const body = await readJson(req);
+    const rows = await supabaseFetch(rest("profiles", `?id=eq.${encode(profile.id)}&select=id,full_name,email,role,client_id,job_title,phone,must_change_password,clients(id,name,primary_contact_name,primary_contact_email,billing_email,created_at)`), {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({
+        full_name: body.fullName,
+        job_title: body.jobTitle || null,
+        phone: body.phone || null
+      })
+    });
+    return json(res, 200, rows[0]);
+  }
+
   if (path === "/clients" && method === "GET") {
     const rows = await supabaseFetch(rest("clients", "?select=id,name,primary_contact_name,primary_contact_email,billing_email,status,created_at&order=created_at.desc"));
     return json(res, 200, rows);
@@ -524,10 +539,41 @@ async function handleApi(req, res, url) {
     const closed = url.searchParams.get("closed") === "1";
     const profile = await currentProfile(url);
     const clientFilter = profile.role === "client" ? `&client_id=eq.${encode(profile.client_id)}` : "";
+    let assignmentFilter = "";
+    if (["developer", "reviewer", "assignee"].includes(profile.role)) {
+      const assignments = await supabaseFetch(rest("request_assignments", `?select=request_id&profile_id=eq.${encode(profile.id)}`));
+      const requestIds = (assignments || []).map((assignment) => assignment.request_id).filter(Boolean);
+      if (!requestIds.length) return json(res, 200, []);
+      assignmentFilter = `&id=in.(${requestIds.map(encode).join(",")})`;
+    }
     const query = closed
-      ? `?select=id,request_number,client_id,title,description,service_type,status,closed_at,created_at&status=in.(delivered,closed)${clientFilter}&order=closed_at.desc.nullslast`
-      : `?select=id,request_number,client_id,title,description,service_type,status,due_date,created_at,updated_at,closed_at${clientFilter}&order=updated_at.desc`;
+      ? `?select=id,request_number,client_id,title,description,service_type,status,closed_at,created_at&status=in.(delivered,closed)${clientFilter}${assignmentFilter}&order=closed_at.desc.nullslast`
+      : `?select=id,request_number,client_id,title,description,service_type,status,due_date,created_at,updated_at,closed_at${clientFilter}${assignmentFilter}&order=updated_at.desc`;
     return json(res, 200, await supabaseFetch(rest("requests", query)));
+  }
+
+  if (path === "/request-assignments" && method === "GET") {
+    return json(res, 200, await supabaseFetch(rest("request_assignments", "?select=request_id,profile_id,assigned_by,created_at")));
+  }
+
+  const assignmentMatch = path.match(/^\/request-assignments\/([^/]+)$/);
+  if (assignmentMatch && method === "PUT") {
+    const body = await readJson(req);
+    const requestId = assignmentMatch[1];
+    const profileIds = Array.from(new Set((body.profileIds || []).filter(Boolean)));
+    await supabaseFetch(rest("request_assignments", `?request_id=eq.${encode(requestId)}`), { method: "DELETE" });
+
+    if (profileIds.length) {
+      await supabaseFetch(rest("request_assignments"), {
+        method: "POST",
+        body: JSON.stringify(profileIds.map((profileId) => ({
+          request_id: requestId,
+          profile_id: profileId,
+          assigned_by: body.assignedBy || null
+        })))
+      });
+    }
+    return json(res, 200, { ok: true });
   }
 
   if (path === "/requests" && method === "POST") {
@@ -571,6 +617,7 @@ async function handleApi(req, res, url) {
   }
 
   if (requestMatch && method === "DELETE") {
+    await supabaseFetch(rest("request_assignments", `?request_id=eq.${encode(requestMatch[1])}`), { method: "DELETE" });
     await supabaseFetch(rest("request_messages", `?request_id=eq.${encode(requestMatch[1])}`), { method: "DELETE" });
     await supabaseFetch(rest("requests", `?id=eq.${encode(requestMatch[1])}`), { method: "DELETE" });
     return json(res, 200, { ok: true });

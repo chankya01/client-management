@@ -14,14 +14,17 @@ import {
   loadDeliverables,
   loadMessages,
   loadProfile,
+  loadRequestAssignments,
   loadRequests,
   loadTeam,
   onAuthStateChange,
   sendMagicLink,
   sendPasswordReset,
+  setRequestAssignments,
   signInWithPassword,
   signOut,
   updateClient,
+  updateOwnProfile,
   updatePassword,
   updateRequest,
   updateTeamMember,
@@ -43,6 +46,7 @@ const state = {
   history: [],
   clients: [],
   team: [],
+  requestAssignments: [],
   selectedRequestId: null,
   editingClientId: null,
   editingRequestId: null,
@@ -60,7 +64,7 @@ const clientPages = ["messages", "dashboard", "history", "request", "account"];
 const managementRoles = ["owner", "project_manager"];
 const workRoles = ["developer", "reviewer", "assignee"];
 const internalRoles = [...managementRoles, ...workRoles];
-const workPortalPages = ["admin-dashboard", "admin-requests", "admin-request-detail", "admin-messages", "admin-team"];
+const workPortalPages = ["admin-dashboard", "admin-requests", "admin-request-detail", "admin-messages", "admin-team", "admin-settings"];
 const LOAD_TIMEOUT_MS = 8000;
 const LAST_PAGE_KEY = "requestManagementLastPage";
 const LAST_REQUEST_KEY = "requestManagementLastRequest";
@@ -107,7 +111,7 @@ function isPasswordRecoveryFlow(event) {
 
 function passwordRecoveryPage() {
   if (!isInternal()) return "account";
-  return canAccessManagementPages() ? "admin-settings" : "admin-dashboard";
+  return "admin-settings";
 }
 
 function clearPasswordRecoveryUrl() {
@@ -235,7 +239,7 @@ function showAppError(error, context = "Action failed") {
 function defaultPage() {
   if (state.profile?.must_change_password) {
     if (!isInternal()) return "account";
-    return canAccessManagementPages() ? "admin-settings" : "admin-dashboard";
+    return "admin-settings";
   }
   if (canAccessManagementPages()) return "admin-dashboard";
   return isInternal() ? "admin-requests" : "messages";
@@ -431,7 +435,13 @@ async function boot() {
 
 async function loadPortalData() {
   state.profile = await loadProfile();
-  state.requests = await loadRequests();
+  const loadedRequests = await loadRequests();
+  state.requestAssignments = isInternal() ? await loadRequestAssignments() : [];
+  state.requests = isInternal() && !canAccessManagementPages()
+    ? loadedRequests.filter((request) => state.requestAssignments.some((assignment) => (
+      assignment.request_id === request.id && assignment.profile_id === state.profile.id
+    )))
+    : loadedRequests;
   state.clients = isInternal() ? await loadClients() : [];
   state.team = isInternal() ? await loadTeam() : [];
   const lastRequestId = localStorage.getItem(LAST_REQUEST_KEY);
@@ -613,7 +623,7 @@ function navHtml() {
   return `
     <header class="topbar">
       <div class="topbar-inner">
-        <div class="brand">accessible.org</div>
+        <div class="brand">${APP_NAME}</div>
         <nav class="nav" aria-label="Client portal">
           ${navButton("messages", `Messages ${unreadCount ? `<span class="count">${unreadCount}</span>` : ""}`)}
           ${navButton("dashboard", "Dashboard")}
@@ -638,7 +648,7 @@ function adminNavHtml() {
           ${navButton("admin-requests", "Requests")}
           ${navButton("admin-messages", `Messages ${totalUnreadCount() ? `<span class="count">${totalUnreadCount()}</span>` : ""}`)}
           ${navButton("admin-team", "Team")}
-          ${canManage ? navButton("admin-settings", "Settings") : ""}
+          ${navButton("admin-settings", "Settings")}
           <button class="nav-logout" data-action="logout">Logout</button>
         </nav>
       </div>
@@ -662,6 +672,40 @@ function clientName(clientId) {
   return state.clients.find((client) => client.id === clientId)?.name || organizationName();
 }
 
+function assignableTeamMembers() {
+  return state.team.filter((member) => ["developer", "reviewer", "assignee"].includes(member.role));
+}
+
+function assignedProfileIdsForRequest(requestId) {
+  return state.requestAssignments
+    .filter((assignment) => assignment.request_id === requestId)
+    .map((assignment) => assignment.profile_id);
+}
+
+function assignedPeopleText(requestId) {
+  const assignedIds = new Set(assignedProfileIdsForRequest(requestId));
+  const names = state.team
+    .filter((member) => assignedIds.has(member.id))
+    .map((member) => member.full_name);
+  return names.length ? names.join(", ") : "Not assigned";
+}
+
+function assignmentCheckboxes(selectedIds = []) {
+  const selected = new Set(selectedIds);
+  const people = assignableTeamMembers();
+  return `
+    <fieldset class="field wide checkbox-field assignment-field">
+      <legend>Tagged team members</legend>
+      ${people.map((member) => `
+        <label>
+          <input type="checkbox" name="assignedProfileIds" value="${member.id}" ${selected.has(member.id) ? "checked" : ""} />
+          <span>${escapeHtml(member.full_name)} · ${escapeHtml(roleLabel(member.role))}</span>
+        </label>
+      `).join("") || `<p class="helper">Add developer/reviewer/assignee team members first, then tag them here.</p>`}
+    </fieldset>
+  `;
+}
+
 function displayRequestNumber(request) {
   const storedNumber = String(request?.request_number || "").trim();
   if (/^REQ-\d{1,3}$/i.test(storedNumber)) return storedNumber.toUpperCase();
@@ -675,16 +719,16 @@ function displayRequestNumber(request) {
 
 function adminDashboardPage() {
   const activeRequests = state.requests.filter((request) => !["closed", "cancelled"].includes(request.status));
-  const workspaceLabel = canAccessManagementPages() ? "Admin workspace" : "Work workspace";
+  const workspaceLabel = canAccessManagementPages() ? "Admin Workspace" : "Work Workspace";
   const permissionText = canAccessManagementPages()
     ? "management permissions."
-    : `${roleLabel(state.profile.role)} access. You can view assigned work, messages, and team members.`;
+    : `${roleLabel(state.profile.role)} access.`;
   return `
     <section class="admin-page">
       <div class="admin-heading">
         <div>
           <p class="section-label green">${workspaceLabel}</p>
-          <h1>${APP_NAME} dashboard</h1>
+          <h1>${APP_NAME} Dashboard</h1>
           <p class="subtitle">Signed in as ${escapeHtml(state.profile.full_name)} · ${escapeHtml(permissionText)}</p>
         </div>
         ${canManageClients() ? `<button class="primary" data-page="admin-clients">Add Client</button>` : ""}
@@ -783,6 +827,7 @@ function adminClientsPage() {
 function adminRequestsPage() {
   const editingRequest = state.requests.find((request) => request.id === state.editingRequestId);
   const requestStatus = editingRequest?.status || "new";
+  const selectedAssignees = editingRequest ? assignedProfileIdsForRequest(editingRequest.id) : [];
   return `
     <section class="admin-page">
       <div class="admin-heading">
@@ -800,6 +845,7 @@ function adminRequestsPage() {
             <label class="field"><span>Title</span><input name="title" value="${escapeHtml(editingRequest?.title || "")}" required /></label>
             <label class="field wide"><span>Description</span><input name="description" value="${escapeHtml(editingRequest?.description || "")}" /></label>
             ${serviceCheckboxes(editingRequest?.service_type || "")}
+            ${assignmentCheckboxes(selectedAssignees)}
             <label class="field"><span>Due date</span><input name="dueDate" type="date" value="${editingRequest?.due_date || ""}" /></label>
             <label class="field"><span>Status</span><select name="status">${requestStatusOptions(requestStatus)}</select></label>
             <button class="primary" type="submit">${editingRequest ? "Update Request" : "Create Request"}</button>
@@ -827,13 +873,14 @@ function adminRequestRows(requests, { source = "requests" } = {}) {
         <strong class="request-client-line">${escapeHtml(clientName(request.client_id))}</strong>
         <span class="request-title-line">
           <span class="request-number">${escapeHtml(displayRequestNumber(request))}</span>
-          · due ${formatDate(request.due_date)}
+          · Due ${formatDate(request.due_date)}
+          <span class="request-status-text">${statusLabel(request.status)}</span>
         </span>
+        ${isInternal() ? `<span class="assigned-line">Tagged: ${escapeHtml(assignedPeopleText(request.id))}</span>` : ""}
         ${pendingReadText(request.id)}
       </div>
       <div class="row-actions">
         ${requestUnreadBadge(request.id)}
-        <span class="status-pill">${statusLabel(request.status)}</span>
         ${source === "dashboard" ? `<button class="secondary small-action" data-open-request-button="${request.id}">Open</button>` : ""}
         ${canManageRequests() ? `<button class="secondary small-action" data-edit-request="${request.id}">Edit</button>` : ""}
         ${canDelete() ? `<button class="danger-link" data-delete-request="${request.id}">Delete</button>` : ""}
@@ -866,6 +913,7 @@ function adminRequestDetailPage() {
           <p class="section-label">Request details</p>
           ${accountRow("Client", clientName(request.client_id))}
           ${accountRow("Status", statusLabel(request.status))}
+          ${accountRow("Tagged team", assignedPeopleText(request.id))}
           ${accountRow("Due date", formatDate(request.due_date))}
           ${accountRow("Created", formatDate(request.created_at))}
           <p class="card-note">${escapeHtml(request.description || "No description added.")}</p>
@@ -895,7 +943,7 @@ function adminMessagesPage() {
       <div class="admin-heading">
         <div>
           <p class="section-label green">Internal messages</p>
-          <h1>Request conversation</h1>
+          <h1>Request Conversation</h1>
           <p class="subtitle">${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(request.title)} · ${escapeHtml(clientName(request.client_id))}</p>
         </div>
       </div>
@@ -982,6 +1030,34 @@ function adminTeamPage() {
 }
 
 function adminSettingsPage() {
+  if (!canAccessManagementPages()) {
+    return `
+      <section class="admin-page settings-page">
+        <div class="admin-heading">
+          <div>
+            <p class="section-label green">Personal Settings</p>
+            <h1>Settings</h1>
+            <p class="subtitle">Manage your profile details and password.</p>
+          </div>
+        </div>
+        <div class="settings-grid personal-settings-grid">
+          <section class="card">
+            <p class="section-label">Profile</p>
+            <form class="admin-form profile-form" id="profileForm">
+              <label class="field"><span>Name</span><input name="fullName" value="${escapeHtml(state.profile.full_name || "")}" required /></label>
+              <label class="field"><span>Email</span><input value="${escapeHtml(state.profile.email || "")}" disabled /></label>
+              <label class="field"><span>Role</span><input value="${escapeHtml(roleLabel(state.profile.role))}" disabled /></label>
+              <label class="field"><span>Job title</span><input name="jobTitle" value="${escapeHtml(state.profile.job_title || "")}" /></label>
+              <label class="field wide"><span>Phone</span><input name="phone" value="${escapeHtml(state.profile.phone || "")}" /></label>
+              <button class="primary" type="submit">Update Profile</button>
+            </form>
+          </section>
+          ${passwordSection("Password")}
+        </div>
+      </section>
+    `;
+  }
+
   return `
     <section class="admin-page">
       <div class="admin-heading">
@@ -1131,13 +1207,6 @@ function dashboardPage() {
     <section class="page">
       <h1>${escapeHtml(requestTitle())}: ${statusLabel(state.activeRequest.status)}</h1>
       ${clientRequestSwitcher()}
-
-      <section class="card status-card">
-        <p class="section-label green">${statusLabel(state.activeRequest.status)}</p>
-        <p>${escapeHtml(state.activeRequest.description || "Your request is active. Use messages if you need help or want to share an update.")}</p>
-        <button class="secondary" type="button" data-open-active-request>Open request</button>
-        <button class="primary" id="readyButton">Ready for validation</button>
-      </section>
 
       <section class="card">
         <p class="section-label">Services</p>
@@ -1578,6 +1647,7 @@ function attachEvents() {
       const formData = new FormData(event.currentTarget);
       const values = Object.fromEntries(formData);
       const selectedServices = formData.getAll("services").map(String);
+      const assignedProfileIds = formData.getAll("assignedProfileIds").map(String);
       if (!selectedServices.length) {
         showToast("Select at least one service.");
         return;
@@ -1596,6 +1666,7 @@ function attachEvents() {
 
         if (state.editingRequestId) {
           await updateRequest(state.editingRequestId, requestPayload);
+          await setRequestAssignments(state.editingRequestId, assignedProfileIds, state.profile.id);
           if (previousRequest && previousRequest.service_type !== requestPayload.serviceType) {
             const versionLabel = nextServiceVersionLabel(state.editingRequestId);
             await createMessage(
@@ -1608,6 +1679,7 @@ function attachEvents() {
           showToast("Request updated.");
         } else {
           const createdRequest = await createRequest(requestPayload);
+          await setRequestAssignments(createdRequest.id, assignedProfileIds, state.profile.id);
           await createMessage(
             createdRequest.id,
             state.profile.id,
@@ -1728,6 +1800,22 @@ function attachEvents() {
     });
   });
 
+  const profileForm = document.getElementById("profileForm");
+  if (profileForm) {
+    profileForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const values = Object.fromEntries(new FormData(event.currentTarget));
+      try {
+        const updatedProfile = await updateOwnProfile(values);
+        if (updatedProfile) state.profile = updatedProfile;
+        showToast("Profile updated.");
+        render();
+      } catch (error) {
+        showAppError(error, "Update profile");
+      }
+    });
+  }
+
   const form = document.getElementById("messageForm");
   if (form) {
     form.addEventListener("submit", async (event) => {
@@ -1772,22 +1860,6 @@ function attachEvents() {
         render();
       } catch (error) {
         showAppError(error, "Send internal message");
-      }
-    });
-  }
-
-  const readyButton = document.getElementById("readyButton");
-  if (readyButton) {
-    readyButton.addEventListener("click", async () => {
-      try {
-        await createMessage(state.activeRequest.id, state.profile.id, "We are ready for validation.");
-        await refreshActiveMessages({ markRead: true });
-        state.page = "messages";
-        rememberPage();
-        showToast("Accessible.org has been notified that you are ready for validation.");
-        render();
-      } catch (error) {
-        showAppError(error, "Mark ready for validation");
       }
     });
   }
@@ -1898,6 +1970,7 @@ function resetSessionState() {
   state.history = [];
   state.clients = [];
   state.team = [];
+  state.requestAssignments = [];
   state.selectedRequestId = null;
   state.editingClientId = null;
   state.editingRequestId = null;

@@ -57,11 +57,12 @@ a:hover { text-decoration: underline; }
 }
 
 .topbar-inner {
-  width: min(100%, 740px);
+  width: min(100%, 1120px);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 32px;
+  gap: 56px;
+  padding: 0 40px;
 }
 
 .admin-topbar-inner {
@@ -71,14 +72,16 @@ a:hover { text-decoration: underline; }
 .brand {
   color: var(--green);
   font-weight: 800;
+  font-size: 20px;
   letter-spacing: -0.02em;
   user-select: none;
+  white-space: nowrap;
 }
 
 .nav {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 26px;
 }
 
 .nav button {
@@ -123,6 +126,11 @@ main {
   width: min(100%, 740px);
   margin: 0 auto;
   padding: 52px 32px 88px;
+}
+
+.page > h1,
+.admin-page > h1 {
+  margin-bottom: 18px;
 }
 
 .admin-topbar + main,
@@ -710,7 +718,7 @@ h2 {
   justify-content: space-between;
   align-items: flex-start;
   gap: 28px;
-  margin-bottom: 30px;
+  margin-bottom: 34px;
 }
 
 .metric-grid {
@@ -811,7 +819,24 @@ h2 {
 }
 
 .request-title-line {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
   font-size: 14px;
+}
+
+.request-status-text {
+  color: var(--green);
+  display: inline;
+  font-weight: 800;
+}
+
+.assigned-line {
+  color: var(--muted);
+  display: block;
+  font-size: 13px;
+  margin-top: 4px;
 }
 
 .request-number {
@@ -894,7 +919,7 @@ h2 {
 .message-layout {
   display: grid;
   grid-template-columns: 280px 1fr;
-  gap: 20px;
+  gap: 28px;
   align-items: start;
 }
 
@@ -951,6 +976,18 @@ h2 {
   align-self: end;
   justify-self: start;
   min-height: 42px;
+}
+
+.assignment-field {
+  gap: 12px;
+}
+
+.assignment-field label {
+  background: #fff;
+}
+
+.personal-settings-grid {
+  align-items: start;
 }
 
 .toast {

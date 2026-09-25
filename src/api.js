@@ -479,6 +479,34 @@ export async function loadProfile() {
   return data;
 }
 
+export async function updateOwnProfile({ fullName, jobTitle, phone }) {
+  if (useLocalAdminProxy()) {
+    return localApi("/profile", {
+      method: "PUT",
+      body: JSON.stringify({ fullName, jobTitle, phone })
+    });
+  }
+
+  if (useDemo()) return null;
+
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError) throw userError;
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .update({
+      full_name: fullName,
+      job_title: jobTitle || null,
+      phone: phone || null
+    })
+    .eq("id", userData.user.id)
+    .select("id, full_name, email, role, client_id, job_title, phone, must_change_password, clients(id, name, primary_contact_name, primary_contact_email, billing_email, created_at)")
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
 export async function loadRequests() {
   if (useLocalAdminProxy()) return localApi("/requests");
   if (useDemo()) return demoRequests;
@@ -489,6 +517,21 @@ export async function loadRequests() {
     .order("updated_at", { ascending: false });
 
   if (error) throw error;
+  return data ?? [];
+}
+
+export async function loadRequestAssignments() {
+  if (useDemo()) return [];
+  if (useLocalAdminProxy()) return localApi("/request-assignments");
+
+  const { data, error } = await supabase
+    .from("request_assignments")
+    .select("request_id, profile_id, assigned_by, created_at");
+
+  if (error) {
+    if (String(error.message || "").includes("request_assignments")) return [];
+    throw error;
+  }
   return data ?? [];
 }
 
@@ -688,6 +731,38 @@ export async function createRequest({ clientId, title, description, serviceType,
 
   if (error) throw error;
   return data;
+}
+
+export async function setRequestAssignments(requestId, profileIds = [], assignedBy) {
+  const uniqueProfileIds = Array.from(new Set((profileIds || []).filter(Boolean)));
+
+  if (useDemo()) return;
+  if (useLocalAdminProxy()) {
+    await localApi(`/request-assignments/${requestId}`, {
+      method: "PUT",
+      body: JSON.stringify({ profileIds: uniqueProfileIds, assignedBy })
+    });
+    return;
+  }
+
+  const deleted = await supabase
+    .from("request_assignments")
+    .delete()
+    .eq("request_id", requestId);
+  if (deleted.error) throw deleted.error;
+
+  if (!uniqueProfileIds.length) return;
+
+  const rows = uniqueProfileIds.map((profileId) => ({
+    request_id: requestId,
+    profile_id: profileId,
+    assigned_by: assignedBy
+  }));
+
+  const { error } = await supabase
+    .from("request_assignments")
+    .insert(rows);
+  if (error) throw error;
 }
 
 function nextClientRequestNumber(requests, clientId) {

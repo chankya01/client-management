@@ -34,6 +34,21 @@ as $$
   limit 1
 $$;
 
+create or replace function public.is_assigned_to_request(target_request_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.request_assignments ra
+    where ra.request_id = target_request_id
+      and ra.profile_id = auth.uid()
+  )
+$$;
+
 drop policy if exists "requests_select_policy" on public.requests;
 drop policy if exists "requests_insert_policy" on public.requests;
 drop policy if exists "requests_update_policy" on public.requests;
@@ -44,7 +59,11 @@ on public.requests
 for select
 to authenticated
 using (
-  public.current_app_role() in ('owner', 'project_manager', 'developer', 'reviewer', 'assignee')
+  public.current_app_role() in ('owner', 'project_manager')
+  or (
+    public.current_app_role() in ('developer', 'reviewer', 'assignee')
+    and public.is_assigned_to_request(requests.id)
+  )
   or (
     public.current_app_role() = 'client'
     and public.current_client_id() = requests.client_id
