@@ -48,6 +48,7 @@ const state = {
   editingRequestId: null,
   editingTeamId: null,
   showPasswordForm: false,
+  authView: "signin",
   page: "messages",
   loading: true,
   loadError: "",
@@ -81,6 +82,32 @@ function statusLabel(status) {
   return String(status || "new")
     .replaceAll("_", " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function roleLabel(role) {
+  return statusLabel(role || "team member");
+}
+
+function isPasswordRecoveryFlow(event) {
+  if (event === "PASSWORD_RECOVERY") return true;
+  if (typeof window === "undefined") return false;
+  const params = new URLSearchParams(window.location.search);
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  return params.get("mode") === "password-reset"
+    || params.get("type") === "recovery"
+    || (params.has("code") && params.get("mode") === "password-reset")
+    || hashParams.get("type") === "recovery";
+}
+
+function passwordRecoveryPage() {
+  return isInternal() ? "admin-settings" : "account";
+}
+
+function clearPasswordRecoveryUrl() {
+  if (typeof window === "undefined") return;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("mode") !== "password-reset" && params.get("type") !== "recovery" && !params.has("code") && !window.location.hash.includes("type=recovery")) return;
+  window.history.replaceState({}, document.title, window.location.pathname);
 }
 
 function requestServices(request) {
@@ -308,11 +335,18 @@ async function refreshActiveMessages({ markRead = false } = {}) {
 
 async function boot() {
   const generation = ++loadGeneration;
+  const recoveryFlow = isPasswordRecoveryFlow();
   try {
     state.session = await withTimeout(getSession(), "Session check");
     if (state.session) {
       await withTimeout(loadPortalData(), "Account data loading");
-      state.page = savedPage() || defaultPage();
+      if (recoveryFlow) {
+        state.showPasswordForm = true;
+        state.page = passwordRecoveryPage();
+        clearPasswordRecoveryUrl();
+      } else {
+        state.page = savedPage() || defaultPage();
+      }
     }
   } catch (error) {
     state.loadError = error.message;
@@ -366,6 +400,10 @@ function renderSignIn() {
           <span>Password</span>
           <input name="password" type="password" autocomplete="current-password" required />
         </label>
+        <label class="password-toggle">
+          <input type="checkbox" data-toggle-password="#signinForm [name='password']" />
+          <span>Show password</span>
+        </label>
         <button class="primary" type="submit">Sign in</button>
         <div class="signin-actions">
           <button class="link-button" type="button" data-action="forgot-password">Forgot password?</button>
@@ -382,6 +420,7 @@ function renderSignIn() {
     try {
       const session = await signInWithPassword(values.email, values.password);
       if (session?.user) {
+        state.authView = "signin";
         await completeSignIn(session);
         return;
       }
@@ -391,18 +430,9 @@ function renderSignIn() {
     }
   });
 
-  document.querySelector("[data-action='forgot-password']").addEventListener("click", async () => {
-    const email = document.querySelector("#signinForm [name='email']").value.trim();
-    if (!email) {
-      showToast("Enter your email first, then click Forgot password.");
-      return;
-    }
-    try {
-      await sendPasswordReset(email);
-      showToast("Password reset email sent. Check your inbox.");
-    } catch (error) {
-      showToast(error.message);
-    }
+  document.querySelector("[data-action='forgot-password']").addEventListener("click", () => {
+    state.authView = "forgot-password";
+    render();
   });
 
   document.querySelector("[data-action='magic-link']").addEventListener("click", async () => {
@@ -414,6 +444,7 @@ function renderSignIn() {
     try {
       const session = await sendMagicLink(email);
       if (session?.user) {
+        state.authView = "signin";
         await completeSignIn(session);
         return;
       }
@@ -421,6 +452,43 @@ function renderSignIn() {
     } catch (error) {
       showToast(error.message);
     }
+  });
+}
+
+function renderForgotPassword() {
+  root.innerHTML = `
+    <main class="signin-shell">
+      <form class="signin-card" id="forgotPasswordForm">
+        <div class="brand">${APP_NAME}</div>
+        <h1>Reset password</h1>
+        <p class="helper">Enter your account email address. We’ll send a secure password reset link.</p>
+        <label class="field">
+          <span>Email address</span>
+          <input name="email" type="email" autocomplete="email" required />
+        </label>
+        <button class="primary" type="submit">Send reset link</button>
+        <div class="signin-actions">
+          <button class="link-button" type="button" data-action="back-to-signin">Back to sign in</button>
+        </div>
+      </form>
+      ${toastHtml()}
+    </main>
+  `;
+
+  document.getElementById("forgotPasswordForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const values = Object.fromEntries(new FormData(event.currentTarget));
+    try {
+      await sendPasswordReset(values.email);
+      showToast("Password reset email sent. Check your inbox.");
+    } catch (error) {
+      showToast(error.message);
+    }
+  });
+
+  document.querySelector("[data-action='back-to-signin']").addEventListener("click", () => {
+    state.authView = "signin";
+    render();
   });
 }
 
@@ -656,7 +724,7 @@ function adminRequestRows(requests, { source = "requests" } = {}) {
         <strong class="request-client-line">${escapeHtml(clientName(request.client_id))}</strong>
         <span class="request-title-line">
           <span class="request-number">${escapeHtml(displayRequestNumber(request))}</span>
-          · ${escapeHtml(request.title)} · ${escapeHtml(servicesText(request))} · due ${formatDate(request.due_date)}
+          · due ${formatDate(request.due_date)}
         </span>
         ${pendingReadText(request.id)}
       </div>
@@ -787,9 +855,9 @@ function adminTeamPage() {
         <p class="section-label">People</p>
         ${state.team.map((member) => `
           <div class="admin-row">
-            <div><strong>${escapeHtml(member.full_name)}</strong><span>${escapeHtml(member.email)} · ${escapeHtml(member.job_title || member.role)}</span></div>
+            <div><strong>${escapeHtml(member.full_name)}</strong><span>${escapeHtml(member.email)} · ${escapeHtml(member.job_title || roleLabel(member.role))}</span></div>
             <div class="row-actions">
-              <span class="status-pill">${escapeHtml(member.role)}</span>
+              <span class="status-pill team-role-pill">${escapeHtml(roleLabel(member.role))}</span>
               <button class="secondary small-action" data-edit-team="${member.id}">Edit</button>
               ${canDelete() ? `<button class="danger-link" data-delete-team="${member.id}" ${member.id === state.profile.id ? "disabled" : ""}>Delete</button>` : ""}
             </div>
@@ -1082,6 +1150,10 @@ function passwordSection(title) {
             <span>Confirm password</span>
             <input name="confirmPassword" type="password" autocomplete="new-password" minlength="8" required />
           </label>
+          <label class="password-toggle">
+            <input type="checkbox" data-toggle-password="#passwordForm [name='password'], #passwordForm [name='confirmPassword']" />
+            <span>Show password</span>
+          </label>
           <div class="form-actions">
             <button class="primary" type="submit">Update password</button>
             ${mustChange ? "" : `<button class="secondary" type="button" data-action="cancel-password-change">Cancel</button>`}
@@ -1130,7 +1202,11 @@ function render() {
   }
 
   if (!state.session) {
-    renderSignIn();
+    if (state.authView === "forgot-password") {
+      renderForgotPassword();
+    } else {
+      renderSignIn();
+    }
     return;
   }
 
@@ -1193,6 +1269,14 @@ function attachEvents() {
     button.addEventListener("click", () => {
       state.showPasswordForm = false;
       render();
+    });
+  });
+
+  document.querySelectorAll("[data-toggle-password]").forEach((checkbox) => {
+    checkbox.addEventListener("change", () => {
+      document.querySelectorAll(checkbox.dataset.togglePassword).forEach((input) => {
+        input.type = checkbox.checked ? "text" : "password";
+      });
     });
   });
 
@@ -1660,6 +1744,7 @@ function attachEvents() {
         await updatePassword(values.password);
         state.profile = { ...state.profile, must_change_password: false };
         state.showPasswordForm = false;
+        clearPasswordRecoveryUrl();
         event.currentTarget.reset();
         showToast("Password updated.");
         render();
@@ -1709,6 +1794,7 @@ function resetSessionState() {
   state.editingRequestId = null;
   state.editingTeamId = null;
   state.showPasswordForm = false;
+  state.authView = "signin";
   state.loadError = "";
   state.page = "messages";
 }
@@ -1717,13 +1803,20 @@ onAuthStateChange((session, event) => {
   window.setTimeout(async () => {
     const generation = ++loadGeneration;
     state.session = session;
+    const recoveryFlow = isPasswordRecoveryFlow(event);
     if (session) {
       state.loading = true;
       state.loadError = "";
       render();
       try {
         await withTimeout(loadPortalData(), "Account data loading");
-        state.page = savedPage() || defaultPage();
+        if (recoveryFlow) {
+          state.showPasswordForm = true;
+          state.page = passwordRecoveryPage();
+          clearPasswordRecoveryUrl();
+        } else {
+          state.page = savedPage() || defaultPage();
+        }
       } catch (error) {
         state.loadError = `${event || "Auth"}: ${error.message}`;
       } finally {

@@ -297,6 +297,15 @@ export async function getSession() {
     return demoSession();
   }
 
+  if (typeof window !== "undefined") {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    if (code) {
+      const exchange = await supabase.auth.exchangeCodeForSession(code);
+      if (exchange.error) throw exchange.error;
+    }
+  }
+
   const { data, error } = await supabase.auth.getSession();
   if (error) throw error;
   return data.session;
@@ -351,7 +360,7 @@ export async function sendPasswordReset(email) {
   }
 
   const { error } = await supabase.auth.resetPasswordForEmail(normalizeEmail(email), {
-    redirectTo: window.location.origin
+    redirectTo: `${window.location.origin}?mode=password-reset&type=recovery`
   });
   if (error) throw error;
 }

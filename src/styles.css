@@ -288,6 +288,16 @@ h2 {
   text-decoration: underline;
 }
 
+.password-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+  margin: -4px 0 12px;
+}
+
 .password-form {
   display: grid;
   gap: 16px;
@@ -794,11 +804,22 @@ h2 {
 
 .admin-row .status-pill {
   align-items: center;
+  border: 1px solid var(--green);
+  border-radius: 8px;
   color: var(--green);
   display: inline-flex;
   font-size: 13px;
+  justify-content: center;
   min-height: 30px;
-  padding: 4px 0;
+  min-width: 76px;
+  padding: 4px 10px;
+}
+
+.admin-row .team-role-pill {
+  justify-content: center;
+  min-width: 112px;
+  padding: 4px 10px;
+  text-align: center;
 }
 
 .admin-row .request-number {
