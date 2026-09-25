@@ -401,7 +401,7 @@ function renderSignIn() {
           <input name="password" type="password" autocomplete="current-password" required />
         </label>
         <label class="password-toggle">
-          <input type="checkbox" data-toggle-password="#signinForm [name='password']" />
+          <input type="checkbox" data-toggle-password="password" />
           <span>Show password</span>
         </label>
         <button class="primary" type="submit">Sign in</button>
@@ -466,9 +466,9 @@ function renderForgotPassword() {
           <span>Email address</span>
           <input name="email" type="email" autocomplete="email" required />
         </label>
-        <button class="primary" type="submit">Send reset link</button>
-        <div class="signin-actions">
-          <button class="link-button" type="button" data-action="back-to-signin">Back to sign in</button>
+        <div class="auth-actions">
+          <button class="primary" type="submit">Send reset link</button>
+          <button class="secondary" type="button" data-action="back-to-signin">Back to sign in</button>
         </div>
       </form>
       ${toastHtml()}
@@ -1151,7 +1151,7 @@ function passwordSection(title) {
             <input name="confirmPassword" type="password" autocomplete="new-password" minlength="8" required />
           </label>
           <label class="password-toggle">
-            <input type="checkbox" data-toggle-password="#passwordForm [name='password'], #passwordForm [name='confirmPassword']" />
+            <input type="checkbox" data-toggle-password="password,confirmPassword" />
             <span>Show password</span>
           </label>
           <div class="form-actions">
@@ -1274,7 +1274,14 @@ function attachEvents() {
 
   document.querySelectorAll("[data-toggle-password]").forEach((checkbox) => {
     checkbox.addEventListener("change", () => {
-      document.querySelectorAll(checkbox.dataset.togglePassword).forEach((input) => {
+      const scope = checkbox.closest("form") || document;
+      const fieldNames = String(checkbox.dataset.togglePassword || "")
+        .split(",")
+        .map((name) => name.trim())
+        .filter(Boolean);
+      fieldNames.forEach((name) => {
+        const input = scope.querySelector(`[name="${name}"]`);
+        if (!input) return;
         input.type = checkbox.checked ? "text" : "password";
       });
     });
