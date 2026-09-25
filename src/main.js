@@ -282,10 +282,15 @@ function syncBrowserHistory({ replace = false } = {}) {
 }
 
 function closeServiceDropdownsOnOutsideClick(event) {
-  if (event.target.closest?.("[data-service-dropdown]")) return;
+  if (event.target.closest?.("[data-service-dropdown], [data-assignment-dropdown]")) return;
   document.querySelectorAll("[data-service-menu]").forEach((menu) => {
     menu.hidden = true;
     const toggle = menu.closest("[data-service-dropdown]")?.querySelector("[data-action='toggle-services']");
+    toggle?.setAttribute("aria-expanded", "false");
+  });
+  document.querySelectorAll("[data-assignment-menu]").forEach((menu) => {
+    menu.hidden = true;
+    const toggle = menu.closest("[data-assignment-dropdown]")?.querySelector("[data-action='toggle-assignments']");
     toggle?.setAttribute("aria-expanded", "false");
   });
 }
@@ -694,15 +699,22 @@ function assignmentCheckboxes(selectedIds = []) {
   const selected = new Set(selectedIds);
   const people = assignableTeamMembers();
   return `
-    <fieldset class="field wide checkbox-field assignment-field">
-      <legend>Tagged team members</legend>
-      ${people.map((member) => `
-        <label>
-          <input type="checkbox" name="assignedProfileIds" value="${member.id}" ${selected.has(member.id) ? "checked" : ""} />
-          <span>${escapeHtml(member.full_name)} · ${escapeHtml(roleLabel(member.role))}</span>
-        </label>
-      `).join("") || `<p class="helper">Add developer/reviewer/assignee team members first, then tag them here.</p>`}
-    </fieldset>
+    <div class="field wide service-dropdown assignment-dropdown" data-assignment-dropdown>
+      <span>Tagged Team Members</span>
+      <button class="service-dropdown-toggle" type="button" data-action="toggle-assignments" aria-expanded="false">
+        <span data-assignment-summary>${selected.size ? escapeHtml(people.filter((member) => selected.has(member.id)).map((member) => member.full_name).join(", ")) : "Select team members"}</span>
+        <span aria-hidden="true">▾</span>
+      </button>
+      <div class="service-dropdown-menu" data-assignment-menu hidden>
+        ${people.map((member) => `
+          <label>
+            <input type="checkbox" name="assignedProfileIds" value="${member.id}" data-assignment-name="${escapeHtml(member.full_name)}" ${selected.has(member.id) ? "checked" : ""} />
+            <span>${escapeHtml(member.full_name)} · ${escapeHtml(roleLabel(member.role))}</span>
+          </label>
+        `).join("") || `<p class="helper">Add developer/reviewer/assignee team members first, then tag them here.</p>`}
+        <button class="secondary small-action" type="button" data-action="close-assignments">Done</button>
+      </div>
+    </div>
   `;
 }
 
@@ -848,8 +860,10 @@ function adminRequestsPage() {
             ${assignmentCheckboxes(selectedAssignees)}
             <label class="field"><span>Due date</span><input name="dueDate" type="date" value="${editingRequest?.due_date || ""}" /></label>
             <label class="field"><span>Status</span><select name="status">${requestStatusOptions(requestStatus)}</select></label>
-            <button class="primary" type="submit">${editingRequest ? "Update Request" : "Create Request"}</button>
-            ${editingRequest ? `<button class="secondary" type="button" data-cancel-request-edit>Cancel Edit</button>` : ""}
+            <div class="form-actions wide request-form-actions">
+              <button class="primary" type="submit">${editingRequest ? "Update Request" : "Create Request"}</button>
+              ${editingRequest ? `<button class="secondary" type="button" data-cancel-request-edit>Cancel Edit</button>` : ""}
+            </div>
           </form>
         </section>
       ` : `
@@ -1490,6 +1504,43 @@ function attachEvents() {
       const summary = dropdown?.querySelector("[data-service-summary]");
       const selected = Array.from(dropdown?.querySelectorAll("input[name='services']:checked") || []).map((input) => input.value);
       if (summary) summary.textContent = selected.length ? selected.join(", ") : "Select services";
+    });
+  });
+
+  document.querySelectorAll("[data-action='toggle-assignments']").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const dropdown = button.closest("[data-assignment-dropdown]");
+      const menu = dropdown?.querySelector("[data-assignment-menu]");
+      if (menu) {
+        menu.hidden = !menu.hidden;
+        button.setAttribute("aria-expanded", String(!menu.hidden));
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-action='close-assignments']").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const dropdown = button.closest("[data-assignment-dropdown]");
+      const menu = dropdown?.querySelector("[data-assignment-menu]");
+      const toggle = dropdown?.querySelector("[data-action='toggle-assignments']");
+      if (menu) {
+        menu.hidden = true;
+        toggle?.setAttribute("aria-expanded", "false");
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-assignment-dropdown] input[name='assignedProfileIds']").forEach((checkbox) => {
+    checkbox.addEventListener("change", () => {
+      const dropdown = checkbox.closest("[data-assignment-dropdown]");
+      const summary = dropdown?.querySelector("[data-assignment-summary]");
+      const selected = Array.from(dropdown?.querySelectorAll("input[name='assignedProfileIds']:checked") || [])
+        .map((input) => input.dataset.assignmentName || input.value);
+      if (summary) summary.textContent = selected.length ? selected.join(", ") : "Select team members";
     });
   });
 

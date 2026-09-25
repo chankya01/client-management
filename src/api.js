@@ -756,6 +756,7 @@ export async function setRequestAssignments(requestId, profileIds = [], assigned
   const rows = uniqueProfileIds.map((profileId) => ({
     request_id: requestId,
     profile_id: profileId,
+    user_id: profileId,
     assigned_by: assignedBy
   }));
 

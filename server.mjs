@@ -569,6 +569,7 @@ async function handleApi(req, res, url) {
         body: JSON.stringify(profileIds.map((profileId) => ({
           request_id: requestId,
           profile_id: profileId,
+          user_id: profileId,
           assigned_by: body.assignedBy || null
         })))
       });

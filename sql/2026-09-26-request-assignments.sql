@@ -18,6 +18,9 @@ alter table public.request_assignments
   add column if not exists profile_id uuid references public.profiles(id) on delete cascade;
 
 alter table public.request_assignments
+  add column if not exists user_id uuid;
+
+alter table public.request_assignments
   add column if not exists assigned_by uuid references public.profiles(id) on delete set null;
 
 alter table public.request_assignments
@@ -34,6 +37,8 @@ begin
       and column_name = 'user_id'
   ) then
     execute 'update public.request_assignments set profile_id = user_id where profile_id is null and user_id is not null';
+    execute 'update public.request_assignments set user_id = profile_id where user_id is null and profile_id is not null';
+    execute 'alter table public.request_assignments alter column user_id drop not null';
   end if;
 
   if exists (
@@ -49,6 +54,9 @@ end $$;
 
 create index if not exists request_assignments_profile_id_idx
 on public.request_assignments(profile_id);
+
+create index if not exists request_assignments_user_id_idx
+on public.request_assignments(user_id);
 
 create unique index if not exists request_assignments_request_profile_uidx
 on public.request_assignments(request_id, profile_id)

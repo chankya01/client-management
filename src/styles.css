@@ -6,8 +6,8 @@
   --green: #4b166e;
   --text: #050505;
   --muted: #4b5563;
-  --line: #b9c4d6;
-  --line-strong: #94a3b8;
+  --line: #9aa8bd;
+  --line-strong: #64748b;
   --panel: #f6f8fc;
   --surface: #ffffff;
   --focus: #a7c2ff;
@@ -60,8 +60,8 @@ a:hover { text-decoration: underline; }
   width: min(100%, 1120px);
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 56px;
+  justify-content: center;
+  gap: 72px;
   padding: 0 40px;
 }
 
@@ -158,8 +158,8 @@ h2 {
 }
 
 .heading-accent {
-  border-left: 3px solid var(--blue);
-  padding-left: 16px;
+  border-left: 0;
+  padding-left: 0;
 }
 
 .date-row {
@@ -185,7 +185,7 @@ h2 {
 
 .message-card,
 .card {
-  border: 1.5px solid var(--line);
+  border: 2px solid var(--line);
   border-radius: 14px;
   background: #fff;
   box-shadow: var(--shadow-soft);
@@ -230,7 +230,7 @@ h2 {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  border: 1.5px solid var(--line);
+  border: 2px solid var(--line);
   border-radius: 10px;
   background: #fff;
   padding: 12px;
@@ -340,6 +340,18 @@ h2 {
   align-items: center;
 }
 
+.request-form-actions {
+  align-items: center;
+  gap: 16px;
+}
+
+.request-form-actions .primary,
+.request-form-actions .secondary {
+  height: 48px;
+  justify-content: center;
+  min-width: 170px;
+}
+
 .request-switcher {
   display: grid;
   gap: 10px;
@@ -387,7 +399,7 @@ h2 {
   display: flex;
   align-items: center;
   gap: 10px;
-  border: 1px solid var(--line);
+  border: 2px solid var(--line);
   border-radius: 10px;
   padding: 10px 12px;
 }
@@ -409,7 +421,7 @@ h2 {
 
 .service-dropdown-toggle {
   width: 100%;
-  border: 1px solid var(--line);
+  border: 2px solid var(--line);
   border-radius: 10px;
   background: #fff;
   color: var(--text);
@@ -425,7 +437,7 @@ h2 {
   left: 0;
   right: 0;
   top: calc(100% - 18px);
-  border: 1px solid var(--line);
+  border: 2px solid var(--line);
   border-radius: 12px;
   background: #fff;
   box-shadow: 0 18px 40px rgba(15, 23, 42, 0.16);
@@ -492,7 +504,7 @@ h2 {
   width: 100%;
   min-height: 92px;
   resize: vertical;
-  border: 1px solid var(--line);
+  border: 2px solid var(--line);
   border-radius: 8px;
   padding: 12px;
   background: #fff;
@@ -659,7 +671,7 @@ h2 {
 .signin-card {
   width: min(100%, 440px);
   background: #fff;
-  border: 1.5px solid var(--line);
+  border: 2px solid var(--line);
   border-radius: 16px;
   padding: 34px;
   box-shadow: var(--shadow-soft);
@@ -683,16 +695,18 @@ h2 {
 }
 
 .field input {
-  border: 1.5px solid var(--line);
+  border: 2px solid var(--line);
   border-radius: 10px;
-  min-height: 46px;
+  height: 48px;
+  min-height: 48px;
   padding: 10px 12px;
 }
 
 .field select {
-  border: 1.5px solid var(--line);
+  border: 2px solid var(--line);
   border-radius: 10px;
-  min-height: 46px;
+  height: 48px;
+  min-height: 48px;
   padding: 10px 12px;
   background: #fff;
 }
@@ -751,7 +765,7 @@ h2 {
 }
 
 .status-segment {
-  border: 1px solid var(--line);
+  border: 2px solid var(--line);
   border-radius: 8px;
   padding: 12px;
   display: flex;
@@ -787,7 +801,7 @@ h2 {
 }
 
 .admin-row {
-  border-top: 1.5px solid var(--line);
+  border-top: 2px solid var(--line);
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 24px;
@@ -931,7 +945,7 @@ h2 {
 .message-request-list button {
   width: 100%;
   border: 0;
-  border-top: 1px solid var(--line);
+  border-top: 2px solid var(--line);
   background: transparent;
   text-align: left;
   padding: 12px 0;
@@ -976,6 +990,12 @@ h2 {
   align-self: end;
   justify-self: start;
   min-height: 42px;
+}
+
+.admin-form .request-form-actions .primary,
+.admin-form .request-form-actions .secondary {
+  align-self: auto;
+  justify-self: start;
 }
 
 .assignment-field {
