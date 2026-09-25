@@ -85,6 +85,7 @@ function statusLabel(status) {
 }
 
 function roleLabel(role) {
+  if (role === "owner") return "Admin";
   return statusLabel(role || "team member");
 }
 
@@ -225,6 +226,21 @@ function rememberPage() {
   }
 }
 
+function currentRoute() {
+  const params = new URLSearchParams();
+  if (state.page) params.set("page", state.page);
+  if (state.activeRequest?.id) params.set("request", state.activeRequest.id);
+  return `${window.location.pathname}?${params.toString()}`;
+}
+
+function syncBrowserHistory({ replace = false } = {}) {
+  if (typeof window === "undefined" || !pageIsAllowed(state.page)) return;
+  const route = currentRoute();
+  if (window.location.pathname + window.location.search === route) return;
+  const method = replace ? "replaceState" : "pushState";
+  window.history[method]({ page: state.page, requestId: state.activeRequest?.id || null }, "", route);
+}
+
 function closeServiceDropdownsOnOutsideClick(event) {
   if (event.target.closest?.("[data-service-dropdown]")) return;
   document.querySelectorAll("[data-service-menu]").forEach((menu) => {
@@ -325,6 +341,19 @@ async function setActiveRequest(requestId, { page, markRead = false } = {}) {
   }
 }
 
+async function goToPage(page, { requestId, replace = false, scroll = true } = {}) {
+  state.page = page;
+  rememberPage();
+  if (requestId) {
+    await setActiveRequest(requestId, { page, markRead: page === "messages" });
+  } else if (page === "messages" && state.activeRequest) {
+    await setActiveRequest(state.activeRequest.id, { markRead: true });
+  }
+  syncBrowserHistory({ replace });
+  render();
+  if (scroll) window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
 async function refreshActiveMessages({ markRead = false } = {}) {
   if (!state.activeRequest) return;
   state.messages = await loadMessages(state.activeRequest.id);
@@ -340,13 +369,20 @@ async function boot() {
     state.session = await withTimeout(getSession(), "Session check");
     if (state.session) {
       await withTimeout(loadPortalData(), "Account data loading");
+      const params = new URLSearchParams(window.location.search);
+      const routePage = params.get("page");
+      const routeRequestId = params.get("request");
       if (recoveryFlow) {
         state.showPasswordForm = true;
         state.page = passwordRecoveryPage();
         clearPasswordRecoveryUrl();
+      } else if (routePage && pageIsAllowed(routePage)) {
+        state.page = routePage;
+        if (routeRequestId) await setActiveRequest(routeRequestId, { page: routePage });
       } else {
         state.page = savedPage() || defaultPage();
       }
+      syncBrowserHistory({ replace: true });
     }
   } catch (error) {
     state.loadError = error.message;
@@ -543,7 +579,7 @@ function adminNavHtml() {
     <header class="topbar admin-topbar">
       <div class="topbar-inner admin-topbar-inner">
         <div class="brand">${APP_NAME}</div>
-        <nav class="nav" aria-label="Owner portal">
+        <nav class="nav" aria-label="Admin portal">
           ${navButton("admin-dashboard", "Dashboard")}
           ${navButton("admin-clients", "Clients")}
           ${navButton("admin-requests", "Requests")}
@@ -590,9 +626,9 @@ function adminDashboardPage() {
     <section class="admin-page">
       <div class="admin-heading">
         <div>
-          <p class="section-label green">Owner workspace</p>
+          <p class="section-label green">Admin workspace</p>
           <h1>${APP_NAME} dashboard</h1>
-          <p class="subtitle">Signed in as ${escapeHtml(state.profile.full_name)} · full owner permissions.</p>
+          <p class="subtitle">Signed in as ${escapeHtml(state.profile.full_name)} · full admin permissions.</p>
         </div>
         <button class="primary" data-page="admin-clients">Add Client</button>
       </div>
@@ -659,10 +695,10 @@ function adminClientsPage() {
       <section class="card">
         <p class="section-label">${editingClient ? "Edit Client" : "Add Client"}</p>
         <form class="admin-form" id="clientForm">
-          <label class="field"><span>Organization</span><input name="name" value="${escapeHtml(editingClient?.name || "Northwind Health")}" required /></label>
-          <label class="field"><span>Primary contact</span><input name="contactName" value="${escapeHtml(editingClient?.primary_contact_name || "Dana Whitfield")}" required /></label>
-          <label class="field"><span>Client email</span><input name="email" type="email" value="${escapeHtml(editingClient?.primary_contact_email || "dana.whitfield@northwindhealth.com")}" required /></label>
-          <label class="field"><span>Billing email</span><input name="billingEmail" type="email" value="${escapeHtml(editingClient?.billing_email || "ap@northwindhealth.com")}" /></label>
+          <label class="field"><span>Organization</span><input name="name" value="${escapeHtml(editingClient?.name || "")}" required /></label>
+          <label class="field"><span>Primary contact</span><input name="contactName" value="${escapeHtml(editingClient?.primary_contact_name || "")}" required /></label>
+          <label class="field"><span>Client email</span><input name="email" type="email" value="${escapeHtml(editingClient?.primary_contact_email || "")}" required /></label>
+          <label class="field"><span>Billing email</span><input name="billingEmail" type="email" value="${escapeHtml(editingClient?.billing_email || "")}" /></label>
           <label class="field"><span>Status</span><select name="status">${clientStatusOptions(clientStatus)}</select></label>
           <button class="primary" type="submit">${editingClient ? "Update Client" : "Create Client"}</button>
           ${editingClient ? `<button class="secondary" type="button" data-cancel-client-edit>Cancel Edit</button>` : ""}
@@ -702,9 +738,9 @@ function adminRequestsPage() {
         <p class="section-label">${editingRequest ? "Edit Request" : "Create Request"}</p>
         <form class="admin-form" id="requestForm">
           <label class="field"><span>Client</span><select name="clientId" required>${state.clients.map((client) => `<option value="${client.id}" ${editingRequest?.client_id === client.id ? "selected" : ""}>${escapeHtml(client.name)}</option>`).join("")}</select></label>
-          <label class="field"><span>Title</span><input name="title" value="${escapeHtml(editingRequest?.title || "WCAG Audit + VPAT")}" required /></label>
-          <label class="field wide"><span>Description</span><input name="description" value="${escapeHtml(editingRequest?.description || "Client request created by owner.")}" /></label>
-          ${serviceCheckboxes(editingRequest?.service_type || "WCAG 2.1 AA Audit")}
+          <label class="field"><span>Title</span><input name="title" value="${escapeHtml(editingRequest?.title || "")}" required /></label>
+          <label class="field wide"><span>Description</span><input name="description" value="${escapeHtml(editingRequest?.description || "")}" /></label>
+          ${serviceCheckboxes(editingRequest?.service_type || "")}
           <label class="field"><span>Due date</span><input name="dueDate" type="date" value="${editingRequest?.due_date || ""}" /></label>
           <label class="field"><span>Status</span><select name="status">${requestStatusOptions(requestStatus)}</select></label>
           <button class="primary" type="submit">${editingRequest ? "Update Request" : "Create Request"}</button>
@@ -831,7 +867,7 @@ function adminTeamPage() {
   const editingMember = state.team.find((member) => member.id === state.editingTeamId);
   const formTitle = editingMember ? "Update team member" : "Add team member";
   const submitText = editingMember ? "Update team member" : "Add team member";
-  const roleValue = editingMember?.role || "developer";
+  const roleValue = editingMember?.role || "";
   return `
     <section class="admin-page">
       <h1>Team</h1>
@@ -840,15 +876,16 @@ function adminTeamPage() {
         <p class="section-label">${formTitle}</p>
         <p class="helper">This creates or updates the Supabase Auth user and profile through the local/server backend. Share the configured temporary password, then ask the user to change it after first login.</p>
         <form class="admin-form" id="teamForm">
-          <label class="field"><span>Full name</span><input name="fullName" value="${escapeHtml(editingMember?.full_name || "John Davis")}" required /></label>
-          <label class="field"><span>Email</span><input name="email" type="email" value="${escapeHtml(editingMember?.email || "john@accessible.org")}" required /></label>
+          <label class="field"><span>Full name</span><input name="fullName" value="${escapeHtml(editingMember?.full_name || "")}" required /></label>
+          <label class="field"><span>Email</span><input name="email" type="email" value="${escapeHtml(editingMember?.email || "")}" required /></label>
           <label class="field"><span>Role</span><select name="role">
+            <option value="" ${roleValue ? "" : "selected"} disabled>Select role</option>
             <option value="developer" ${roleValue === "developer" ? "selected" : ""}>Developer</option>
             <option value="reviewer" ${roleValue === "reviewer" ? "selected" : ""}>Reviewer</option>
             <option value="project_manager" ${roleValue === "project_manager" ? "selected" : ""}>Project manager</option>
-            <option value="owner" ${roleValue === "owner" ? "selected" : ""}>Owner</option>
+            <option value="owner" ${roleValue === "owner" ? "selected" : ""}>Admin</option>
           </select></label>
-          <label class="field"><span>Job title</span><input name="jobTitle" value="${escapeHtml(editingMember?.job_title || "Accessibility Developer")}" /></label>
+          <label class="field"><span>Job title</span><input name="jobTitle" value="${escapeHtml(editingMember?.job_title || "")}" /></label>
           <button class="primary" type="submit">${submitText}</button>
           ${editingMember ? `<button class="secondary" type="button" data-cancel-team-edit>Cancel edit</button>` : ""}
         </form>
@@ -885,7 +922,7 @@ function adminSettingsPage() {
         <section class="card">
           <p class="section-label">Organization profile</p>
           ${accountRow("Workspace name", APP_NAME)}
-          ${accountRow("Default owner", state.profile.full_name)}
+          ${accountRow("Default admin", state.profile.full_name)}
           ${accountRow("Default timezone", "Asia/Kolkata")}
           ${accountRow("Support email", "support@accessible.org")}
         </section>
@@ -895,11 +932,11 @@ function adminSettingsPage() {
           <div class="list-row">New request -> Scoping -> Agreement -> In progress -> Validation -> Closed</div>
           <div class="list-row">Default request prefix: REQ</div>
           <div class="list-row">Next request number: ${1000 + state.requests.length + 1}</div>
-          <div class="list-row">Auto-assign new requests to workspace owner</div>
+          <div class="list-row">Auto-assign new requests to workspace admin</div>
         </section>
         <section class="card">
           <p class="section-label">Permission policy</p>
-          <div class="list-row">Owner: full create, update, delete, and settings access</div>
+          <div class="list-row">Admin: full create, update, delete, and settings access</div>
           <div class="list-row">Project manager: manage clients, requests, team, and conversations</div>
           <div class="list-row">Developer/reviewer: view assigned work and participate in request chat</div>
           <div class="list-row">Client: messages, attachments, dashboard, history, and account only</div>
@@ -908,7 +945,7 @@ function adminSettingsPage() {
           <p class="section-label">Notifications</p>
           <div class="list-row">Email all request participants when a new message is posted</div>
           <div class="list-row">Email assigned team when request status changes</div>
-          <div class="list-row">Notify owner when deliverables are uploaded</div>
+          <div class="list-row">Notify admin when deliverables are uploaded</div>
           <div class="list-row">Send client reminder if awaiting response for 3 business days</div>
         </section>
         <section class="card">
@@ -1335,30 +1372,20 @@ function attachEvents() {
 
   document.querySelectorAll("[data-page]").forEach((button) => {
     button.addEventListener("click", async () => {
-      state.page = button.dataset.page;
-      rememberPage();
-      if (state.page === "messages" && state.activeRequest) {
-        await setActiveRequest(state.activeRequest.id, { markRead: true });
-      }
-      render();
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      await goToPage(button.dataset.page);
     });
   });
 
   document.querySelectorAll("[data-open-request]").forEach((row) => {
     row.addEventListener("click", async () => {
-      await setActiveRequest(row.dataset.openRequest, { page: "admin-request-detail" });
-      render();
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      await goToPage("admin-request-detail", { requestId: row.dataset.openRequest });
     });
   });
 
   document.querySelectorAll("[data-open-request-button]").forEach((button) => {
     button.addEventListener("click", async (event) => {
       event.stopPropagation();
-      await setActiveRequest(button.dataset.openRequestButton, { page: "admin-request-detail" });
-      render();
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      await goToPage("admin-request-detail", { requestId: button.dataset.openRequestButton });
     });
   });
 
@@ -1371,45 +1398,33 @@ function attachEvents() {
 
   document.querySelectorAll("[data-client-request]").forEach((button) => {
     button.addEventListener("click", async () => {
-      await setActiveRequest(button.dataset.clientRequest, {
-        page: state.page === "dashboard" ? "request" : undefined,
-        markRead: state.page === "messages"
-      });
-      render();
-      if (state.page === "request") window.scrollTo({ top: 0, behavior: "smooth" });
+      const targetPage = state.page === "dashboard" ? "request" : state.page;
+      await goToPage(targetPage, { requestId: button.dataset.clientRequest });
     });
   });
 
   document.querySelectorAll("[data-client-open-request]").forEach((card) => {
     card.addEventListener("click", async () => {
-      await setActiveRequest(card.dataset.clientOpenRequest, { page: "request" });
-      render();
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      await goToPage("request", { requestId: card.dataset.clientOpenRequest });
     });
   });
 
   document.querySelectorAll("[data-open-active-messages]").forEach((button) => {
     button.addEventListener("click", async () => {
-      await setActiveRequest(state.activeRequest?.id, { page: "messages", markRead: true });
-      render();
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      await goToPage("messages", { requestId: state.activeRequest?.id });
     });
   });
 
   document.querySelectorAll("[data-open-active-request]").forEach((button) => {
     button.addEventListener("click", async () => {
-      await setActiveRequest(state.activeRequest?.id, { page: "request" });
-      render();
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      await goToPage("request", { requestId: state.activeRequest?.id });
     });
   });
 
   document.querySelectorAll("[data-jump]").forEach((link) => {
     link.addEventListener("click", (event) => {
       event.preventDefault();
-      state.page = link.dataset.jump;
-      rememberPage();
-      render();
+      goToPage(link.dataset.jump);
     });
   });
 
@@ -1818,9 +1833,10 @@ onAuthStateChange((session, event) => {
     state.session = session;
     const recoveryFlow = isPasswordRecoveryFlow(event);
     if (session) {
-      state.loading = true;
+      const hasExistingPortal = Boolean(state.profile);
+      state.loading = !hasExistingPortal;
       state.loadError = "";
-      render();
+      if (!hasExistingPortal) render();
       try {
         await withTimeout(loadPortalData(), "Account data loading");
         if (recoveryFlow) {
@@ -1844,6 +1860,24 @@ onAuthStateChange((session, event) => {
       render();
     }
   }, 0);
+});
+
+window.addEventListener("popstate", async () => {
+  if (!state.session || state.loading) return;
+  const params = new URLSearchParams(window.location.search);
+  const page = params.get("page") || defaultPage();
+  const requestId = params.get("request");
+  if (!pageIsAllowed(page)) {
+    await goToPage(defaultPage(), { replace: true, scroll: false });
+    return;
+  }
+  if (requestId) {
+    await setActiveRequest(requestId, { page, markRead: page === "messages" });
+  } else {
+    state.page = page;
+    rememberPage();
+  }
+  render();
 });
 
 boot();
