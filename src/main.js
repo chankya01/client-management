@@ -57,6 +57,10 @@ const state = {
 
 const adminPages = ["admin-dashboard", "admin-clients", "admin-requests", "admin-request-detail", "admin-messages", "admin-team", "admin-settings"];
 const clientPages = ["messages", "dashboard", "history", "request", "account"];
+const managementRoles = ["owner", "project_manager"];
+const workRoles = ["developer", "reviewer", "assignee"];
+const internalRoles = [...managementRoles, ...workRoles];
+const workPortalPages = ["admin-dashboard", "admin-requests", "admin-request-detail", "admin-messages", "admin-team"];
 const LOAD_TIMEOUT_MS = 8000;
 const LAST_PAGE_KEY = "requestManagementLastPage";
 const LAST_REQUEST_KEY = "requestManagementLastRequest";
@@ -86,6 +90,7 @@ function statusLabel(status) {
 
 function roleLabel(role) {
   if (role === "owner") return "Admin";
+  if (role === "project_manager") return "Project Manager";
   return statusLabel(role || "team member");
 }
 
@@ -101,7 +106,8 @@ function isPasswordRecoveryFlow(event) {
 }
 
 function passwordRecoveryPage() {
-  return isInternal() ? "admin-settings" : "account";
+  if (!isInternal()) return "account";
+  return canAccessManagementPages() ? "admin-settings" : "admin-dashboard";
 }
 
 function clearPasswordRecoveryUrl() {
@@ -228,13 +234,20 @@ function showAppError(error, context = "Action failed") {
 
 function defaultPage() {
   if (state.profile?.must_change_password) {
-    return isInternal() ? "admin-settings" : "account";
+    if (!isInternal()) return "account";
+    return canAccessManagementPages() ? "admin-settings" : "admin-dashboard";
   }
-  return isInternal() ? "admin-dashboard" : "messages";
+  if (canAccessManagementPages()) return "admin-dashboard";
+  return isInternal() ? "admin-requests" : "messages";
 }
 
 function pageIsAllowed(page) {
-  return isInternal() ? adminPages.includes(page) : clientPages.includes(page);
+  if (!isInternal()) return clientPages.includes(page);
+  return allowedInternalPages().includes(page);
+}
+
+function allowedInternalPages() {
+  return canAccessManagementPages() ? adminPages : workPortalPages;
 }
 
 function savedPage() {
@@ -566,11 +579,27 @@ async function completeSignIn(session) {
 }
 
 function isAdmin() {
-  return ["owner", "project_manager"].includes(state.profile?.role);
+  return managementRoles.includes(state.profile?.role);
 }
 
 function isInternal() {
-  return ["owner", "project_manager", "developer", "reviewer"].includes(state.profile?.role);
+  return internalRoles.includes(state.profile?.role);
+}
+
+function canAccessManagementPages() {
+  return managementRoles.includes(state.profile?.role);
+}
+
+function canManageTeam() {
+  return managementRoles.includes(state.profile?.role);
+}
+
+function canManageRequests() {
+  return managementRoles.includes(state.profile?.role);
+}
+
+function canManageClients() {
+  return managementRoles.includes(state.profile?.role);
 }
 
 function canDelete() {
@@ -598,17 +627,18 @@ function navHtml() {
 }
 
 function adminNavHtml() {
+  const canManage = canAccessManagementPages();
   return `
     <header class="topbar admin-topbar">
       <div class="topbar-inner admin-topbar-inner">
         <div class="brand">${APP_NAME}</div>
         <nav class="nav" aria-label="Admin portal">
           ${navButton("admin-dashboard", "Dashboard")}
-          ${navButton("admin-clients", "Clients")}
+          ${canManage ? navButton("admin-clients", "Clients") : ""}
           ${navButton("admin-requests", "Requests")}
           ${navButton("admin-messages", `Messages ${totalUnreadCount() ? `<span class="count">${totalUnreadCount()}</span>` : ""}`)}
           ${navButton("admin-team", "Team")}
-          ${navButton("admin-settings", "Settings")}
+          ${canManage ? navButton("admin-settings", "Settings") : ""}
           <button class="nav-logout" data-action="logout">Logout</button>
         </nav>
       </div>
@@ -645,26 +675,31 @@ function displayRequestNumber(request) {
 
 function adminDashboardPage() {
   const activeRequests = state.requests.filter((request) => !["closed", "cancelled"].includes(request.status));
+  const workspaceLabel = canAccessManagementPages() ? "Admin workspace" : "Work workspace";
+  const permissionText = canAccessManagementPages()
+    ? "management permissions."
+    : `${roleLabel(state.profile.role)} access. You can view assigned work, messages, and team members.`;
   return `
     <section class="admin-page">
       <div class="admin-heading">
         <div>
-          <p class="section-label green">Admin workspace</p>
+          <p class="section-label green">${workspaceLabel}</p>
           <h1>${APP_NAME} dashboard</h1>
-          <p class="subtitle">Signed in as ${escapeHtml(state.profile.full_name)} · full admin permissions.</p>
+          <p class="subtitle">Signed in as ${escapeHtml(state.profile.full_name)} · ${escapeHtml(permissionText)}</p>
         </div>
-        <button class="primary" data-page="admin-clients">Add Client</button>
+        ${canManageClients() ? `<button class="primary" data-page="admin-clients">Add Client</button>` : ""}
       </div>
       <div class="metric-grid">
-        ${metricCard("Clients", state.clients.length)}
+        ${canAccessManagementPages() ? metricCard("Clients", state.clients.length) : ""}
         ${metricCard("Active requests", activeRequests.length)}
         ${metricCard("Team members", state.team.length)}
-        ${metricCard("Client portal", "Restricted")}
+        ${metricCard("Access", roleLabel(state.profile.role))}
       </div>
       <section class="card">
         <p class="section-label">Recent requests</p>
         ${adminRequestRows(state.requests, { source: "dashboard" })}
       </section>
+      ${!canAccessManagementPages() && (state.profile?.must_change_password || state.showPasswordForm) ? passwordSection("Password and account") : ""}
     </section>
   `;
 }
@@ -757,19 +792,26 @@ function adminRequestsPage() {
           <p class="subtitle">Create work for a client and keep the client view scoped to that request/company.</p>
         </div>
       </div>
-      <section class="card">
-        <p class="section-label">${editingRequest ? "Edit Request" : "Create Request"}</p>
-        <form class="admin-form" id="requestForm">
-          <label class="field"><span>Client</span><select name="clientId" required>${state.clients.map((client) => `<option value="${client.id}" ${editingRequest?.client_id === client.id ? "selected" : ""}>${escapeHtml(client.name)}</option>`).join("")}</select></label>
-          <label class="field"><span>Title</span><input name="title" value="${escapeHtml(editingRequest?.title || "")}" required /></label>
-          <label class="field wide"><span>Description</span><input name="description" value="${escapeHtml(editingRequest?.description || "")}" /></label>
-          ${serviceCheckboxes(editingRequest?.service_type || "")}
-          <label class="field"><span>Due date</span><input name="dueDate" type="date" value="${editingRequest?.due_date || ""}" /></label>
-          <label class="field"><span>Status</span><select name="status">${requestStatusOptions(requestStatus)}</select></label>
-          <button class="primary" type="submit">${editingRequest ? "Update Request" : "Create Request"}</button>
-          ${editingRequest ? `<button class="secondary" type="button" data-cancel-request-edit>Cancel Edit</button>` : ""}
-        </form>
-      </section>
+      ${canManageRequests() ? `
+        <section class="card">
+          <p class="section-label">${editingRequest ? "Edit Request" : "Create Request"}</p>
+          <form class="admin-form" id="requestForm">
+            <label class="field"><span>Client</span><select name="clientId" required>${state.clients.map((client) => `<option value="${client.id}" ${editingRequest?.client_id === client.id ? "selected" : ""}>${escapeHtml(client.name)}</option>`).join("")}</select></label>
+            <label class="field"><span>Title</span><input name="title" value="${escapeHtml(editingRequest?.title || "")}" required /></label>
+            <label class="field wide"><span>Description</span><input name="description" value="${escapeHtml(editingRequest?.description || "")}" /></label>
+            ${serviceCheckboxes(editingRequest?.service_type || "")}
+            <label class="field"><span>Due date</span><input name="dueDate" type="date" value="${editingRequest?.due_date || ""}" /></label>
+            <label class="field"><span>Status</span><select name="status">${requestStatusOptions(requestStatus)}</select></label>
+            <button class="primary" type="submit">${editingRequest ? "Update Request" : "Create Request"}</button>
+            ${editingRequest ? `<button class="secondary" type="button" data-cancel-request-edit>Cancel Edit</button>` : ""}
+          </form>
+        </section>
+      ` : `
+        <section class="card">
+          <p class="section-label">Work Queue</p>
+          <p class="helper">You can view request details and continue request conversations. Client creation, request edits, and deletion are available only to Admin and Project Manager.</p>
+        </section>
+      `}
       <section class="card">
         <p class="section-label">All requests</p>
         ${adminRequestRows(state.requests)}
@@ -793,7 +835,7 @@ function adminRequestRows(requests, { source = "requests" } = {}) {
         ${requestUnreadBadge(request.id)}
         <span class="status-pill">${statusLabel(request.status)}</span>
         ${source === "dashboard" ? `<button class="secondary small-action" data-open-request-button="${request.id}">Open</button>` : ""}
-        <button class="secondary small-action" data-edit-request="${request.id}">Edit</button>
+        ${canManageRequests() ? `<button class="secondary small-action" data-edit-request="${request.id}">Edit</button>` : ""}
         ${canDelete() ? `<button class="danger-link" data-delete-request="${request.id}">Delete</button>` : ""}
       </div>
     </div>
@@ -815,7 +857,7 @@ function adminRequestDetailPage() {
           <p class="subtitle">${escapeHtml(clientName(request.client_id))} · ${escapeHtml(request.service_type || "Service")}</p>
         </div>
         <div class="row-actions">
-          <button class="secondary" data-edit-request="${request.id}">Edit request</button>
+          ${canManageRequests() ? `<button class="secondary" data-edit-request="${request.id}">Edit request</button>` : ""}
           ${canDelete() ? `<button class="danger-button" data-delete-request="${request.id}">Delete request</button>` : ""}
         </div>
       </div>
@@ -837,6 +879,7 @@ function adminRequestDetailPage() {
               <span>${escapeHtml(message.message)}</span>
             </div>
           `).join("") || `<p class="helper">No messages for this request yet.</p>`}
+          <button class="primary conversation-button" type="button" data-open-request-messages="${request.id}">Open conversation</button>
         </section>
       </div>
     </section>
@@ -895,24 +938,32 @@ function adminTeamPage() {
     <section class="admin-page">
       <h1>Team</h1>
       <p class="subtitle">Internal users who can own, manage, develop, or review work.</p>
-      <section class="card">
-        <p class="section-label">${formTitle}</p>
-        <p class="helper">This creates or updates the Supabase Auth user and profile through the local/server backend. Share the configured temporary password, then ask the user to change it after first login.</p>
-        <form class="admin-form" id="teamForm">
-          <label class="field"><span>Full name</span><input name="fullName" value="${escapeHtml(editingMember?.full_name || "")}" required /></label>
-          <label class="field"><span>Email</span><input name="email" type="email" value="${escapeHtml(editingMember?.email || "")}" required /></label>
-          <label class="field"><span>Role</span><select name="role">
-            <option value="" ${roleValue ? "" : "selected"} disabled>Select role</option>
-            <option value="developer" ${roleValue === "developer" ? "selected" : ""}>Developer</option>
-            <option value="reviewer" ${roleValue === "reviewer" ? "selected" : ""}>Reviewer</option>
-            <option value="project_manager" ${roleValue === "project_manager" ? "selected" : ""}>Project manager</option>
-            <option value="owner" ${roleValue === "owner" ? "selected" : ""}>Admin</option>
-          </select></label>
-          <label class="field"><span>Job title</span><input name="jobTitle" value="${escapeHtml(editingMember?.job_title || "")}" /></label>
-          <button class="primary" type="submit">${submitText}</button>
-          ${editingMember ? `<button class="secondary" type="button" data-cancel-team-edit>Cancel edit</button>` : ""}
-        </form>
-      </section>
+      ${canManageTeam() ? `
+        <section class="card">
+          <p class="section-label">${formTitle}</p>
+          <p class="helper">This creates or updates the Supabase Auth user and profile through the local/server backend. Share the configured temporary password, then ask the user to change it after first login.</p>
+          <form class="admin-form" id="teamForm">
+            <label class="field"><span>Full name</span><input name="fullName" value="${escapeHtml(editingMember?.full_name || "")}" required /></label>
+            <label class="field"><span>Email</span><input name="email" type="email" value="${escapeHtml(editingMember?.email || "")}" required /></label>
+            <label class="field"><span>Role</span><select name="role">
+              <option value="" ${roleValue ? "" : "selected"} disabled>Select role</option>
+              <option value="assignee" ${roleValue === "assignee" ? "selected" : ""}>Assignee</option>
+              <option value="developer" ${roleValue === "developer" ? "selected" : ""}>Developer</option>
+              <option value="reviewer" ${roleValue === "reviewer" ? "selected" : ""}>Reviewer</option>
+              <option value="project_manager" ${roleValue === "project_manager" ? "selected" : ""}>Project Manager</option>
+              <option value="owner" ${roleValue === "owner" ? "selected" : ""}>Admin</option>
+            </select></label>
+            <label class="field"><span>Job title</span><input name="jobTitle" value="${escapeHtml(editingMember?.job_title || "")}" /></label>
+            <button class="primary" type="submit">${submitText}</button>
+            ${editingMember ? `<button class="secondary" type="button" data-cancel-team-edit>Cancel edit</button>` : ""}
+          </form>
+        </section>
+      ` : `
+        <section class="card">
+          <p class="section-label">Team Directory</p>
+          <p class="helper">You can view team members. Adding, editing, and deleting team members is restricted to Admin and Project Manager.</p>
+        </section>
+      `}
       <section class="card">
         <p class="section-label">People</p>
         ${state.team.map((member) => `
@@ -920,7 +971,7 @@ function adminTeamPage() {
             <div><strong>${escapeHtml(member.full_name)}</strong><span>${escapeHtml(member.email)} · ${escapeHtml(member.job_title || roleLabel(member.role))}</span></div>
             <div class="row-actions">
               <span class="status-pill team-role-pill">${escapeHtml(roleLabel(member.role))}</span>
-              <button class="secondary small-action" data-edit-team="${member.id}">Edit</button>
+              ${canManageTeam() ? `<button class="secondary small-action" data-edit-team="${member.id}">Edit</button>` : ""}
               ${canDelete() ? `<button class="danger-link" data-delete-team="${member.id}" ${member.id === state.profile.id ? "disabled" : ""}>Delete</button>` : ""}
             </div>
           </div>
@@ -1021,7 +1072,8 @@ function messagesPage() {
 
 function messageCard(message) {
   const isClient = message.profiles?.role === "client";
-  const sender = isClient ? organizationName() : "Accessible.org";
+  const messageRequest = state.requests.find((request) => request.id === message.request_id) || state.activeRequest;
+  const sender = isClient ? clientName(messageRequest?.client_id) : "Accessible.org";
   const attachment = message.attachment;
   return `
     <article class="message-card ${isClient ? "client" : "team"}">
@@ -1416,6 +1468,12 @@ function attachEvents() {
     button.addEventListener("click", async () => {
       await setActiveRequest(button.dataset.chatRequest, { markRead: true });
       render();
+    });
+  });
+
+  document.querySelectorAll("[data-open-request-messages]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await goToPage("admin-messages", { requestId: button.dataset.openRequestMessages });
     });
   });
 

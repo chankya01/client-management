@@ -3,7 +3,7 @@
 --
 -- It allows:
 -- - Admin/Project Manager: create, read, update, delete requests.
--- - Developer/Reviewer: read internal requests.
+-- - Developer/Reviewer/Assignee: read internal requests.
 -- - Client: read only requests linked to their client_id.
 
 alter table public.requests enable row level security;
@@ -22,7 +22,7 @@ using (
     select 1
     from public.profiles p
     where p.id = auth.uid()
-      and p.role in ('owner', 'project_manager', 'developer', 'reviewer')
+      and p.role in ('owner', 'project_manager', 'developer', 'reviewer', 'assignee')
   )
   or exists (
     select 1
