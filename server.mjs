@@ -410,6 +410,12 @@ async function handleApi(req, res, url) {
   if (path === "/clients" && method === "POST") {
     const body = await readJson(req);
     const email = normalizeEmail(body.email);
+    const duplicateClient = await selectOne("clients", `?select=id,name,primary_contact_email&primary_contact_email=ilike.${encode(email)}&limit=1`);
+    if (duplicateClient) {
+      return json(res, 409, {
+        error: `Client already exists for ${email}. Open the existing client instead of creating another one.`
+      });
+    }
     const rows = await supabaseFetch(rest("clients", "?select=*"), {
       method: "POST",
       headers: { Prefer: "return=representation" },
@@ -459,6 +465,12 @@ async function handleApi(req, res, url) {
   if (clientMatch && method === "PUT") {
     const body = await readJson(req);
     const email = normalizeEmail(body.email);
+    const duplicateClient = await selectOne("clients", `?select=id,name,primary_contact_email&primary_contact_email=ilike.${encode(email)}&id=neq.${encode(clientMatch[1])}&limit=1`);
+    if (duplicateClient) {
+      return json(res, 409, {
+        error: `Client already exists for ${email}. Use the existing client record.`
+      });
+    }
     const rows = await supabaseFetch(rest("clients", `?id=eq.${encode(clientMatch[1])}&select=*`), {
       method: "PATCH",
       headers: { Prefer: "return=representation" },
@@ -573,24 +585,28 @@ async function handleApi(req, res, url) {
     const body = await readJson(req);
     const email = normalizeEmail(body.email);
     let profile = await selectOne("profiles", `?select=id&email=eq.${encode(email)}&limit=1`);
-    if (!profile) {
-      const authUser = await createAuthUser(email, body.fullName);
-      const inserted = await supabaseFetch(rest("profiles", "?select=id"), {
-        method: "POST",
-        headers: { Prefer: "return=representation" },
-        body: JSON.stringify({
-          id: authUser.id,
-          full_name: body.fullName,
-          email,
-          role: body.role,
-          job_title: body.jobTitle || body.role,
-          client_id: null,
-          is_active: true,
-          must_change_password: true
-        })
+    if (profile) {
+      return json(res, 409, {
+        error: `User already exists for ${email}. Edit the existing team member instead.`
       });
-      profile = inserted[0];
     }
+
+    const authUser = await createAuthUser(email, body.fullName);
+    const inserted = await supabaseFetch(rest("profiles", "?select=id"), {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({
+        id: authUser.id,
+        full_name: body.fullName,
+        email,
+        role: body.role,
+        job_title: body.jobTitle || body.role,
+        client_id: null,
+        is_active: true,
+        must_change_password: true
+      })
+    });
+    profile = inserted[0];
 
     const rows = await supabaseFetch(rest("profiles", `?id=eq.${encode(profile.id)}&select=id,full_name,email,role,job_title,client_id`), {
       method: "PATCH",
@@ -611,12 +627,19 @@ async function handleApi(req, res, url) {
   const teamMatch = path.match(/^\/team\/([^/]+)$/);
   if (teamMatch && method === "PUT") {
     const body = await readJson(req);
+    const email = normalizeEmail(body.email);
+    const duplicateProfile = await selectOne("profiles", `?select=id&email=eq.${encode(email)}&id=neq.${encode(teamMatch[1])}&limit=1`);
+    if (duplicateProfile) {
+      return json(res, 409, {
+        error: `User already exists for ${email}. Use the existing profile.`
+      });
+    }
     const rows = await supabaseFetch(rest("profiles", `?id=eq.${encode(teamMatch[1])}&select=id,full_name,email,role,job_title,client_id`), {
       method: "PATCH",
       headers: { Prefer: "return=representation" },
       body: JSON.stringify({
         full_name: body.fullName,
-        email: normalizeEmail(body.email),
+        email,
         role: body.role,
         job_title: body.jobTitle || body.role
       })

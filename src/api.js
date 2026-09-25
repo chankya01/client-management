@@ -520,10 +520,11 @@ export async function loadTeam() {
 }
 
 export async function createClient({ name, contactName, email, billingEmail, status }) {
+  const normalizedEmail = normalizeEmail(email);
   if (useLocalAdminProxy()) {
     return localApi("/clients", {
       method: "POST",
-      body: JSON.stringify({ name, contactName, email, billingEmail, status })
+      body: JSON.stringify({ name, contactName, email: normalizedEmail, billingEmail, status })
     });
   }
 
@@ -532,8 +533,8 @@ export async function createClient({ name, contactName, email, billingEmail, sta
       id: crypto.randomUUID(),
       name,
       primary_contact_name: contactName,
-      primary_contact_email: normalizeEmail(email),
-      billing_email: normalizeEmail(billingEmail || email),
+      primary_contact_email: normalizedEmail,
+      billing_email: normalizeEmail(billingEmail || normalizedEmail),
       status: status || "signed",
       created_at: new Date().toISOString()
     };
@@ -541,13 +542,18 @@ export async function createClient({ name, contactName, email, billingEmail, sta
     return client;
   }
 
+  const existing = await findClientByEmail(normalizedEmail);
+  if (existing) {
+    throw new Error(`Client already exists for ${normalizedEmail}. Open the existing client instead of creating another one.`);
+  }
+
   const { data, error } = await supabase
     .from("clients")
     .insert({
       name,
       primary_contact_name: contactName,
-      primary_contact_email: normalizeEmail(email),
-      billing_email: normalizeEmail(billingEmail || email),
+      primary_contact_email: normalizedEmail,
+      billing_email: normalizeEmail(billingEmail || normalizedEmail),
       status: status || "signed"
     })
     .select()
@@ -558,23 +564,31 @@ export async function createClient({ name, contactName, email, billingEmail, sta
 }
 
 export async function updateClient(clientId, { name, contactName, email, billingEmail, status }) {
+  const normalizedEmail = normalizeEmail(email);
   if (useLocalAdminProxy()) {
     return localApi(`/clients/${clientId}`, {
       method: "PUT",
-      body: JSON.stringify({ name, contactName, email, billingEmail, status })
+      body: JSON.stringify({ name, contactName, email: normalizedEmail, billingEmail, status })
     });
   }
 
   if (useDemo()) {
+    const duplicate = demoClients.find((item) => item.id !== clientId && normalizeEmail(item.primary_contact_email) === normalizedEmail);
+    if (duplicate) throw new Error(`Client already exists for ${normalizedEmail}.`);
     const client = demoClients.find((item) => item.id === clientId);
     if (client) {
       client.name = name;
       client.primary_contact_name = contactName;
-      client.primary_contact_email = normalizeEmail(email);
-      client.billing_email = normalizeEmail(billingEmail || email);
+      client.primary_contact_email = normalizedEmail;
+      client.billing_email = normalizeEmail(billingEmail || normalizedEmail);
       client.status = status || client.status || "signed";
     }
     return client;
+  }
+
+  const existing = await findClientByEmail(normalizedEmail);
+  if (existing && existing.id !== clientId) {
+    throw new Error(`Client already exists for ${normalizedEmail}. Use the existing client record.`);
   }
 
   const { data, error } = await supabase
@@ -582,13 +596,25 @@ export async function updateClient(clientId, { name, contactName, email, billing
     .update({
       name,
       primary_contact_name: contactName,
-      primary_contact_email: normalizeEmail(email),
-      billing_email: normalizeEmail(billingEmail || email),
+      primary_contact_email: normalizedEmail,
+      billing_email: normalizeEmail(billingEmail || normalizedEmail),
       status: status || "signed"
     })
     .eq("id", clientId)
     .select()
     .single();
+
+  if (error) throw error;
+  return data;
+}
+
+async function findClientByEmail(email) {
+  const { data, error } = await supabase
+    .from("clients")
+    .select("id, name, primary_contact_email")
+    .ilike("primary_contact_email", normalizeEmail(email))
+    .limit(1)
+    .maybeSingle();
 
   if (error) throw error;
   return data;
@@ -756,6 +782,9 @@ export async function createTeamMember({ fullName, email, role, jobTitle }) {
   }
 
   if (useDemo()) {
+    if (demoTeam.some((member) => normalizeEmail(member.email) === normalizedEmail)) {
+      throw new Error(`User already exists for ${normalizedEmail}. Edit the existing team member instead.`);
+    }
     const member = {
       id: crypto.randomUUID(),
       full_name: fullName,
@@ -775,51 +804,50 @@ export async function createTeamMember({ fullName, email, role, jobTitle }) {
 
   if (existing.error) throw existing.error;
 
-  if (!existing.data?.id) {
-    throw new Error(`Invite ${normalizedEmail} in Supabase Auth first, then create or sync their public.profiles row. Frontend cannot create auth users safely.`);
+  if (existing.data?.id) {
+    throw new Error(`User already exists for ${normalizedEmail}. Edit the existing profile instead of creating another account.`);
   }
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .update({
-      full_name: fullName,
-      email: normalizedEmail,
-      role,
-      job_title: jobTitle || role,
-      is_active: true
-    })
-    .eq("id", existing.data.id)
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data;
+  throw new Error(`Invite ${normalizedEmail} in Supabase Auth first, then create or sync their public.profiles row. Frontend cannot create auth users safely.`);
 }
 
 export async function updateTeamMember(memberId, { fullName, email, role, jobTitle }) {
+  const normalizedEmail = normalizeEmail(email);
   if (useLocalAdminProxy()) {
     return localApi(`/team/${memberId}`, {
       method: "PUT",
-      body: JSON.stringify({ fullName, email, role, jobTitle })
+      body: JSON.stringify({ fullName, email: normalizedEmail, role, jobTitle })
     });
   }
 
   if (useDemo()) {
+    const duplicate = demoTeam.find((item) => item.id !== memberId && normalizeEmail(item.email) === normalizedEmail);
+    if (duplicate) throw new Error(`User already exists for ${normalizedEmail}.`);
     const member = demoTeam.find((item) => item.id === memberId);
     if (member) {
       member.full_name = fullName;
-      member.email = normalizeEmail(email);
+      member.email = normalizedEmail;
       member.role = role;
       member.job_title = jobTitle || role;
     }
     return member;
   }
 
+  const duplicate = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("email", normalizedEmail)
+    .neq("id", memberId)
+    .maybeSingle();
+
+  if (duplicate.error) throw duplicate.error;
+  if (duplicate.data?.id) throw new Error(`User already exists for ${normalizedEmail}. Use the existing profile.`);
+
   const { data, error } = await supabase
     .from("profiles")
     .update({
       full_name: fullName,
-      email: normalizeEmail(email),
+      email: normalizedEmail,
       role,
       job_title: jobTitle || role
     })

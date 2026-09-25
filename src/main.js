@@ -203,6 +203,29 @@ function showToast(message) {
   }, 3200);
 }
 
+function friendlyErrorMessage(error) {
+  const message = String(error?.message || error || "Something went wrong.");
+  const lower = message.toLowerCase();
+  if (lower.includes("duplicate key") || lower.includes("already exists") || lower.includes("23505")) {
+    return message.includes("already exists")
+      ? message
+      : "A record with this email already exists. Please use the existing record.";
+  }
+  if (lower.includes("row level security") || lower.includes("violates row-level security")) {
+    return "Permission issue: your account is not allowed to perform this action yet. Please ask an admin to check access policies.";
+  }
+  if (lower.includes("invalid login credentials")) return "Invalid email or password.";
+  if (lower.includes("failed to fetch") || lower.includes("network")) {
+    return "Network error. Please check your connection and try again.";
+  }
+  return message;
+}
+
+function showAppError(error, context = "Action failed") {
+  console.error(`[${APP_NAME}] ${context}`, error);
+  showToast(friendlyErrorMessage(error));
+}
+
 function defaultPage() {
   if (state.profile?.must_change_password) {
     return isInternal() ? "admin-settings" : "account";
@@ -462,7 +485,7 @@ function renderSignIn() {
       }
       showToast(`Signed in to ${APP_NAME}.`);
     } catch (error) {
-      showToast(error.message);
+      showAppError(error);
     }
   });
 
@@ -486,7 +509,7 @@ function renderSignIn() {
       }
       showToast("Magic link sent. Check your email to continue.");
     } catch (error) {
-      showToast(error.message);
+      showAppError(error);
     }
   });
 
@@ -520,7 +543,7 @@ function renderForgotPassword() {
       await sendPasswordReset(values.email);
       showToast("Password reset email sent. Check your inbox.");
     } catch (error) {
-      showToast(error.message);
+      showAppError(error);
     }
   });
 
@@ -1445,7 +1468,7 @@ function attachEvents() {
         state.clients = await loadClients();
         render();
       } catch (error) {
-        showToast(error.message);
+        showAppError(error, "Save client");
       }
     });
   }
@@ -1485,7 +1508,7 @@ function attachEvents() {
         showToast("Client deleted.");
         render();
       } catch (error) {
-        showToast(error.message);
+        showAppError(error, "Delete client");
       }
     });
   });
@@ -1537,7 +1560,7 @@ function attachEvents() {
         await loadPortalData();
         render();
       } catch (error) {
-        showToast(error.message);
+        showAppError(error, "Save request");
       }
     });
   }
@@ -1582,7 +1605,7 @@ function attachEvents() {
         showToast("Request deleted.");
         render();
       } catch (error) {
-        showToast(error.message);
+        showAppError(error, "Delete request");
       }
     });
   });
@@ -1604,7 +1627,7 @@ function attachEvents() {
         state.team = await loadTeam();
         render();
       } catch (error) {
-        showToast(error.message);
+        showAppError(error, "Save team member");
       }
     });
   }
@@ -1642,7 +1665,7 @@ function attachEvents() {
         showToast("Team member deleted.");
         render();
       } catch (error) {
-        showToast(error.message);
+        showAppError(error, "Delete team member");
       }
     });
   });
@@ -1666,7 +1689,7 @@ function attachEvents() {
         showToast("Message sent. Related people can be notified by email from your backend.");
         render();
       } catch (error) {
-        showToast(error.message);
+        showAppError(error, "Send client message");
       }
     });
   }
@@ -1690,7 +1713,7 @@ function attachEvents() {
         showToast("Message sent on the request conversation.");
         render();
       } catch (error) {
-        showToast(error.message);
+        showAppError(error, "Send internal message");
       }
     });
   }
@@ -1706,7 +1729,7 @@ function attachEvents() {
         showToast("Accessible.org has been notified that you are ready for validation.");
         render();
       } catch (error) {
-        showToast(error.message);
+        showAppError(error, "Mark ready for validation");
       }
     });
   }
@@ -1719,7 +1742,7 @@ function attachEvents() {
         const url = await createSignedDownload(deliverable.files);
         window.open(url, "_blank", "noopener,noreferrer");
       } catch (error) {
-        showToast(error.message);
+        showAppError(error, "Download deliverable");
       }
     });
   });
@@ -1732,7 +1755,7 @@ function attachEvents() {
         const url = await createSignedDownload(message.attachment);
         window.open(url, "_blank", "noopener,noreferrer");
       } catch (error) {
-        showToast(error.message);
+        showAppError(error, "Download attachment");
       }
     });
   });
@@ -1760,7 +1783,7 @@ function attachEvents() {
         showToast("Password updated.");
         render();
       } catch (error) {
-        showToast(error.message);
+        showAppError(error);
       }
     });
   }
@@ -1801,7 +1824,7 @@ async function handleLogout() {
     }
     render();
   } catch (error) {
-    showToast(error.message);
+    showAppError(error);
   }
 }
 
