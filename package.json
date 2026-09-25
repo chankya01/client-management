@@ -1,0 +1,25 @@
+{
+  "name": "requestmanagement",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "api:admin": "PORT=8000 node server.mjs",
+    "api:client": "PORT=8001 node server.mjs",
+    "next:admin": "LOCAL_API_PORT=8000 next dev -p 3000",
+    "next:client": "LOCAL_API_PORT=8001 next dev -p 3001",
+    "local": "PORT=8000 node server.mjs",
+    "local:admin": "PORT=8000 node server.mjs",
+    "local:client": "PORT=8001 node server.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4",
+    "next": "^14.2.15",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {}
+}
