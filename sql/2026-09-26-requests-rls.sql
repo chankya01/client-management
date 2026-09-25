@@ -8,6 +8,32 @@
 
 alter table public.requests enable row level security;
 
+create or replace function public.current_app_role()
+returns public.app_role
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select role
+  from public.profiles
+  where id = auth.uid()
+  limit 1
+$$;
+
+create or replace function public.current_client_id()
+returns uuid
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select client_id
+  from public.profiles
+  where id = auth.uid()
+  limit 1
+$$;
+
 drop policy if exists "requests_select_policy" on public.requests;
 drop policy if exists "requests_insert_policy" on public.requests;
 drop policy if exists "requests_update_policy" on public.requests;
@@ -18,18 +44,10 @@ on public.requests
 for select
 to authenticated
 using (
-  exists (
-    select 1
-    from public.profiles p
-    where p.id = auth.uid()
-      and p.role in ('owner', 'project_manager', 'developer', 'reviewer', 'assignee')
-  )
-  or exists (
-    select 1
-    from public.profiles p
-    where p.id = auth.uid()
-      and p.role = 'client'
-      and p.client_id = requests.client_id
+  public.current_app_role() in ('owner', 'project_manager', 'developer', 'reviewer', 'assignee')
+  or (
+    public.current_app_role() = 'client'
+    and public.current_client_id() = requests.client_id
   )
 );
 
@@ -38,12 +56,7 @@ on public.requests
 for insert
 to authenticated
 with check (
-  exists (
-    select 1
-    from public.profiles p
-    where p.id = auth.uid()
-      and p.role in ('owner', 'project_manager')
-  )
+  public.current_app_role() in ('owner', 'project_manager')
   and created_by = auth.uid()
 );
 
@@ -52,20 +65,10 @@ on public.requests
 for update
 to authenticated
 using (
-  exists (
-    select 1
-    from public.profiles p
-    where p.id = auth.uid()
-      and p.role in ('owner', 'project_manager')
-  )
+  public.current_app_role() in ('owner', 'project_manager')
 )
 with check (
-  exists (
-    select 1
-    from public.profiles p
-    where p.id = auth.uid()
-      and p.role in ('owner', 'project_manager')
-  )
+  public.current_app_role() in ('owner', 'project_manager')
 );
 
 create policy "requests_delete_policy"
@@ -73,10 +76,5 @@ on public.requests
 for delete
 to authenticated
 using (
-  exists (
-    select 1
-    from public.profiles p
-    where p.id = auth.uid()
-      and p.role = 'owner'
-  )
+  public.current_app_role() = 'owner'
 );

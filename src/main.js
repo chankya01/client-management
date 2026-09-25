@@ -29,7 +29,7 @@ import {
 } from "./api.js";
 
 const root = document.getElementById("root");
-const APP_NAME = "Clients Management";
+const APP_NAME = "Clients";
 
 const state = {
   session: null,

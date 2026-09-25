@@ -12,6 +12,32 @@ alter table public.profiles enable row level security;
 alter table public.request_messages enable row level security;
 alter table public.files enable row level security;
 
+create or replace function public.current_app_role()
+returns public.app_role
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select role
+  from public.profiles
+  where id = auth.uid()
+  limit 1
+$$;
+
+create or replace function public.current_client_id()
+returns uuid
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select client_id
+  from public.profiles
+  where id = auth.uid()
+  limit 1
+$$;
+
 drop policy if exists "clients_select_policy" on public.clients;
 drop policy if exists "profiles_select_policy" on public.profiles;
 drop policy if exists "request_messages_select_policy" on public.request_messages;
@@ -24,18 +50,10 @@ on public.clients
 for select
 to authenticated
 using (
-  exists (
-    select 1
-    from public.profiles p
-    where p.id = auth.uid()
-      and p.role in ('owner', 'project_manager', 'developer', 'reviewer', 'assignee')
-  )
-  or exists (
-    select 1
-    from public.profiles p
-    where p.id = auth.uid()
-      and p.role = 'client'
-      and p.client_id = clients.id
+  public.current_app_role() in ('owner', 'project_manager', 'developer', 'reviewer', 'assignee')
+  or (
+    public.current_app_role() = 'client'
+    and public.current_client_id() = clients.id
   )
 );
 
@@ -45,12 +63,7 @@ for select
 to authenticated
 using (
   id = auth.uid()
-  or exists (
-    select 1
-    from public.profiles p
-    where p.id = auth.uid()
-      and p.role in ('owner', 'project_manager', 'developer', 'reviewer', 'assignee')
-  )
+  or public.current_app_role() in ('owner', 'project_manager', 'developer', 'reviewer', 'assignee')
 );
 
 create policy "request_messages_select_policy"
@@ -58,19 +71,13 @@ on public.request_messages
 for select
 to authenticated
 using (
-  exists (
-    select 1
-    from public.profiles p
-    where p.id = auth.uid()
-      and p.role in ('owner', 'project_manager', 'developer', 'reviewer', 'assignee')
-  )
+  public.current_app_role() in ('owner', 'project_manager', 'developer', 'reviewer', 'assignee')
   or exists (
     select 1
-    from public.profiles p
-    join public.requests r on r.id = request_messages.request_id
-    where p.id = auth.uid()
-      and p.role = 'client'
-      and p.client_id = r.client_id
+    from public.requests r
+    where r.id = request_messages.request_id
+      and public.current_app_role() = 'client'
+      and public.current_client_id() = r.client_id
   )
 );
 
@@ -81,19 +88,13 @@ to authenticated
 with check (
   sender_id = auth.uid()
   and (
-    exists (
-      select 1
-      from public.profiles p
-      where p.id = auth.uid()
-        and p.role in ('owner', 'project_manager', 'developer', 'reviewer', 'assignee')
-    )
+    public.current_app_role() in ('owner', 'project_manager', 'developer', 'reviewer', 'assignee')
     or exists (
       select 1
-      from public.profiles p
-      join public.requests r on r.id = request_messages.request_id
-      where p.id = auth.uid()
-        and p.role = 'client'
-        and p.client_id = r.client_id
+      from public.requests r
+      where r.id = request_messages.request_id
+        and public.current_app_role() = 'client'
+        and public.current_client_id() = r.client_id
     )
   )
 );
@@ -103,18 +104,10 @@ on public.files
 for select
 to authenticated
 using (
-  exists (
-    select 1
-    from public.profiles p
-    where p.id = auth.uid()
-      and p.role in ('owner', 'project_manager', 'developer', 'reviewer', 'assignee')
-  )
-  or exists (
-    select 1
-    from public.profiles p
-    where p.id = auth.uid()
-      and p.role = 'client'
-      and p.client_id = files.client_id
+  public.current_app_role() in ('owner', 'project_manager', 'developer', 'reviewer', 'assignee')
+  or (
+    public.current_app_role() = 'client'
+    and public.current_client_id() = files.client_id
   )
 );
 
@@ -125,18 +118,10 @@ to authenticated
 with check (
   uploaded_by = auth.uid()
   and (
-    exists (
-      select 1
-      from public.profiles p
-      where p.id = auth.uid()
-        and p.role in ('owner', 'project_manager', 'developer', 'reviewer', 'assignee')
-    )
-    or exists (
-      select 1
-      from public.profiles p
-      where p.id = auth.uid()
-        and p.role = 'client'
-        and p.client_id = files.client_id
+    public.current_app_role() in ('owner', 'project_manager', 'developer', 'reviewer', 'assignee')
+    or (
+      public.current_app_role() = 'client'
+      and public.current_client_id() = files.client_id
     )
   )
 );
