@@ -297,13 +297,19 @@ h2 {
 }
 
 .password-toggle {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 8px;
   color: var(--muted);
   font-size: 14px;
   font-weight: 700;
-  margin: 2px 0 18px;
+  margin: 8px 0 22px;
+  width: 100%;
+}
+
+.password-toggle + .primary {
+  display: inline-flex;
+  width: fit-content;
 }
 
 .password-form {

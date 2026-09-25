@@ -453,6 +453,8 @@ function renderSignIn() {
       showToast(error.message);
     }
   });
+
+  attachPasswordToggles();
 }
 
 function renderForgotPassword() {
@@ -1272,20 +1274,7 @@ function attachEvents() {
     });
   });
 
-  document.querySelectorAll("[data-toggle-password]").forEach((checkbox) => {
-    checkbox.addEventListener("change", () => {
-      const scope = checkbox.closest("form") || document;
-      const fieldNames = String(checkbox.dataset.togglePassword || "")
-        .split(",")
-        .map((name) => name.trim())
-        .filter(Boolean);
-      fieldNames.forEach((name) => {
-        const input = scope.querySelector(`[name="${name}"]`);
-        if (!input) return;
-        input.type = checkbox.checked ? "text" : "password";
-      });
-    });
-  });
+  attachPasswordToggles();
 
   document.querySelectorAll("[data-action='toggle-services']").forEach((button) => {
     button.addEventListener("click", (event) => {
@@ -1760,6 +1749,23 @@ function attachEvents() {
       }
     });
   }
+}
+
+function attachPasswordToggles() {
+  document.querySelectorAll("[data-toggle-password]").forEach((checkbox) => {
+    checkbox.addEventListener("change", () => {
+      const scope = checkbox.closest("form") || document;
+      const fieldNames = String(checkbox.dataset.togglePassword || "")
+        .split(",")
+        .map((name) => name.trim())
+        .filter(Boolean);
+      fieldNames.forEach((name) => {
+        const input = scope.querySelector(`[name="${name}"]`);
+        if (!input) return;
+        input.type = checkbox.checked ? "text" : "password";
+      });
+    });
+  });
 }
 
 async function handleLogout() {
