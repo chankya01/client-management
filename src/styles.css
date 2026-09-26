@@ -104,7 +104,7 @@ a:hover { text-decoration: underline; }
 }
 
 .nav .nav-logout {
-  border: 1px solid var(--line);
+  border: 1px solid var(--green);
   background: #fff;
   color: var(--green);
 }
@@ -624,13 +624,17 @@ h2 {
 }
 
 .danger-button {
-  border: 1px solid #b42318;
-  background: #b42318;
+  border: 1px solid var(--green);
+  background: var(--green);
   color: #fff;
   border-radius: 8px;
   font-weight: 700;
   min-height: 38px;
   padding: 8px 18px;
+}
+
+.danger-button:hover {
+  background: var(--blue-dark);
 }
 
 .card {
@@ -941,6 +945,14 @@ h2 {
   min-width: 112px;
   padding: 4px 10px;
   text-align: center;
+}
+
+.role-meta {
+  color: var(--green);
+  display: block;
+  font-size: 13px;
+  font-weight: 800;
+  margin-top: 6px;
 }
 
 .admin-row .request-number {

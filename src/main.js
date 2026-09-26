@@ -1039,9 +1039,12 @@ function adminTeamPage() {
         <p class="section-label">People</p>
         ${state.team.map((member) => `
           <div class="admin-row">
-            <div><strong>${escapeHtml(member.full_name)}</strong><span>${escapeHtml(member.email)} · ${escapeHtml(member.job_title || roleLabel(member.role))}</span></div>
+            <div>
+              <strong>${escapeHtml(member.full_name)}</strong>
+              <span>${escapeHtml(member.email)} · ${escapeHtml(member.job_title || roleLabel(member.role))}</span>
+              <span class="role-meta">${escapeHtml(roleLabel(member.role))}</span>
+            </div>
             <div class="row-actions">
-              <span class="status-pill team-role-pill">${escapeHtml(roleLabel(member.role))}</span>
               ${canManageTeam() ? `<button class="secondary small-action" data-edit-team="${member.id}">Edit</button>` : ""}
               ${canDelete() ? `<button class="danger-link" data-delete-team="${member.id}" ${member.id === state.profile.id ? "disabled" : ""}>Delete</button>` : ""}
             </div>
@@ -1071,7 +1074,6 @@ function adminSettingsPage() {
               <label class="field"><span>Email</span><input value="${escapeHtml(state.profile.email || "")}" disabled /></label>
               <label class="field"><span>Role</span><input value="${escapeHtml(roleLabel(state.profile.role))}" disabled /></label>
               <label class="field"><span>Job Title</span><input name="jobTitle" value="${escapeHtml(state.profile.job_title || "")}" /></label>
-              <label class="field wide"><span>Phone</span><input name="phone" type="tel" inputmode="numeric" pattern="[0-9]*" autocomplete="tel" value="${escapeHtml(state.profile.phone || "")}" /></label>
               <button class="primary" type="submit">Update Profile</button>
             </form>
           </section>
@@ -1367,11 +1369,11 @@ function passwordSection(title) {
           </label>
           <div class="form-actions">
             <button class="primary" type="submit">Update Password</button>
-            ${mustChange ? "" : `<button class="secondary" type="button" data-action="cancel-password-change">Cancel</button>`}
+            ${mustChange ? "" : `<button class="primary" type="button" data-action="cancel-password-change">Cancel</button>`}
           </div>
         </form>
       ` : `
-        <button class="secondary" type="button" data-action="show-password-change">Update Password</button>
+        <button class="primary" type="button" data-action="show-password-change">Update Password</button>
       `}
     </section>
   `;
@@ -1558,7 +1560,8 @@ function attachEvents() {
     });
   });
 
-  document.addEventListener("click", closeServiceDropdownsOnOutsideClick, { once: true });
+  document.removeEventListener("click", closeServiceDropdownsOnOutsideClick);
+  document.addEventListener("click", closeServiceDropdownsOnOutsideClick);
 
   document.querySelectorAll("[data-action='retry-load']").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -1867,15 +1870,9 @@ function attachEvents() {
 
   const profileForm = document.getElementById("profileForm");
   if (profileForm) {
-    const phoneInput = profileForm.querySelector("input[name='phone']");
-    phoneInput?.addEventListener("input", () => {
-      phoneInput.value = phoneInput.value.replace(/\D/g, "");
-    });
-
     profileForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const values = Object.fromEntries(new FormData(event.currentTarget));
-      values.phone = String(values.phone || "").replace(/\D/g, "");
       try {
         const updatedProfile = await updateOwnProfile(values);
         if (updatedProfile) state.profile = updatedProfile;
