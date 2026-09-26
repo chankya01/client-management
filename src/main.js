@@ -95,7 +95,7 @@ function statusLabel(status) {
 function roleLabel(role) {
   if (role === "owner") return "Admin";
   if (role === "project_manager") return "Project Manager";
-  return statusLabel(role || "team member");
+  return statusLabel(role || "Team Member");
 }
 
 function isPasswordRecoveryFlow(event) {
@@ -139,7 +139,7 @@ function serviceCheckboxes(selectedText) {
     <div class="field wide service-dropdown" data-service-dropdown>
       <span>Services</span>
       <button class="service-dropdown-toggle" type="button" data-action="toggle-services" aria-expanded="false">
-        <span data-service-summary>${selectedServices.size ? escapeHtml(Array.from(selectedServices).join(", ")) : "Select services"}</span>
+        <span data-service-summary>${selectedServices.size ? escapeHtml(Array.from(selectedServices).join(", ")) : "Select Services"}</span>
         <span aria-hidden="true">▾</span>
       </button>
       <div class="service-dropdown-menu" data-service-menu hidden>
@@ -163,14 +163,14 @@ function statusTracker(request) {
   const currentIndex = Math.max(0, steps.indexOf(request?.status || "new"));
   return `
     <section class="card">
-      <p class="section-label">Status tracker</p>
+      <p class="section-label">Status Tracker</p>
       <div class="status-timeline">
         ${steps.map((step, index) => `
           <div class="timeline-step ${index < currentIndex ? "done" : ""} ${index === currentIndex ? "current" : ""}">
             <span class="timeline-dot"></span>
             <div>
               <strong>${statusLabel(step)}</strong>
-              <small>${index < currentIndex ? "Completed" : index === currentIndex ? "Current stage" : "Pending"}</small>
+              <small>${index < currentIndex ? "Completed" : index === currentIndex ? "Current Stage" : "Pending"}</small>
             </div>
           </div>
         `).join("")}
@@ -477,10 +477,10 @@ function renderSignIn() {
     <main class="signin-shell">
       <form class="signin-card" id="signinForm">
         <div class="brand">${APP_NAME}</div>
-        <h1>Sign in</h1>
+        <h1>Sign In</h1>
         <p class="helper">Use your email and password to access your workspace or client portal.</p>
         <label class="field">
-          <span>Email address</span>
+          <span>Email Address</span>
           <input name="email" type="email" autocomplete="email" required />
         </label>
         <label class="field">
@@ -489,12 +489,12 @@ function renderSignIn() {
         </label>
         <label class="password-toggle">
           <input type="checkbox" data-toggle-password="password" />
-          <span>Show password</span>
+          <span>Show Password</span>
         </label>
-        <button class="primary" type="submit">Sign in</button>
+        <button class="primary" type="submit">Sign In</button>
         <div class="signin-actions">
-          <button class="link-button" type="button" data-action="forgot-password">Forgot password?</button>
-          <button class="link-button" type="button" data-action="magic-link">Send magic link instead</button>
+          <button class="link-button" type="button" data-action="forgot-password">Forgot Password?</button>
+          <button class="link-button" type="button" data-action="magic-link">Send Magic Link Instead</button>
         </div>
       </form>
       ${toastHtml()}
@@ -549,15 +549,15 @@ function renderForgotPassword() {
     <main class="signin-shell">
       <form class="signin-card" id="forgotPasswordForm">
         <div class="brand">${APP_NAME}</div>
-        <h1>Reset password</h1>
+        <h1>Reset Password</h1>
         <p class="helper">Enter your account email address. We’ll send a secure password reset link.</p>
         <label class="field">
-          <span>Email address</span>
+          <span>Email Address</span>
           <input name="email" type="email" autocomplete="email" required />
         </label>
         <div class="auth-actions">
-          <button class="primary" type="submit">Send reset link</button>
-          <button class="secondary" type="button" data-action="back-to-signin">Back to sign in</button>
+          <button class="primary" type="submit">Send Reset Link</button>
+          <button class="secondary" type="button" data-action="back-to-signin">Back to Sign In</button>
         </div>
       </form>
       ${toastHtml()}
@@ -666,11 +666,11 @@ function navButton(page, label) {
 }
 
 function requestTitle() {
-  return state.activeRequest?.title || "No active request";
+  return state.activeRequest?.title || "No Active Request";
 }
 
 function organizationName() {
-  return state.profile?.clients?.name || "Client organization";
+  return state.profile?.clients?.name || "Client Organization";
 }
 
 function clientName(clientId) {
@@ -697,7 +697,7 @@ function assignedPeopleText(requestId) {
   const names = state.team
     .filter((member) => assignedIds.has(member.id))
     .map((member) => member.full_name);
-  return names.length ? names.join(", ") : "Not assigned";
+  return names.length ? names.join(", ") : "Not Assigned";
 }
 
 function assignmentCheckboxes(selectedIds = []) {
@@ -707,7 +707,7 @@ function assignmentCheckboxes(selectedIds = []) {
     <div class="field wide service-dropdown assignment-dropdown" data-assignment-dropdown>
       <span>Tagged Team Members</span>
       <button class="service-dropdown-toggle" type="button" data-action="toggle-assignments" aria-expanded="false">
-        <span data-assignment-summary>${selected.size ? escapeHtml(people.filter((member) => selected.has(member.id)).map((member) => member.full_name).join(", ")) : "Select team members"}</span>
+        <span data-assignment-summary>${selected.size ? escapeHtml(people.filter((member) => selected.has(member.id)).map((member) => member.full_name).join(", ")) : "Select Team Members"}</span>
         <span aria-hidden="true">▾</span>
       </button>
       <div class="service-dropdown-menu" data-assignment-menu hidden>
@@ -752,15 +752,15 @@ function adminDashboardPage() {
       </div>
       <div class="metric-grid">
         ${canAccessManagementPages() ? metricCard("Clients", state.clients.length) : ""}
-        ${metricCard("Active requests", activeRequests.length)}
-        ${metricCard("Team members", state.team.length)}
+        ${metricCard("Active Requests", activeRequests.length)}
+        ${metricCard("Team Members", state.team.length)}
         ${metricCard("Access", roleLabel(state.profile.role))}
       </div>
       <section class="card">
-        <p class="section-label">Recent requests</p>
+        <p class="section-label">Recent Requests</p>
         ${adminRequestRows(state.requests, { source: "dashboard" })}
       </section>
-      ${!canAccessManagementPages() && (state.profile?.must_change_password || state.showPasswordForm) ? passwordSection("Password and account") : ""}
+      ${!canAccessManagementPages() && (state.profile?.must_change_password || state.showPasswordForm) ? passwordSection("Password and Account") : ""}
     </section>
   `;
 }
@@ -815,9 +815,9 @@ function adminClientsPage() {
         <p class="section-label">${editingClient ? "Edit Client" : "Add Client"}</p>
         <form class="admin-form" id="clientForm">
           <label class="field"><span>Organization</span><input name="name" value="${escapeHtml(editingClient?.name || "")}" required /></label>
-          <label class="field"><span>Primary contact</span><input name="contactName" value="${escapeHtml(editingClient?.primary_contact_name || "")}" required /></label>
-          <label class="field"><span>Client email</span><input name="email" type="email" value="${escapeHtml(editingClient?.primary_contact_email || "")}" required /></label>
-          <label class="field"><span>Billing email</span><input name="billingEmail" type="email" value="${escapeHtml(editingClient?.billing_email || "")}" /></label>
+          <label class="field"><span>Primary Contact</span><input name="contactName" value="${escapeHtml(editingClient?.primary_contact_name || "")}" required /></label>
+          <label class="field"><span>Client Email</span><input name="email" type="email" value="${escapeHtml(editingClient?.primary_contact_email || "")}" required /></label>
+          <label class="field"><span>Billing Email</span><input name="billingEmail" type="email" value="${escapeHtml(editingClient?.billing_email || "")}" /></label>
           <label class="field"><span>Status</span><select name="status">${clientStatusOptions(clientStatus)}</select></label>
           <button class="primary" type="submit">${editingClient ? "Update Client" : "Create Client"}</button>
           ${editingClient ? `<button class="secondary" type="button" data-cancel-client-edit>Cancel Edit</button>` : ""}
@@ -863,7 +863,7 @@ function adminRequestsPage() {
             <label class="field wide"><span>Description</span><input name="description" value="${escapeHtml(editingRequest?.description || "")}" /></label>
             ${serviceCheckboxes(editingRequest?.service_type || "")}
             ${assignmentCheckboxes(selectedAssignees)}
-            <label class="field"><span>Due date</span><input name="dueDate" type="date" value="${editingRequest?.due_date || ""}" /></label>
+            <label class="field"><span>Due Date</span><input name="dueDate" type="date" value="${editingRequest?.due_date || ""}" /></label>
             <label class="field"><span>Status</span><select name="status">${requestStatusOptions(requestStatus)}</select></label>
             <div class="form-actions wide request-form-actions">
               <button class="primary" type="submit">${editingRequest ? "Update Request" : "Create Request"}</button>
@@ -878,7 +878,7 @@ function adminRequestsPage() {
         </section>
       `}
       <section class="card">
-        <p class="section-label">All requests</p>
+        <p class="section-label">All Requests</p>
         ${adminRequestRows(state.requests)}
       </section>
     </section>
@@ -905,17 +905,17 @@ function adminRequestRows(requests, { source = "requests" } = {}) {
         ${canDelete() ? `<button class="danger-link" data-delete-request="${request.id}">Delete</button>` : ""}
       </div>
     </div>
-  `).join("") || `<p class="helper">No requests yet.</p>`;
+  `).join("") || `<p class="helper">No Requests Yet.</p>`;
 }
 
 function adminRequestDetailPage() {
   const request = state.requests.find((item) => item.id === state.selectedRequestId) || state.activeRequest;
-  if (!request) return emptyCard("Request not found", "The selected request is no longer available.");
+  if (!request) return emptyCard("Request Not Found", "The selected request is no longer available.");
 
   const requestMessages = state.messages.filter((message) => message.request_id === request.id);
   return `
     <section class="admin-page">
-      <button class="secondary back-button" data-page="admin-requests">Back to requests</button>
+      <button class="secondary back-button" data-page="admin-requests">Back to Requests</button>
       <div class="admin-heading">
         <div>
           <p class="section-label green">${escapeHtml(displayRequestNumber(request))}</p>
@@ -923,30 +923,30 @@ function adminRequestDetailPage() {
           <p class="subtitle">${escapeHtml(clientName(request.client_id))} · ${escapeHtml(request.service_type || "Service")}</p>
         </div>
         <div class="row-actions">
-          ${canManageRequests() ? `<button class="secondary" data-edit-request="${request.id}">Edit request</button>` : ""}
-          ${canDelete() ? `<button class="danger-button" data-delete-request="${request.id}">Delete request</button>` : ""}
+          ${canManageRequests() ? `<button class="secondary" data-edit-request="${request.id}">Edit Request</button>` : ""}
+          ${canDelete() ? `<button class="danger-button" data-delete-request="${request.id}">Delete Request</button>` : ""}
         </div>
       </div>
       <div class="detail-grid">
         <section class="card">
-          <p class="section-label">Request details</p>
+          <p class="section-label">Request Details</p>
           ${accountRow("Client", clientName(request.client_id))}
           ${accountRow("Status", statusLabel(request.status))}
-          ${accountRow("Tagged team", assignedPeopleText(request.id))}
-          ${accountRow("Due date", formatDate(request.due_date))}
+          ${accountRow("Tagged Team", assignedPeopleText(request.id))}
+          ${accountRow("Due Date", formatDate(request.due_date))}
           ${accountRow("Created", formatDate(request.created_at))}
           <p class="card-note">${escapeHtml(request.description || "No description added.")}</p>
         </section>
         ${statusTracker(request)}
         <section class="card">
-          <p class="section-label">Conversation summary</p>
+          <p class="section-label">Conversation Summary</p>
           ${requestMessages.slice(-4).map((message) => `
             <div class="list-row">
               <strong>${escapeHtml(message.profiles?.full_name || "User")}</strong>
               <span>${escapeHtml(message.message)}</span>
             </div>
-          `).join("") || `<p class="helper">No messages for this request yet.</p>`}
-          <button class="primary conversation-button" type="button" data-open-request-messages="${request.id}">Open conversation</button>
+          `).join("") || `<p class="helper">No Messages for This Request Yet.</p>`}
+          <button class="primary conversation-button" type="button" data-open-request-messages="${request.id}">Open Conversation</button>
         </section>
       </div>
     </section>
@@ -961,7 +961,7 @@ function adminMessagesPage() {
     <section class="admin-page">
       <div class="admin-heading">
         <div>
-          <p class="section-label green">Internal messages</p>
+          <p class="section-label green">Internal Messages</p>
           <h1>Request Conversation</h1>
           <p class="subtitle">${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(request.title)} · ${escapeHtml(clientName(request.client_id))}</p>
         </div>
@@ -979,15 +979,19 @@ function adminMessagesPage() {
         <section>
           ${state.messages.map(messageCard).join("") || emptyMessage()}
           <form class="card composer" id="internalMessageForm">
-            <label class="section-label" for="internalMessageText">New message</label>
+            <label class="section-label" for="internalMessageText">New Message</label>
             <textarea id="internalMessageText" name="message" placeholder="Write a message to the client or project team"></textarea>
+            <div class="selected-file-row" data-selected-file-for="internalAttachmentInput" hidden>
+              <span data-selected-file-name></span>
+              <button class="remove-file-button" type="button" data-clear-file="internalAttachmentInput" aria-label="Remove selected file">×</button>
+            </div>
             <div class="composer-actions">
               <label class="file-control">
                 Attachment
                 <input id="internalAttachmentInput" name="attachment" type="file" />
               </label>
               <span class="helper">Visible on the request conversation.</span>
-              <button class="primary" type="submit">Send message</button>
+              <button class="primary" type="submit">Send Message</button>
             </div>
           </form>
         </section>
@@ -998,8 +1002,8 @@ function adminMessagesPage() {
 
 function adminTeamPage() {
   const editingMember = state.team.find((member) => member.id === state.editingTeamId);
-  const formTitle = editingMember ? "Update team member" : "Add team member";
-  const submitText = editingMember ? "Update team member" : "Add team member";
+  const formTitle = editingMember ? "Update Team Member" : "Add Team Member";
+  const submitText = editingMember ? "Update Team Member" : "Add Team Member";
   const roleValue = editingMember?.role || "";
   return `
     <section class="admin-page">
@@ -1010,19 +1014,19 @@ function adminTeamPage() {
           <p class="section-label">${formTitle}</p>
           <p class="helper">This creates or updates the Supabase Auth user and profile through the local/server backend. Share the configured temporary password, then ask the user to change it after first login.</p>
           <form class="admin-form" id="teamForm">
-            <label class="field"><span>Full name</span><input name="fullName" value="${escapeHtml(editingMember?.full_name || "")}" required /></label>
+            <label class="field"><span>Full Name</span><input name="fullName" value="${escapeHtml(editingMember?.full_name || "")}" required /></label>
             <label class="field"><span>Email</span><input name="email" type="email" value="${escapeHtml(editingMember?.email || "")}" required /></label>
             <label class="field"><span>Role</span><select name="role">
-              <option value="" ${roleValue ? "" : "selected"} disabled>Select role</option>
+              <option value="" ${roleValue ? "" : "selected"} disabled>Select Role</option>
               <option value="assignee" ${roleValue === "assignee" ? "selected" : ""}>Assignee</option>
               <option value="developer" ${roleValue === "developer" ? "selected" : ""}>Developer</option>
               <option value="reviewer" ${roleValue === "reviewer" ? "selected" : ""}>Reviewer</option>
               <option value="project_manager" ${roleValue === "project_manager" ? "selected" : ""}>Project Manager</option>
               <option value="owner" ${roleValue === "owner" ? "selected" : ""}>Admin</option>
             </select></label>
-            <label class="field"><span>Job title</span><input name="jobTitle" value="${escapeHtml(editingMember?.job_title || "")}" /></label>
+            <label class="field"><span>Job Title</span><input name="jobTitle" value="${escapeHtml(editingMember?.job_title || "")}" /></label>
             <button class="primary team-form-button" type="submit">${submitText}</button>
-            ${editingMember ? `<button class="primary team-form-button" type="button" data-cancel-team-edit>Cancel edit</button>` : ""}
+            ${editingMember ? `<button class="primary team-form-button" type="button" data-cancel-team-edit>Cancel Edit</button>` : ""}
           </form>
         </section>
       ` : `
@@ -1066,8 +1070,8 @@ function adminSettingsPage() {
               <label class="field"><span>Name</span><input name="fullName" value="${escapeHtml(state.profile.full_name || "")}" required /></label>
               <label class="field"><span>Email</span><input value="${escapeHtml(state.profile.email || "")}" disabled /></label>
               <label class="field"><span>Role</span><input value="${escapeHtml(roleLabel(state.profile.role))}" disabled /></label>
-              <label class="field"><span>Job title</span><input name="jobTitle" value="${escapeHtml(state.profile.job_title || "")}" /></label>
-              <label class="field wide"><span>Phone</span><input name="phone" value="${escapeHtml(state.profile.phone || "")}" /></label>
+              <label class="field"><span>Job Title</span><input name="jobTitle" value="${escapeHtml(state.profile.job_title || "")}" /></label>
+              <label class="field wide"><span>Phone</span><input name="phone" type="tel" inputmode="numeric" pattern="[0-9]*" autocomplete="tel" value="${escapeHtml(state.profile.phone || "")}" /></label>
               <button class="primary" type="submit">Update Profile</button>
             </form>
           </section>
@@ -1081,30 +1085,30 @@ function adminSettingsPage() {
     <section class="admin-page">
       <div class="admin-heading">
         <div>
-          <p class="section-label green">Workspace controls</p>
+          <p class="section-label green">Workspace Controls</p>
           <h1>Settings</h1>
           <p class="subtitle">Operational defaults for requests, notifications, services, and client access.</p>
         </div>
-        <button class="primary" type="button" onclick="return false;">Save settings</button>
+        <button class="primary" type="button" onclick="return false;">Save Settings</button>
       </div>
       <div class="settings-grid">
         <section class="card">
-          <p class="section-label">Organization profile</p>
-          ${accountRow("Workspace name", APP_NAME)}
-          ${accountRow("Default admin", state.profile.full_name)}
-          ${accountRow("Default timezone", "Asia/Kolkata")}
-          ${accountRow("Support email", "support@accessible.org")}
+          <p class="section-label">Organization Profile</p>
+          ${accountRow("Workspace Name", APP_NAME)}
+          ${accountRow("Default Admin", state.profile.full_name)}
+          ${accountRow("Default Timezone", "Asia/Kolkata")}
+          ${accountRow("Support Email", "support@accessible.org")}
         </section>
-        ${passwordSection("Password and account")}
+        ${passwordSection("Password and Account")}
         <section class="card">
-          <p class="section-label">Request workflow</p>
+          <p class="section-label">Request Workflow</p>
           <div class="list-row">New request -> Scoping -> Agreement -> In progress -> Validation -> Closed</div>
           <div class="list-row">Default request prefix: REQ</div>
           <div class="list-row">Next request number: ${1000 + state.requests.length + 1}</div>
           <div class="list-row">Auto-assign new requests to workspace admin</div>
         </section>
         <section class="card">
-          <p class="section-label">Permission policy</p>
+          <p class="section-label">Permission Policy</p>
           <div class="list-row">Admin: full create, update, delete, and settings access</div>
           <div class="list-row">Project manager: manage clients, requests, team, and conversations</div>
           <div class="list-row">Developer/reviewer: view assigned work and participate in request chat</div>
@@ -1118,14 +1122,14 @@ function adminSettingsPage() {
           <div class="list-row">Send client reminder if awaiting response for 3 business days</div>
         </section>
         <section class="card">
-          <p class="section-label">Service catalog</p>
+          <p class="section-label">Service Catalog</p>
           <div class="list-row">WCAG 2.1 AA audit</div>
           <div class="list-row">VPAT / ACR creation</div>
           <div class="list-row">Accessibility remediation support</div>
           <div class="list-row">Validation and regression testing</div>
         </section>
         <section class="card">
-          <p class="section-label">Storage and files</p>
+          <p class="section-label">Storage and Files</p>
           <div class="list-row">Request attachments: private bucket</div>
           <div class="list-row">Deliverables: private bucket with signed downloads</div>
           <div class="list-row">Agreements: private bucket, owner/project manager upload</div>
@@ -1138,7 +1142,7 @@ function adminSettingsPage() {
 
 function messagesPage() {
   if (!state.activeRequest) {
-    return emptyCard("No active request", "Your portal is ready, but there are no active requests linked to this account yet.");
+    return emptyCard("No Active Request", "Your portal is ready, but there are no active requests linked to this account yet.");
   }
   const requestFromName = organizationName();
 
@@ -1152,14 +1156,18 @@ function messagesPage() {
       <div class="date-row conversation-row"><span>Conversation</span></div>
       ${state.messages.map(messageCard).join("") || emptyMessage()}
       <form class="card composer" id="messageForm">
-        <label class="section-label" for="messageText">New message</label>
+        <label class="section-label" for="messageText">New Message</label>
         <textarea id="messageText" name="message" placeholder="Write a message about ${escapeHtml(requestTitle())}"></textarea>
+        <div class="selected-file-row" data-selected-file-for="attachmentInput" hidden>
+          <span data-selected-file-name></span>
+          <button class="remove-file-button" type="button" data-clear-file="attachmentInput" aria-label="Remove selected file">×</button>
+        </div>
         <div class="composer-actions">
           <label class="file-control">
             Attachment
             <input id="attachmentInput" name="attachment" type="file" />
           </label>
-          <button class="primary" type="submit">Send message</button>
+          <button class="primary" type="submit">Send Message</button>
         </div>
       </form>
     </section>
@@ -1230,13 +1238,13 @@ function dashboardPage() {
 
       <section class="card">
         <p class="section-label">Services</p>
-        ${requestServices(state.activeRequest).map((service) => `<div class="list-row">${escapeHtml(service)}</div>`).join("") || `<div class="list-row">Accessibility service</div>`}
+        ${requestServices(state.activeRequest).map((service) => `<div class="list-row">${escapeHtml(service)}</div>`).join("") || `<div class="list-row">Accessibility Service</div>`}
         <p class="card-note">Need something else? Just ask in <a href="#" data-jump="messages">Messages</a>.</p>
       </section>
 
       <section class="card">
         <p class="section-label">Deliverables</p>
-        ${state.deliverables.map(deliverableRow).join("") || `<p class="helper">No deliverables have been released yet.</p>`}
+        ${state.deliverables.map(deliverableRow).join("") || `<p class="helper">No Deliverables Have Been Released Yet.</p>`}
       </section>
     </section>
   `;
@@ -1249,28 +1257,28 @@ function clientRequestPage() {
 
   return `
     <section class="page">
-      <button class="secondary back-button" data-page="history">Back to history</button>
+      <button class="secondary back-button" data-page="history">Back to History</button>
       <div class="heading-accent">
         <h1>${escapeHtml(state.activeRequest.title)}</h1>
         <p class="subtitle">${escapeHtml(displayRequestNumber(state.activeRequest))} · ${statusLabel(state.activeRequest.status)} ${requestUnreadBadge(state.activeRequest.id)}</p>
       </div>
       <section class="card status-card">
-        <p class="section-label green">Request details</p>
+        <p class="section-label green">Request Details</p>
         ${accountRow("Status", statusLabel(state.activeRequest.status))}
-        ${accountRow("Due date", formatDate(state.activeRequest.due_date))}
+        ${accountRow("Due Date", formatDate(state.activeRequest.due_date))}
         ${accountRow("Created", formatDate(state.activeRequest.created_at))}
         <p class="card-note">${escapeHtml(state.activeRequest.description || "No description added.")}</p>
       </section>
       ${statusTracker(state.activeRequest)}
       <section class="card">
-        <p class="section-label">Services in this request</p>
-        ${requestServices(state.activeRequest).map((service) => `<div class="list-row">${escapeHtml(service)}</div>`).join("") || `<p class="helper">No services listed.</p>`}
+        <p class="section-label">Services in This Request</p>
+        ${requestServices(state.activeRequest).map((service) => `<div class="list-row">${escapeHtml(service)}</div>`).join("") || `<p class="helper">No Services Listed.</p>`}
       </section>
       <section class="card">
         <p class="section-label">Deliverables</p>
-        ${state.deliverables.map(deliverableRow).join("") || `<p class="helper">No deliverables have been released yet.</p>`}
+        ${state.deliverables.map(deliverableRow).join("") || `<p class="helper">No Deliverables Have Been Released Yet.</p>`}
       </section>
-      <button class="primary" type="button" data-open-active-messages>Open messages for this request</button>
+      <button class="primary" type="button" data-open-active-messages>Open Messages for This Request</button>
     </section>
   `;
 }
@@ -1289,20 +1297,20 @@ function deliverableRow(deliverable) {
 function historyPage() {
   return `
     <section class="page">
-      <h1>Request history</h1>
+      <h1>Request History</h1>
       ${
         state.history.map((request) => `
           <section class="card history-card clickable-row" data-client-open-request="${request.id}">
             <h2>${escapeHtml(request.title)} ${requestUnreadBadge(request.id)}</h2>
             <p>${escapeHtml(request.description || "Request linked to this client account.")}</p>
             <div class="deliverable-row">
-              <span>${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(request.service_type || "Accessibility service")}</span>
+              <span>${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(request.service_type || "Accessibility Service")}</span>
               <time>${formatDate(request.closed_at || request.created_at)}</time>
               <span class="status-pill">${statusLabel(request.status)}</span>
             </div>
-            <p class="helper open-request-link">Open this request</p>
+            <p class="helper open-request-link">Open This Request</p>
           </section>
-        `).join("") || emptyCard("No requests yet", "Requests linked to this client account will appear here.")
+        `).join("") || emptyCard("No Requests Yet", "Requests linked to this client account will appear here.")
       }
     </section>
   `;
@@ -1316,16 +1324,16 @@ function accountPage() {
       <section class="card">
         <p class="section-label">Organization</p>
         ${accountRow("Organization", client?.name)}
-        ${accountRow("Primary contact", client?.primary_contact_name || state.profile?.full_name)}
+        ${accountRow("Primary Contact", client?.primary_contact_name || state.profile?.full_name)}
         ${accountRow("Email", client?.primary_contact_email || state.profile?.email)}
-        ${accountRow("Billing email", client?.billing_email)}
-        ${accountRow("Client since", formatDate(client?.created_at))}
+        ${accountRow("Billing Email", client?.billing_email)}
+        ${accountRow("Client Since", formatDate(client?.created_at))}
         <p class="card-note">To change any of these, send a note in <a href="#" data-jump="messages">Messages</a>.</p>
       </section>
       <section class="card">
-        <p class="section-label">Sign in</p>
+        <p class="section-label">Sign In</p>
         <p>You are signed in as ${escapeHtml(state.profile?.email || "")} on this device.</p>
-        <button class="secondary" id="signOut">Sign out</button>
+        <button class="secondary" id="signOut">Sign Out</button>
       </section>
       ${passwordSection("Password")}
     </section>
@@ -1346,24 +1354,24 @@ function passwordSection(title) {
       ${showForm ? `
         <form class="password-form" id="passwordForm">
           <label class="field">
-            <span>New password</span>
+            <span>New Password</span>
             <input name="password" type="password" autocomplete="new-password" minlength="8" required />
           </label>
           <label class="field">
-            <span>Confirm password</span>
+            <span>Confirm Password</span>
             <input name="confirmPassword" type="password" autocomplete="new-password" minlength="8" required />
           </label>
           <label class="password-toggle">
             <input type="checkbox" data-toggle-password="password,confirmPassword" />
-            <span>Show password</span>
+            <span>Show Password</span>
           </label>
           <div class="form-actions">
-            <button class="primary" type="submit">Update password</button>
+            <button class="primary" type="submit">Update Password</button>
             ${mustChange ? "" : `<button class="secondary" type="button" data-action="cancel-password-change">Cancel</button>`}
           </div>
         </form>
       ` : `
-        <button class="secondary" type="button" data-action="show-password-change">Update password</button>
+        <button class="secondary" type="button" data-action="show-password-change">Update Password</button>
       `}
     </section>
   `;
@@ -1374,7 +1382,7 @@ function accountRow(label, value) {
 }
 
 function emptyMessage() {
-  return `<article class="message-card team"><p>No messages yet. Start the conversation below.</p></article>`;
+  return `<article class="message-card team"><p>No Messages Yet. Start the conversation below.</p></article>`;
 }
 
 function emptyCard(title, body) {
@@ -1418,11 +1426,11 @@ function render() {
       <main class="signin-shell">
         <section class="signin-card">
           <div class="brand">${APP_NAME}</div>
-          <h1>Account setup required</h1>
+          <h1>Account Setup Required</h1>
           <p class="helper">${escapeHtml(state.loadError)}</p>
           <p class="helper">Check Supabase Auth and public.profiles for this email, then sign in again.</p>
           <div class="quick-login">
-            <button class="primary" data-action="logout">Sign out</button>
+            <button class="primary" data-action="logout">Sign Out</button>
             <button class="secondary" data-action="retry-load">Retry</button>
           </div>
         </section>
@@ -1509,7 +1517,7 @@ function attachEvents() {
       const dropdown = checkbox.closest("[data-service-dropdown]");
       const summary = dropdown?.querySelector("[data-service-summary]");
       const selected = Array.from(dropdown?.querySelectorAll("input[name='services']:checked") || []).map((input) => input.value);
-      if (summary) summary.textContent = selected.length ? selected.join(", ") : "Select services";
+      if (summary) summary.textContent = selected.length ? selected.join(", ") : "Select Services";
     });
   });
 
@@ -1546,7 +1554,7 @@ function attachEvents() {
       const summary = dropdown?.querySelector("[data-assignment-summary]");
       const selected = Array.from(dropdown?.querySelectorAll("input[name='assignedProfileIds']:checked") || [])
         .map((input) => input.dataset.assignmentName || input.value);
-      if (summary) summary.textContent = selected.length ? selected.join(", ") : "Select team members";
+      if (summary) summary.textContent = selected.length ? selected.join(", ") : "Select Team Members";
     });
   });
 
@@ -1859,9 +1867,15 @@ function attachEvents() {
 
   const profileForm = document.getElementById("profileForm");
   if (profileForm) {
+    const phoneInput = profileForm.querySelector("input[name='phone']");
+    phoneInput?.addEventListener("input", () => {
+      phoneInput.value = phoneInput.value.replace(/\D/g, "");
+    });
+
     profileForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const values = Object.fromEntries(new FormData(event.currentTarget));
+      values.phone = String(values.phone || "").replace(/\D/g, "");
       try {
         const updatedProfile = await updateOwnProfile(values);
         if (updatedProfile) state.profile = updatedProfile;
@@ -1872,6 +1886,8 @@ function attachEvents() {
       }
     });
   }
+
+  attachFileInputRemovers();
 
   const form = document.getElementById("messageForm");
   if (form) {
@@ -1974,6 +1990,36 @@ function attachEvents() {
       }
     });
   }
+}
+
+function attachFileInputRemovers() {
+  document.querySelectorAll("input[type='file']").forEach((input) => {
+    const row = document.querySelector(`[data-selected-file-for="${input.id}"]`);
+    const fileName = row?.querySelector("[data-selected-file-name]");
+    const updateSelectedFile = () => {
+      const file = input.files?.[0];
+      if (!row || !fileName) return;
+      if (file) {
+        fileName.textContent = file.name;
+        row.hidden = false;
+      } else {
+        fileName.textContent = "";
+        row.hidden = true;
+      }
+    };
+    input.addEventListener("change", updateSelectedFile);
+    updateSelectedFile();
+  });
+
+  document.querySelectorAll("[data-clear-file]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const input = document.getElementById(button.dataset.clearFile);
+      if (!input) return;
+      input.value = "";
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      input.focus();
+    });
+  });
 }
 
 function attachPasswordToggles() {

@@ -542,6 +542,56 @@ h2 {
   font-size: 13px;
 }
 
+.composer .section-label {
+  display: block;
+  margin-bottom: 16px;
+}
+
+.selected-file-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  margin-top: 14px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--text);
+  font-weight: 700;
+}
+
+.selected-file-row[hidden] {
+  display: none;
+}
+
+.selected-file-row span {
+  max-width: min(520px, 70vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remove-file-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--green);
+  border-radius: 999px;
+  background: var(--green);
+  color: #fff;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.remove-file-button:hover,
+.remove-file-button:focus-visible {
+  background: #351052;
+}
+
 .primary,
 .secondary,
 .download-button {
