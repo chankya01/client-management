@@ -12,13 +12,24 @@ function uniqueIds(values) {
   return Array.from(new Set((values || []).map(String).filter(Boolean)));
 }
 
+async function assignmentRoleMap(profileIds) {
+  if (!profileIds.length) return {};
+  const profiles = await supabaseAdminFetch(
+    tablePath("profiles", `?select=id,role&id=in.(${profileIds.map(encodeValue).join(",")})`)
+  );
+  return Object.fromEntries((profiles || []).map((profile) => [profile.id, profile.role || "developer"]));
+}
+
 async function insertAssignments(requestId, profileIds, assignedBy) {
   if (!profileIds.length) return;
+  const rolesByProfileId = await assignmentRoleMap(profileIds);
+  const roleFor = (profileId) => rolesByProfileId[profileId] || "developer";
 
   const fullRows = profileIds.map((profileId) => ({
     request_id: requestId,
     profile_id: profileId,
     user_id: profileId,
+    assignment_role: roleFor(profileId),
     assigned_by: assignedBy || null
   }));
 
@@ -36,6 +47,7 @@ async function insertAssignments(requestId, profileIds, assignedBy) {
   const profileRows = profileIds.map((profileId) => ({
     request_id: requestId,
     profile_id: profileId,
+    assignment_role: roleFor(profileId),
     assigned_by: assignedBy || null
   }));
   try {
@@ -51,6 +63,7 @@ async function insertAssignments(requestId, profileIds, assignedBy) {
   const userRows = profileIds.map((profileId) => ({
     request_id: requestId,
     user_id: profileId,
+    assignment_role: roleFor(profileId),
     assigned_by: assignedBy || null
   }));
   await supabaseAdminFetch(tablePath("request_assignments"), {

@@ -1021,8 +1021,8 @@ function adminTeamPage() {
               <option value="owner" ${roleValue === "owner" ? "selected" : ""}>Admin</option>
             </select></label>
             <label class="field"><span>Job title</span><input name="jobTitle" value="${escapeHtml(editingMember?.job_title || "")}" /></label>
-            <button class="primary" type="submit">${submitText}</button>
-            ${editingMember ? `<button class="secondary" type="button" data-cancel-team-edit>Cancel edit</button>` : ""}
+            <button class="primary team-form-button" type="submit">${submitText}</button>
+            ${editingMember ? `<button class="primary team-form-button" type="button" data-cancel-team-edit>Cancel edit</button>` : ""}
           </form>
         </section>
       ` : `

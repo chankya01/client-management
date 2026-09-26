@@ -1011,6 +1011,16 @@ h2 {
   min-height: 42px;
 }
 
+.admin-form .secondary {
+  align-self: end;
+  justify-self: start;
+  min-height: 42px;
+}
+
+.admin-form .team-form-button {
+  min-width: 250px;
+}
+
 .admin-form .request-form-actions .primary,
 .admin-form .request-form-actions .secondary {
   align-self: auto;

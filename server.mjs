@@ -564,12 +564,15 @@ async function handleApi(req, res, url) {
     await supabaseFetch(rest("request_assignments", `?request_id=eq.${encode(requestId)}`), { method: "DELETE" });
 
     if (profileIds.length) {
+      const profiles = await supabaseFetch(rest("profiles", `?select=id,role&id=in.(${profileIds.map(encode).join(",")})`));
+      const rolesByProfileId = Object.fromEntries((profiles || []).map((profile) => [profile.id, profile.role || "developer"]));
       await supabaseFetch(rest("request_assignments"), {
         method: "POST",
         body: JSON.stringify(profileIds.map((profileId) => ({
           request_id: requestId,
           profile_id: profileId,
           user_id: profileId,
+          assignment_role: rolesByProfileId[profileId] || "developer",
           assigned_by: body.assignedBy || null
         })))
       });

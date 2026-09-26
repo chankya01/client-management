@@ -107,6 +107,13 @@ async function localApi(path, options = {}) {
   return payload;
 }
 
+function isServerRouteMissing(error) {
+  const message = String(error?.message || "");
+  return message.includes("The page could not be found")
+    || message.includes("DNS_HOSTNAME_RESOLVED_PRIVATE")
+    || message.includes("404");
+}
+
 async function fileToBase64(file) {
   const buffer = await file.arrayBuffer();
   let binary = "";
@@ -794,10 +801,21 @@ export async function setRequestAssignments(requestId, profileIds = [], assigned
 
   if (!uniqueProfileIds.length) return;
 
+  let rolesByProfileId = {};
+  const roleLookup = await supabase
+    .from("profiles")
+    .select("id, role")
+    .in("id", uniqueProfileIds);
+  if (!roleLookup.error) {
+    rolesByProfileId = Object.fromEntries((roleLookup.data ?? []).map((profile) => [profile.id, profile.role || "developer"]));
+  }
+  const assignmentRoleFor = (profileId) => rolesByProfileId[profileId] || "developer";
+
   const rows = uniqueProfileIds.map((profileId) => ({
     request_id: requestId,
     profile_id: profileId,
     user_id: profileId,
+    assignment_role: assignmentRoleFor(profileId),
     assigned_by: assignedBy
   }));
 
@@ -813,6 +831,7 @@ export async function setRequestAssignments(requestId, profileIds = [], assigned
   const profileOnlyRows = uniqueProfileIds.map((profileId) => ({
     request_id: requestId,
     profile_id: profileId,
+    assignment_role: assignmentRoleFor(profileId),
     assigned_by: assignedBy
   }));
   const profileOnly = await supabase
@@ -824,6 +843,7 @@ export async function setRequestAssignments(requestId, profileIds = [], assigned
     const userOnlyRows = uniqueProfileIds.map((profileId) => ({
       request_id: requestId,
       user_id: profileId,
+      assignment_role: assignmentRoleFor(profileId),
       assigned_by: assignedBy
     }));
     const userOnly = await supabase
@@ -960,10 +980,14 @@ export async function createTeamMember({ fullName, email, role, jobTitle }) {
 export async function updateTeamMember(memberId, { fullName, email, role, jobTitle }) {
   const normalizedEmail = normalizeEmail(email);
   if (!useDemo()) {
-    return localApi(`/team/${memberId}`, {
-      method: "PUT",
-      body: JSON.stringify({ fullName, email: normalizedEmail, role, jobTitle })
-    });
+    try {
+      return await localApi(`/team/${memberId}`, {
+        method: "PUT",
+        body: JSON.stringify({ fullName, email: normalizedEmail, role, jobTitle })
+      });
+    } catch (error) {
+      if (!isServerRouteMissing(error)) throw error;
+    }
   }
 
   if (useDemo()) {
@@ -1007,8 +1031,12 @@ export async function updateTeamMember(memberId, { fullName, email, role, jobTit
 
 export async function deleteTeamMember(memberId) {
   if (!useDemo()) {
-    await localApi(`/team/${memberId}`, { method: "DELETE" });
-    return;
+    try {
+      await localApi(`/team/${memberId}`, { method: "DELETE" });
+      return;
+    } catch (error) {
+      if (!isServerRouteMissing(error)) throw error;
+    }
   }
 
   if (useDemo()) {
