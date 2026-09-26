@@ -6,7 +6,10 @@ const supabaseUrl = process.env.SUPABASE_URL
   || process.env.VITE_SUPABASE_URL
   || appConfig.supabaseUrl;
 
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  || process.env.SUPABASE_SERVICE_KEY
+  || process.env.SUPABASE_SECRET_KEY
+  || process.env.SERVICE_ROLE_KEY;
 
 const anonKey = process.env.SUPABASE_ANON_KEY
   || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -30,7 +33,11 @@ export function normalizeEmail(email) {
 
 export function requireSupabaseAdmin() {
   if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error("Server team API is not configured. Add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Vercel Environment Variables, then redeploy.");
+    const missing = [
+      !supabaseUrl ? "SUPABASE_URL" : "",
+      !serviceRoleKey ? "SUPABASE_SERVICE_ROLE_KEY" : ""
+    ].filter(Boolean).join(" and ");
+    throw new Error(`Server team API is not configured. Missing ${missing}. Check Vercel Environment Variables for the current environment, then redeploy.`);
   }
 }
 
