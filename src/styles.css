@@ -509,6 +509,7 @@ h2 {
 .composer textarea {
   width: 100%;
   min-height: 140px;
+  margin-top: 10px;
   resize: vertical;
   border: 2px solid var(--line);
   border-radius: 12px;
@@ -544,7 +545,7 @@ h2 {
 
 .composer .section-label {
   display: block;
-  margin-bottom: 16px;
+  margin-bottom: 24px;
 }
 
 .selected-file-row {
