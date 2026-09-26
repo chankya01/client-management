@@ -61,7 +61,7 @@ a:hover { text-decoration: underline; }
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 72px;
+  gap: 44px;
   padding: 0 40px;
 }
 
@@ -81,7 +81,7 @@ a:hover { text-decoration: underline; }
 .nav {
   display: flex;
   align-items: center;
-  gap: 26px;
+  gap: 18px;
 }
 
 .nav button {
@@ -89,7 +89,8 @@ a:hover { text-decoration: underline; }
   background: transparent;
   color: #000;
   border-radius: 8px;
-  padding: 10px 14px;
+  min-height: 48px;
+  padding: 10px 18px;
   font-weight: 600;
   display: inline-flex;
   align-items: center;
@@ -153,8 +154,13 @@ h2 {
 }
 
 .subtitle {
-  margin: 0 0 32px;
+  margin: 0 0 36px;
   color: #000;
+}
+
+.message-subtitle {
+  font-size: 20px;
+  line-height: 1.45;
 }
 
 .heading-accent {
@@ -166,12 +172,12 @@ h2 {
   display: grid;
   grid-template-columns: auto 1fr;
   align-items: center;
-  gap: 14px;
-  margin: 34px 0 28px;
+  gap: 18px;
+  margin: 42px 0 32px;
 }
 
 .date-row span {
-  font-size: 13px;
+  font-size: 18px;
   font-weight: 800;
   letter-spacing: 0;
   text-transform: none;
@@ -193,8 +199,8 @@ h2 {
 
 .message-card {
   width: min(100%, 610px);
-  padding: 20px 22px;
-  margin-bottom: 20px;
+  padding: 24px 28px;
+  margin-bottom: 28px;
 }
 
 .message-card.team { background: var(--panel); }
@@ -205,7 +211,7 @@ h2 {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  margin-bottom: 9px;
+  margin-bottom: 14px;
 }
 
 .sender {
@@ -280,8 +286,8 @@ h2 {
 }
 
 .composer {
-  margin-top: 34px;
-  padding: 18px;
+  margin-top: 44px;
+  padding: 30px;
   background: var(--panel);
 }
 
@@ -502,20 +508,22 @@ h2 {
 
 .composer textarea {
   width: 100%;
-  min-height: 92px;
+  min-height: 140px;
   resize: vertical;
   border: 2px solid var(--line);
-  border-radius: 8px;
-  padding: 12px;
+  border-radius: 12px;
+  padding: 18px;
   background: #fff;
+  font-size: 18px;
+  line-height: 1.5;
 }
 
 .composer-actions {
-  margin-top: 12px;
+  margin-top: 24px;
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
-  gap: 12px;
+  gap: 18px;
   align-items: center;
 }
 
@@ -978,6 +986,17 @@ h2 {
   gap: 20px;
 }
 
+.admin-form > *,
+.field,
+.field input,
+.field select {
+  min-width: 0;
+}
+
+.profile-form {
+  grid-template-columns: 1fr;
+}
+
 .admin-form .field {
   margin: 0;
 }
@@ -1004,6 +1023,21 @@ h2 {
 
 .assignment-field label {
   background: #fff;
+}
+
+.assignment-dropdown .service-dropdown-menu {
+  gap: 8px;
+}
+
+.assignment-dropdown [data-action="close-assignments"] {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+  justify-self: start;
+  margin-top: 6px;
+  min-height: 32px;
+  min-width: 88px;
+  width: auto;
 }
 
 .personal-settings-grid {

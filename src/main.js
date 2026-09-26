@@ -678,7 +678,12 @@ function clientName(clientId) {
 }
 
 function assignableTeamMembers() {
-  return state.team.filter((member) => ["developer", "reviewer", "assignee"].includes(member.role));
+  return state.team.filter((member) => (
+    member.id !== state.profile?.id
+    && member.role !== "client"
+    && member.role !== "owner"
+    && member.role !== "project_manager"
+  ));
 }
 
 function assignedProfileIdsForRequest(requestId) {
@@ -1135,19 +1140,20 @@ function messagesPage() {
   if (!state.activeRequest) {
     return emptyCard("No active request", "Your portal is ready, but there are no active requests linked to this account yet.");
   }
+  const requestFromName = organizationName();
 
   return `
     <section class="page">
       <div class="heading-accent">
         <h1>Messages</h1>
-        <p class="subtitle">${organizationName()} and Accessible.org · ${requestTitle()}</p>
+        <p class="subtitle message-subtitle">${escapeHtml(requestFromName)} · ${escapeHtml(requestTitle())}</p>
       </div>
       ${clientRequestSwitcher()}
-      <div class="date-row"><span>Conversation</span></div>
+      <div class="date-row conversation-row"><span>Conversation</span></div>
       ${state.messages.map(messageCard).join("") || emptyMessage()}
       <form class="card composer" id="messageForm">
         <label class="section-label" for="messageText">New message</label>
-        <textarea id="messageText" name="message" placeholder="Write a message to Accessible.org"></textarea>
+        <textarea id="messageText" name="message" placeholder="Write a message about ${escapeHtml(requestTitle())}"></textarea>
         <div class="composer-actions">
           <label class="file-control">
             Attachment
@@ -1163,7 +1169,7 @@ function messagesPage() {
 function messageCard(message) {
   const isClient = message.profiles?.role === "client";
   const messageRequest = state.requests.find((request) => request.id === message.request_id) || state.activeRequest;
-  const sender = isClient ? clientName(messageRequest?.client_id) : "Accessible.org";
+  const sender = isClient ? clientName(messageRequest?.client_id) : (message.profiles?.full_name || "Team member");
   const attachment = message.attachment;
   return `
     <article class="message-card ${isClient ? "client" : "team"}">

@@ -526,13 +526,26 @@ export async function loadRequestAssignments() {
 
   const { data, error } = await supabase
     .from("request_assignments")
-    .select("request_id, profile_id, assigned_by, created_at");
+    .select("request_id, profile_id, user_id, assigned_by, created_at");
 
   if (error) {
+    if (String(error.message || "").includes("profile_id")) {
+      const fallback = await supabase
+        .from("request_assignments")
+        .select("request_id, user_id, assigned_by, created_at");
+      if (fallback.error) throw fallback.error;
+      return (fallback.data ?? []).map((assignment) => ({
+        ...assignment,
+        profile_id: assignment.user_id
+      }));
+    }
     if (String(error.message || "").includes("request_assignments")) return [];
     throw error;
   }
-  return data ?? [];
+  return (data ?? []).map((assignment) => ({
+    ...assignment,
+    profile_id: assignment.profile_id || assignment.user_id
+  }));
 }
 
 export async function loadClients() {
@@ -763,7 +776,22 @@ export async function setRequestAssignments(requestId, profileIds = [], assigned
   const { error } = await supabase
     .from("request_assignments")
     .insert(rows);
-  if (error) throw error;
+  if (!error) return;
+
+  if (String(error.message || "").includes("user_id")) {
+    const fallbackRows = uniqueProfileIds.map((profileId) => ({
+      request_id: requestId,
+      user_id: profileId,
+      assigned_by: assignedBy
+    }));
+    const fallback = await supabase
+      .from("request_assignments")
+      .insert(fallbackRows);
+    if (fallback.error) throw fallback.error;
+    return;
+  }
+
+  throw error;
 }
 
 function nextClientRequestNumber(requests, clientId) {
