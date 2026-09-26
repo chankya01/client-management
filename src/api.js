@@ -78,10 +78,18 @@ async function localApi(path, options = {}) {
   const pathWithView = useLocalAdminProxy()
     ? `${path}${separator}view=${encodeURIComponent(localView())}`
     : path;
+  let accessToken = "";
+  try {
+    const { data } = await supabase.auth.getSession();
+    accessToken = data?.session?.access_token || "";
+  } catch {
+    accessToken = "";
+  }
   const response = await fetch(`${baseUrl}${pathWithView}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...(options.headers || {})
     }
   });
@@ -522,7 +530,11 @@ export async function loadRequests() {
 
 export async function loadRequestAssignments() {
   if (useDemo()) return [];
-  if (useLocalAdminProxy()) return localApi("/request-assignments");
+  try {
+    return await localApi("/request-assignments");
+  } catch (error) {
+    if (useLocalAdminProxy()) throw error;
+  }
 
   const { data, error } = await supabase
     .from("request_assignments")
@@ -537,6 +549,16 @@ export async function loadRequestAssignments() {
       return (fallback.data ?? []).map((assignment) => ({
         ...assignment,
         profile_id: assignment.user_id
+      }));
+    }
+    if (String(error.message || "").includes("user_id")) {
+      const fallback = await supabase
+        .from("request_assignments")
+        .select("request_id, profile_id, assigned_by, created_at");
+      if (fallback.error) throw fallback.error;
+      return (fallback.data ?? []).map((assignment) => ({
+        ...assignment,
+        profile_id: assignment.profile_id
       }));
     }
     if (String(error.message || "").includes("request_assignments")) return [];
@@ -562,8 +584,12 @@ export async function loadClients() {
 }
 
 export async function loadTeam() {
-  if (useLocalAdminProxy()) return localApi("/team");
   if (useDemo()) return demoTeam;
+  try {
+    return await localApi("/team");
+  } catch (error) {
+    if (useLocalAdminProxy()) throw error;
+  }
 
   const { data, error } = await supabase
     .from("profiles")
@@ -750,12 +776,14 @@ export async function setRequestAssignments(requestId, profileIds = [], assigned
   const uniqueProfileIds = Array.from(new Set((profileIds || []).filter(Boolean)));
 
   if (useDemo()) return;
-  if (useLocalAdminProxy()) {
+  try {
     await localApi(`/request-assignments/${requestId}`, {
       method: "PUT",
       body: JSON.stringify({ profileIds: uniqueProfileIds, assignedBy })
     });
     return;
+  } catch (error) {
+    if (useLocalAdminProxy()) throw error;
   }
 
   const deleted = await supabase
@@ -777,21 +805,35 @@ export async function setRequestAssignments(requestId, profileIds = [], assigned
     .from("request_assignments")
     .insert(rows);
   if (!error) return;
+  const insertMessage = String(error.message || "");
+  if (!insertMessage.includes("profile_id") && !insertMessage.includes("user_id")) {
+    throw error;
+  }
 
-  if (String(error.message || "").includes("user_id")) {
-    const fallbackRows = uniqueProfileIds.map((profileId) => ({
+  const profileOnlyRows = uniqueProfileIds.map((profileId) => ({
+    request_id: requestId,
+    profile_id: profileId,
+    assigned_by: assignedBy
+  }));
+  const profileOnly = await supabase
+    .from("request_assignments")
+    .insert(profileOnlyRows);
+  if (!profileOnly.error) return;
+
+  if (String(profileOnly.error.message || "").includes("profile_id")) {
+    const userOnlyRows = uniqueProfileIds.map((profileId) => ({
       request_id: requestId,
       user_id: profileId,
       assigned_by: assignedBy
     }));
-    const fallback = await supabase
+    const userOnly = await supabase
       .from("request_assignments")
-      .insert(fallbackRows);
-    if (fallback.error) throw fallback.error;
+      .insert(userOnlyRows);
+    if (userOnly.error) throw userOnly.error;
     return;
   }
 
-  throw error;
+  throw profileOnly.error;
 }
 
 function nextClientRequestNumber(requests, clientId) {
@@ -878,7 +920,7 @@ export async function deleteRequest(requestId) {
 export async function createTeamMember({ fullName, email, role, jobTitle }) {
   const normalizedEmail = normalizeEmail(email);
 
-  if (useLocalAdminProxy()) {
+  if (!useDemo()) {
     return localApi("/team", {
       method: "POST",
       body: JSON.stringify({ fullName, email: normalizedEmail, role, jobTitle })
@@ -917,7 +959,7 @@ export async function createTeamMember({ fullName, email, role, jobTitle }) {
 
 export async function updateTeamMember(memberId, { fullName, email, role, jobTitle }) {
   const normalizedEmail = normalizeEmail(email);
-  if (useLocalAdminProxy()) {
+  if (!useDemo()) {
     return localApi(`/team/${memberId}`, {
       method: "PUT",
       body: JSON.stringify({ fullName, email: normalizedEmail, role, jobTitle })
@@ -964,7 +1006,7 @@ export async function updateTeamMember(memberId, { fullName, email, role, jobTit
 }
 
 export async function deleteTeamMember(memberId) {
-  if (useLocalAdminProxy()) {
+  if (!useDemo()) {
     await localApi(`/team/${memberId}`, { method: "DELETE" });
     return;
   }
