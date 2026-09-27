@@ -417,6 +417,17 @@ h2 {
   margin-top: 20px;
 }
 
+.signup-prompt {
+  margin: 0;
+}
+
+.inline-link {
+  display: inline;
+  min-height: auto;
+  padding: 0;
+  vertical-align: baseline;
+}
+
 .auth-actions {
   display: flex;
   flex-wrap: wrap;
@@ -851,70 +862,16 @@ h2 {
   display: grid;
   place-items: center;
   padding: 36px;
-  background:
-    radial-gradient(circle at top left, rgba(82, 31, 111, 0.08), transparent 34%),
-    #f8fafc;
+  background: #f8fafc;
 }
 
 .signin-card {
-  width: min(100%, 860px);
+  width: min(100%, 440px);
   background: #fff;
   border: 2px solid var(--line);
-  border-radius: 22px;
-  padding: 0;
-  overflow: hidden;
+  border-radius: 16px;
+  padding: 34px;
   box-shadow: var(--shadow-soft);
-}
-
-.signin-card-main {
-  padding: 54px 70px 48px;
-}
-
-.signin-heading {
-  text-align: center;
-  margin-bottom: 42px;
-}
-
-.signin-heading h1 {
-  margin-bottom: 10px;
-}
-
-.signin-heading p {
-  color: var(--muted);
-  font-size: 20px;
-  margin: 0;
-}
-
-.signin-submit {
-  width: 100%;
-  justify-content: center;
-  min-height: 54px;
-  margin-top: 20px;
-  font-size: 18px;
-  background: #34343d;
-  border-color: #34343d;
-}
-
-.signin-submit span {
-  display: inline-block;
-  margin-left: 10px;
-  color: #d1d5db;
-}
-
-.signin-footer {
-  display: flex;
-  justify-content: center;
-  gap: 8px;
-  padding: 28px;
-  border-top: 1px solid var(--line);
-  background: #f8fafc;
-  color: var(--muted);
-  font-size: 18px;
-}
-
-.signin-footer a {
-  color: #111827;
-  font-weight: 800;
 }
 
 .field {
@@ -1354,24 +1311,6 @@ h2 {
 
   .signin-shell {
     padding: 18px;
-  }
-
-  .signin-card-main {
-    padding: 36px 24px 32px;
-  }
-
-  .signin-heading {
-    margin-bottom: 30px;
-  }
-
-  .signin-heading p,
-  .signin-footer {
-    font-size: 16px;
-  }
-
-  .signin-footer {
-    flex-wrap: wrap;
-    padding: 22px;
   }
 
   .deliverable-row { grid-template-columns: 1fr auto; }
