@@ -1347,7 +1347,7 @@ export async function loadClosedRequests() {
   const { data, error } = await supabase
     .from("requests")
     .select("id, request_number, client_id, title, description, service_type, status, closed_at, created_at")
-    .in("status", ["completed", "delivered", "documentation_issued", "closed"])
+    .in("status", ["delivered", "documentation_issued", "closed"])
     .order("closed_at", { ascending: false, nullsFirst: false });
 
   if (error) throw error;

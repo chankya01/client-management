@@ -553,7 +553,7 @@ async function handleApi(req, res, url) {
       assignmentFilter = `&id=in.(${requestIds.map(encode).join(",")})`;
     }
     const query = closed
-      ? `?select=id,request_number,client_id,title,description,service_type,status,closed_at,created_at&status=in.(completed,delivered,documentation_issued,closed)${clientFilter}${assignmentFilter}&order=closed_at.desc.nullslast`
+      ? `?select=id,request_number,client_id,title,description,service_type,status,closed_at,created_at&status=in.(delivered,documentation_issued,closed)${clientFilter}${assignmentFilter}&order=closed_at.desc.nullslast`
       : `?select=id,request_number,client_id,title,description,service_type,status,due_date,created_at,updated_at,closed_at${clientFilter}${assignmentFilter}&order=updated_at.desc`;
     return json(res, 200, await supabaseFetch(rest("requests", query)));
   }

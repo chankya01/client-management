@@ -302,12 +302,6 @@ h2 {
   background: var(--blue-soft);
 }
 
-.author {
-  display: block;
-  font-size: 12px;
-  font-weight: 700;
-}
-
 .composer {
   margin-top: 44px;
   padding: 30px;

@@ -95,7 +95,7 @@ function statusLabel(status) {
     payment: "Payment",
     in_progress: "In Progress",
     validation: "Validation",
-    completed: "Completed",
+    closed: "Completed",
     cancelled: "Cancelled"
   };
   return labels[normalizedStatus] || String(status || "new")
@@ -112,7 +112,7 @@ function statusDescription(status) {
     payment: "Payment is pending, received, or being confirmed.",
     in_progress: "Audit, tracker setup, remediation, or assigned work is in progress.",
     validation: "Fixes are being validated.",
-    completed: "Process complete.",
+    closed: "Process complete.",
     cancelled: "Request cancelled."
   };
   return descriptions[normalizedStatus] || "Pending";
@@ -122,12 +122,12 @@ function workflowStatusKey(status) {
   if (["quote_sent"].includes(status)) return "scoping";
   if (["agreement_pending", "agreement_acknowledged"].includes(status)) return "agreement";
   if (["remediation", "client_fixes", "delivered", "tracker_uploaded"].includes(status)) return "in_progress";
-  if (["documentation_issued", "closed"].includes(status)) return "completed";
+  if (["documentation_issued"].includes(status)) return "closed";
   return status || "new";
 }
 
 function isTerminalRequestStatus(status) {
-  return ["completed", "cancelled"].includes(workflowStatusKey(status));
+  return ["closed", "cancelled"].includes(workflowStatusKey(status));
 }
 
 function roleLabel(role) {
@@ -204,7 +204,7 @@ function statusTracker(request) {
     "payment",
     "in_progress",
     "validation",
-    "completed"
+    "closed"
   ];
   const currentIndex = Math.max(0, steps.indexOf(workflowStatusKey(request?.status)));
   return `
@@ -841,7 +841,7 @@ function requestStatusOptions(selected) {
     "payment",
     "in_progress",
     "validation",
-    "completed",
+    "closed",
     "cancelled"
   ].map((status) => (
     `<option value="${status}" ${selectedStatus === status ? "selected" : ""}>${statusLabel(status)}</option>`
@@ -1214,7 +1214,6 @@ function messageCard(message) {
   const isClient = message.profiles?.role === "client";
   const messageRequest = state.requests.find((request) => request.id === message.request_id) || state.activeRequest;
   const sender = isClient ? clientName(messageRequest?.client_id) : (message.profiles?.full_name || "Team Member");
-  const author = message.profiles?.full_name || sender;
   const attachment = message.attachment;
   const messageText = String(message.message || "");
   const isLongMessage = messageText.length > 420 || messageText.split(/\r?\n/).length > 8;
@@ -1228,7 +1227,6 @@ function messageCard(message) {
         <div class="message-text ${isLongMessage ? "is-collapsed" : ""}" data-message-text>${formatMessageText(messageText)}</div>
         ${isLongMessage ? `<button class="message-toggle" type="button" data-action="toggle-message">Show More</button>` : ""}
       `}
-      <span class="author">${escapeHtml(author)}</span>
     </article>
   `;
 }
@@ -1348,7 +1346,6 @@ function clientRequestCards(requests) {
         <time>${formatDate(request.due_date || request.closed_at || request.created_at)}</time>
         <span class="status-pill">${statusLabel(request.status)}</span>
       </div>
-      <button class="primary small-action" type="button" data-client-open-request-button="${request.id}">Open Request</button>
     </section>
   `).join("") || emptyCard("No Requests Yet", "Requests linked to this client account will appear here.");
 }
@@ -1652,13 +1649,6 @@ function attachEvents() {
   document.querySelectorAll("[data-client-open-request]").forEach((card) => {
     card.addEventListener("click", async () => {
       await goToPage("request", { requestId: card.dataset.clientOpenRequest });
-    });
-  });
-
-  document.querySelectorAll("[data-client-open-request-button]").forEach((button) => {
-    button.addEventListener("click", async (event) => {
-      event.stopPropagation();
-      await goToPage("request", { requestId: button.dataset.clientOpenRequestButton });
     });
   });
 
