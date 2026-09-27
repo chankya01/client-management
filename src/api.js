@@ -732,6 +732,10 @@ export async function deleteClient(clientId) {
   if (error) throw error;
 }
 
+function uniqueStoredRequestNumber() {
+  return `REQ-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export async function createRequest({ clientId, title, description, serviceType, dueDate, ownerId, status }) {
   if (useLocalAdminProxy()) {
     return localApi("/requests", {
@@ -758,7 +762,7 @@ export async function createRequest({ clientId, title, description, serviceType,
     return request;
   }
 
-  const requestNumber = await nextSupabaseClientRequestNumber(clientId);
+  const requestNumber = uniqueStoredRequestNumber();
   const { data, error } = await supabase
     .from("requests")
     .insert({
@@ -775,7 +779,29 @@ export async function createRequest({ clientId, title, description, serviceType,
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) {
+    const message = String(error.message || "");
+    if (message.includes("duplicate key") || error.code === "23505") {
+      const retry = await supabase
+        .from("requests")
+        .insert({
+          request_number: uniqueStoredRequestNumber(),
+          client_id: clientId,
+          title,
+          description,
+          service_type: serviceType,
+          due_date: dueDate || null,
+          status: status || "new",
+          owner_id: ownerId,
+          created_by: ownerId
+        })
+        .select()
+        .single();
+      if (retry.error) throw retry.error;
+      return retry.data;
+    }
+    throw error;
+  }
   return data;
 }
 

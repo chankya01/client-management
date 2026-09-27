@@ -81,7 +81,7 @@ a:hover { text-decoration: underline; }
 .nav {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 26px;
 }
 
 .nav button {
@@ -105,8 +105,9 @@ a:hover { text-decoration: underline; }
 
 .nav .nav-logout {
   border: 1px solid var(--green);
-  background: #fff;
-  color: var(--green);
+  background: var(--green);
+  color: #fff;
+  margin-left: 10px;
 }
 
 .count {
@@ -612,9 +613,13 @@ h2 {
 
 .secondary {
   border: 1px solid var(--green);
-  background: #fff;
-  color: var(--green);
+  background: var(--green);
+  color: #fff;
   padding: 8px 18px;
+}
+
+.secondary:hover {
+  background: var(--blue-dark);
 }
 
 .small-action {
@@ -973,8 +978,8 @@ h2 {
   align-items: center;
   border: 1px solid var(--green);
   border-radius: 8px;
-  background: #fff;
-  color: var(--green);
+  background: var(--green);
+  color: #fff;
   display: inline-flex;
   font-size: 13px;
   font-weight: 700;
@@ -984,6 +989,7 @@ h2 {
 
 .danger-link:disabled {
   color: #9ca3af;
+  background: #fff;
   cursor: not-allowed;
 }
 
@@ -1218,7 +1224,6 @@ h2 {
 /* Shared purple theme override for both owner/admin and client portals. */
 .brand,
 .signin-card .brand,
-.nav .nav-logout,
 .sender,
 .file-control,
 .download-button,
@@ -1227,9 +1232,15 @@ h2 {
 .section-label.green,
 .request-switcher button.active,
 .admin-row .status-pill,
-.danger-link,
 a {
   color: var(--green);
+}
+
+.nav .nav-logout,
+.secondary,
+.danger-link,
+.danger-button {
+  color: #fff;
 }
 
 .nav button.active,

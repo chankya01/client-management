@@ -235,6 +235,10 @@ async function nextRequestNumberForClient(clientId) {
   return `REQ-${maxNumber + 1}`;
 }
 
+function uniqueStoredRequestNumber() {
+  return `REQ-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 async function createAuthUser(email, fullName, password = defaultTempPassword) {
   const users = await supabaseFetch("/auth/v1/admin/users?page=1&per_page=1000");
   const existing = users?.users?.find((user) => normalizeEmail(user.email) === normalizeEmail(email));
@@ -583,7 +587,7 @@ async function handleApi(req, res, url) {
   if (path === "/requests" && method === "POST") {
     const body = await readJson(req);
     const admin = await ensureAdminProfile();
-    const requestNumber = await nextRequestNumberForClient(body.clientId);
+    const requestNumber = uniqueStoredRequestNumber();
     const rows = await supabaseFetch(rest("requests", "?select=*"), {
       method: "POST",
       headers: { Prefer: "return=representation" },

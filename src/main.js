@@ -217,9 +217,17 @@ function friendlyErrorMessage(error) {
   const message = String(error?.message || error || "Something went wrong.");
   const lower = message.toLowerCase();
   if (lower.includes("duplicate key") || lower.includes("already exists") || lower.includes("23505")) {
+    if (lower.includes("request")) {
+      return "A request with the same generated number already exists. Please try creating it again.";
+    }
+    if (lower.includes("email")) {
+      return message.includes("already exists")
+        ? message
+        : "A record with this email already exists. Please use the existing record.";
+    }
     return message.includes("already exists")
       ? message
-      : "A record with this email already exists. Please use the existing record.";
+      : "A duplicate record already exists. Please use the existing record or try again.";
   }
   if (lower.includes("row level security") || lower.includes("violates row-level security")) {
     return "Permission issue: your account is not allowed to perform this action yet. Please ask an admin to check access policies.";
@@ -1335,7 +1343,7 @@ function accountPage() {
       <section class="card">
         <p class="section-label">Sign In</p>
         <p>You are signed in as ${escapeHtml(state.profile?.email || "")} on this device.</p>
-        <button class="secondary" id="signOut">Sign Out</button>
+        <button class="primary" id="signOut">Sign Out</button>
       </section>
       ${passwordSection("Password")}
     </section>
