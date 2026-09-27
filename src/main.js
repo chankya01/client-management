@@ -733,10 +733,10 @@ function adminNavHtml() {
         ${brandLogo("nav")}
         <nav class="nav" aria-label="Admin portal">
           ${navButton("admin-dashboard", "Dashboard")}
-          ${canManage ? navButton("admin-clients", "Clients") : ""}
-          ${navButton("admin-requests", "Requests")}
-          ${navButton("admin-messages", `Messages ${totalUnreadCount() ? `<span class="count">${totalUnreadCount()}</span>` : ""}`)}
-          ${navButton("admin-team", "Team")}
+          ${canManage ? navButton("admin-clients", "Client Management") : ""}
+          ${navButton("admin-requests", "Request Management")}
+          ${navButton("admin-messages", `Message Management ${totalUnreadCount() ? `<span class="count">${totalUnreadCount()}</span>` : ""}`)}
+          ${navButton("admin-team", "Team Management")}
           ${navButton("admin-settings", "Settings")}
           <button class="nav-logout" data-action="logout">Logout</button>
         </nav>
@@ -912,8 +912,7 @@ function adminClientsPage() {
     <section class="admin-page">
       <div class="admin-heading">
         <div>
-          <p class="section-label green">Client Management</p>
-          <h1>Clients</h1>
+          <h1>Client Management</h1>
           <p class="subtitle">Create the client company, then create requests against that client.</p>
         </div>
       </div>
@@ -955,8 +954,7 @@ function adminRequestsPage() {
     <section class="admin-page">
       <div class="admin-heading">
         <div>
-          <p class="section-label green">Request Management</p>
-          <h1>Requests</h1>
+          <h1>Request Management</h1>
           <p class="subtitle">Create work for a client and keep the client view scoped to that request/company.</p>
         </div>
       </div>
@@ -1067,8 +1065,7 @@ function adminMessagesPage() {
     <section class="admin-page">
       <div class="admin-heading">
         <div>
-          <p class="section-label green">Message Management</p>
-          <h1>Request Conversation</h1>
+          <h1>Message Management</h1>
           <p class="subtitle">${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(request.title)} · ${escapeHtml(clientName(request.client_id))}</p>
         </div>
       </div>
@@ -1120,8 +1117,7 @@ function adminTeamPage() {
     <section class="admin-page">
       <div class="admin-heading">
         <div>
-          <p class="section-label green">Team Management</p>
-          <h1>Team</h1>
+          <h1>Team Management</h1>
           <p class="subtitle">Internal users who can own, manage, develop, or review work.</p>
         </div>
       </div>
