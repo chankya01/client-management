@@ -14,6 +14,8 @@ This is a Next.js app for the request/client management portal:
 
 The app can run locally in admin mode without repeated login while still reading and writing Supabase data.
 
+For the full local setup and pre-stage test checklist, see [LOCAL_SETUP.md](LOCAL_SETUP.md).
+
 Create a `.env` file from `.env.example`:
 
 ```bash

@@ -535,6 +535,40 @@ h2 {
   font-weight: 800;
 }
 
+.pending-summary {
+  margin-bottom: 24px;
+  display: grid;
+  gap: 10px;
+}
+
+.pending-summary button {
+  width: 100%;
+  border: 2px solid var(--line);
+  background: #fff;
+  color: var(--text);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  text-align: left;
+}
+
+.pending-summary button:hover,
+.pending-summary button:focus-visible {
+  border-color: var(--green);
+}
+
+.pending-summary button span:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.pending-summary .count {
+  flex: 0 0 auto;
+}
+
 .field select[multiple] {
   min-height: 120px;
   padding: 8px;

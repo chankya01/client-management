@@ -299,7 +299,7 @@ function defaultPage() {
     return "admin-settings";
   }
   if (canAccessManagementPages()) return "admin-dashboard";
-  return isInternal() ? "admin-requests" : "messages";
+  return isInternal() ? "admin-requests" : "dashboard";
 }
 
 function pageIsAllowed(page) {
@@ -417,6 +417,30 @@ function pendingReadText(requestId) {
   return count ? `<span class="pending-read">${count} pending read</span>` : "";
 }
 
+function pendingMessagesSummary() {
+  const pendingRequests = state.requests.filter((request) => Number(state.unreadCounts[request.id] || 0) > 0);
+  if (!pendingRequests.length) return "";
+
+  return `
+    <section class="card pending-summary" aria-label="Pending messages by request">
+      <p class="section-label">Pending Messages</p>
+      ${pendingRequests.map((request) => `
+        <button type="button" data-pending-request="${request.id}">
+          <span>
+            <strong>${escapeHtml(displayRequestNumber(request))}</strong>
+            ${escapeHtml(request.title)}
+          </span>
+          <span class="count">${state.unreadCounts[request.id]}</span>
+        </button>
+      `).join("")}
+    </section>
+  `;
+}
+
+function isConversationPage(page) {
+  return page === "messages" || page === "admin-messages";
+}
+
 function rememberActiveRequest() {
   if (state.activeRequest?.id) {
     localStorage.setItem(LAST_REQUEST_KEY, state.activeRequest.id);
@@ -451,8 +475,8 @@ async function goToPage(page, { requestId, replace = false, scroll = true } = {}
   state.page = page;
   rememberPage();
   if (requestId) {
-    await setActiveRequest(requestId, { page, markRead: page === "messages" });
-  } else if (page === "messages" && state.activeRequest) {
+    await setActiveRequest(requestId, { page, markRead: isConversationPage(page) });
+  } else if (isConversationPage(page) && state.activeRequest) {
     await setActiveRequest(state.activeRequest.id, { markRead: true });
   }
   syncBrowserHistory({ replace });
@@ -691,8 +715,8 @@ function navHtml() {
       <div class="topbar-inner">
         ${brandLogo("nav")}
         <nav class="nav" aria-label="Client portal">
-          ${navButton("messages", `Messages ${unreadCount ? `<span class="count">${unreadCount}</span>` : ""}`)}
           ${navButton("dashboard", "Dashboard")}
+          ${navButton("messages", `Messages ${unreadCount ? `<span class="count">${unreadCount}</span>` : ""}`)}
           ${navButton("account", "Account")}
           <button class="nav-logout" data-action="logout">Logout</button>
         </nav>
@@ -810,7 +834,6 @@ function displayRequestNumber(request) {
 
 function adminDashboardPage() {
   const activeRequests = state.requests.filter((request) => !isTerminalRequestStatus(request.status));
-  const workspaceLabel = canAccessManagementPages() ? "Admin Workspace" : "Work Workspace";
   const permissionText = canAccessManagementPages()
     ? "management permissions."
     : `${roleLabel(state.profile.role)} access.`;
@@ -818,11 +841,9 @@ function adminDashboardPage() {
     <section class="admin-page">
       <div class="admin-heading">
         <div>
-          <p class="section-label green">${workspaceLabel}</p>
-          <h1>${APP_NAME} Dashboard</h1>
-          <p class="subtitle">Signed in as ${escapeHtml(state.profile.full_name)} · ${escapeHtml(permissionText)}</p>
+          <h1>Dashboard</h1>
+          <p class="subtitle">Overview of clients, active requests, team members, and recent requests. Signed in as ${escapeHtml(state.profile.full_name)} · ${escapeHtml(permissionText)}</p>
         </div>
-        ${canManageClients() ? `<button class="primary" data-page="admin-clients">Add Client</button>` : ""}
       </div>
       <div class="metric-grid">
         ${canAccessManagementPages() ? metricCard("Clients", state.clients.length) : ""}
@@ -830,6 +851,7 @@ function adminDashboardPage() {
         ${metricCard("Team Members", state.team.length)}
         ${metricCard("Access", roleLabel(state.profile.role))}
       </div>
+      ${pendingMessagesSummary()}
       <section class="card">
         <p class="section-label">Recent Requests</p>
         ${adminRequestRows(state.requests, { source: "dashboard" })}
@@ -890,7 +912,7 @@ function adminClientsPage() {
     <section class="admin-page">
       <div class="admin-heading">
         <div>
-          <p class="section-label green">Client Onboarding</p>
+          <p class="section-label green">Client Management</p>
           <h1>Clients</h1>
           <p class="subtitle">Create the client company, then create requests against that client.</p>
         </div>
@@ -1045,18 +1067,23 @@ function adminMessagesPage() {
     <section class="admin-page">
       <div class="admin-heading">
         <div>
-          <p class="section-label green">Internal Messages</p>
+          <p class="section-label green">Message Management</p>
           <h1>Request Conversation</h1>
           <p class="subtitle">${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(request.title)} · ${escapeHtml(clientName(request.client_id))}</p>
         </div>
       </div>
+      ${pendingMessagesSummary()}
       <div class="message-layout">
         <aside class="card message-request-list">
           <p class="section-label">Requests</p>
           ${state.requests.map((item) => `
             <button class="${item.id === request.id ? "active" : ""}" data-chat-request="${item.id}">
-              <strong>${escapeHtml(displayRequestNumber(item))}</strong>
-              <span>${escapeHtml(item.title)}</span>
+              <span>
+                <strong>${escapeHtml(displayRequestNumber(item))}</strong>
+                <span>${escapeHtml(item.title)}</span>
+                ${pendingReadText(item.id)}
+              </span>
+              ${requestUnreadBadge(item.id)}
             </button>
           `).join("")}
         </aside>
@@ -1091,8 +1118,13 @@ function adminTeamPage() {
   const roleValue = editingMember?.role || "";
   return `
     <section class="admin-page">
-      <h1>Team</h1>
-      <p class="subtitle">Internal users who can own, manage, develop, or review work.</p>
+      <div class="admin-heading">
+        <div>
+          <p class="section-label green">Team Management</p>
+          <h1>Team</h1>
+          <p class="subtitle">Internal users who can own, manage, develop, or review work.</p>
+        </div>
+      </div>
       ${canManageTeam() ? `
         <section class="card">
           <p class="section-label">${formTitle}</p>
@@ -1170,7 +1202,7 @@ function adminSettingsPage() {
     <section class="admin-page">
       <div class="admin-heading">
         <div>
-          <p class="section-label green">Workspace Controls</p>
+          <p class="section-label green">Workspace Settings</p>
           <h1>Settings</h1>
           <p class="subtitle">Manage the workspace basics and your account password.</p>
         </div>
@@ -1294,8 +1326,9 @@ function clientRequestSwitcher() {
 function dashboardPage() {
   return `
     <section class="page">
-      <p class="section-label green">Dashboard</p>
-      <h1>Review your requests, status, services, and deliverables.</h1>
+      <h1>Dashboard</h1>
+      <p class="subtitle">Review your requests, status, services, and deliverables.</p>
+      ${pendingMessagesSummary()}
       ${clientRequestCards(state.requests)}
     </section>
   `;
@@ -1648,6 +1681,13 @@ function attachEvents() {
     button.addEventListener("click", async () => {
       await setActiveRequest(button.dataset.chatRequest, { markRead: true });
       render();
+    });
+  });
+
+  document.querySelectorAll("[data-pending-request]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const requestId = button.dataset.pendingRequest;
+      await goToPage(isInternal() ? "admin-messages" : "messages", { requestId });
     });
   });
 
@@ -2189,7 +2229,7 @@ window.addEventListener("popstate", async () => {
     return;
   }
   if (requestId) {
-    await setActiveRequest(requestId, { page, markRead: page === "messages" });
+    await setActiveRequest(requestId, { page, markRead: isConversationPage(page) });
   } else {
     state.page = page;
     rememberPage();
