@@ -733,10 +733,10 @@ function adminNavHtml() {
         ${brandLogo("nav")}
         <nav class="nav" aria-label="Admin portal">
           ${navButton("admin-dashboard", "Dashboard")}
-          ${canManage ? navButton("admin-clients", "Client Management") : ""}
-          ${navButton("admin-requests", "Request Management")}
-          ${navButton("admin-messages", `Message Management ${totalUnreadCount() ? `<span class="count">${totalUnreadCount()}</span>` : ""}`)}
-          ${navButton("admin-team", "Team Management")}
+          ${canManage ? navButton("admin-clients", "Clients") : ""}
+          ${navButton("admin-requests", "Requests")}
+          ${navButton("admin-messages", `Messages ${totalUnreadCount() ? `<span class="count">${totalUnreadCount()}</span>` : ""}`)}
+          ${navButton("admin-team", "Team")}
           ${navButton("admin-settings", "Settings")}
           <button class="nav-logout" data-action="logout">Logout</button>
         </nav>
