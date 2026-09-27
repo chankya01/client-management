@@ -55,6 +55,15 @@ function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
 }
 
+function normalizeRequestStatus(status) {
+  const value = String(status || "new").trim();
+  if (["completed", "documentation_issued"].includes(value)) return "closed";
+  if (["quote_sent"].includes(value)) return "scoping";
+  if (["agreement_pending", "agreement_acknowledged"].includes(value)) return "agreement";
+  if (["remediation", "client_fixes", "delivered", "tracker_uploaded"].includes(value)) return "in_progress";
+  return value || "new";
+}
+
 function json(res, status, payload) {
   res.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
@@ -600,7 +609,7 @@ async function handleApi(req, res, url) {
         description: body.description,
         service_type: body.serviceType,
         due_date: body.dueDate || null,
-        status: body.status || "new",
+        status: normalizeRequestStatus(body.status),
         owner_id: body.ownerId || admin.id,
         created_by: body.ownerId || admin.id
       })
@@ -620,7 +629,7 @@ async function handleApi(req, res, url) {
         description: body.description,
         service_type: body.serviceType,
         due_date: body.dueDate || null,
-        status: body.status || "new"
+        status: normalizeRequestStatus(body.status)
       })
     });
     return json(res, 200, rows[0]);

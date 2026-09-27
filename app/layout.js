@@ -1,8 +1,8 @@
 import "../src/styles.css";
 
 export const metadata = {
-  title: "Clients Management",
-  description: "Client and request management portal"
+  title: "Clients",
+  description: "Client, admin, and developer workspace"
 };
 
 export default function RootLayout({ children }) {

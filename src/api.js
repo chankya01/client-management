@@ -43,6 +43,15 @@ function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
 }
 
+function normalizeRequestStatus(status) {
+  const value = String(status || "new").trim();
+  if (["completed", "documentation_issued"].includes(value)) return "closed";
+  if (["quote_sent"].includes(value)) return "scoping";
+  if (["agreement_pending", "agreement_acknowledged"].includes(value)) return "agreement";
+  if (["remediation", "client_fixes", "delivered", "tracker_uploaded"].includes(value)) return "in_progress";
+  return value || "new";
+}
+
 function isLocalAdminMode() {
   return Boolean(
     appConfig.localAdminMode
@@ -782,10 +791,11 @@ function uniqueStoredRequestNumber() {
 }
 
 export async function createRequest({ clientId, title, description, serviceType, dueDate, ownerId, status }) {
+  const requestStatus = normalizeRequestStatus(status);
   if (useLocalAdminProxy()) {
     return localApi("/requests", {
       method: "POST",
-      body: JSON.stringify({ clientId, title, description, serviceType, dueDate, ownerId, status })
+      body: JSON.stringify({ clientId, title, description, serviceType, dueDate, ownerId, status: requestStatus })
     });
   }
 
@@ -797,7 +807,7 @@ export async function createRequest({ clientId, title, description, serviceType,
       title,
       description,
       service_type: serviceType,
-      status: status || "new",
+      status: requestStatus,
       due_date: dueDate || null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -817,7 +827,7 @@ export async function createRequest({ clientId, title, description, serviceType,
       description,
       service_type: serviceType,
       due_date: dueDate || null,
-      status: status || "new",
+      status: requestStatus,
       owner_id: ownerId,
       created_by: ownerId
     })
@@ -836,7 +846,7 @@ export async function createRequest({ clientId, title, description, serviceType,
           description,
           service_type: serviceType,
           due_date: dueDate || null,
-          status: status || "new",
+          status: requestStatus,
           owner_id: ownerId,
           created_by: ownerId
         })
@@ -948,10 +958,11 @@ async function nextSupabaseClientRequestNumber(clientId) {
 }
 
 export async function updateRequest(requestId, { clientId, title, description, serviceType, dueDate, status }) {
+  const requestStatus = normalizeRequestStatus(status);
   if (useLocalAdminProxy()) {
     return localApi(`/requests/${requestId}`, {
       method: "PUT",
-      body: JSON.stringify({ clientId, title, description, serviceType, dueDate, status })
+      body: JSON.stringify({ clientId, title, description, serviceType, dueDate, status: requestStatus })
     });
   }
 
@@ -963,7 +974,7 @@ export async function updateRequest(requestId, { clientId, title, description, s
       request.description = description;
       request.service_type = serviceType;
       request.due_date = dueDate || null;
-      request.status = status || request.status || "new";
+      request.status = requestStatus || request.status || "new";
       request.updated_at = new Date().toISOString();
     }
     return request;
@@ -977,7 +988,7 @@ export async function updateRequest(requestId, { clientId, title, description, s
       description,
       service_type: serviceType,
       due_date: dueDate || null,
-      status: status || "new"
+      status: requestStatus
     })
     .eq("id", requestId)
     .select()

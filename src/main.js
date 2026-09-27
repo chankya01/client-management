@@ -18,7 +18,6 @@ import {
   loadRequests,
   loadTeam,
   onAuthStateChange,
-  sendMagicLink,
   sendPasswordReset,
   setRequestAssignments,
   signInWithPassword,
@@ -537,25 +536,32 @@ function renderSignIn() {
   root.innerHTML = `
     <main class="signin-shell">
       <form class="signin-card" id="signinForm">
-        <div class="brand">${APP_NAME}</div>
-        <h1>Sign In</h1>
-        <p class="helper">Use your email and password to access your workspace or client portal.</p>
-        <label class="field">
-          <span>Email Address</span>
-          <input name="email" type="email" autocomplete="email" required />
-        </label>
-        <label class="field">
-          <span>Password</span>
-          <input name="password" type="password" autocomplete="current-password" required />
-        </label>
-        <label class="password-toggle">
-          <input type="checkbox" data-toggle-password="password" />
-          <span>Show Password</span>
-        </label>
-        <button class="primary" type="submit">Sign In</button>
-        <div class="signin-actions">
-          <button class="link-button" type="button" data-action="forgot-password">Forgot Password?</button>
-          <button class="link-button" type="button" data-action="magic-link">Send Magic Link Instead</button>
+        <div class="signin-card-main">
+          ${brandLogo("signin")}
+          <div class="signin-heading">
+            <h1>Sign in to ${APP_NAME}</h1>
+            <p>Client, admin, and developer conversations in one workspace.</p>
+          </div>
+          <label class="field">
+            <span>Email Address</span>
+            <input name="email" type="email" autocomplete="email" placeholder="Enter your email address" required />
+          </label>
+          <label class="field">
+            <span>Password</span>
+            <input name="password" type="password" autocomplete="current-password" placeholder="Enter your password" required />
+          </label>
+          <label class="password-toggle">
+            <input type="checkbox" data-toggle-password="password" />
+            <span>Show Password</span>
+          </label>
+          <button class="primary signin-submit" type="submit">Sign In <span aria-hidden="true">›</span></button>
+          <div class="signin-actions">
+            <button class="link-button" type="button" data-action="forgot-password">Forgot Password?</button>
+          </div>
+        </div>
+        <div class="signin-footer">
+          <span>Don’t have an account?</span>
+          <a href="https://accessibilitytracker.com/sign-up" target="_blank" rel="noopener noreferrer">Sign up</a>
         </div>
       </form>
       ${toastHtml()}
@@ -583,25 +589,6 @@ function renderSignIn() {
     render();
   });
 
-  document.querySelector("[data-action='magic-link']").addEventListener("click", async () => {
-    const email = document.querySelector("#signinForm [name='email']").value.trim();
-    if (!email) {
-      showToast("Enter your email first, then click Send magic link.");
-      return;
-    }
-    try {
-      const session = await sendMagicLink(email);
-      if (session?.user) {
-        state.authView = "signin";
-        await completeSignIn(session);
-        return;
-      }
-      showToast("Magic link sent. Check your email to continue.");
-    } catch (error) {
-      showAppError(error);
-    }
-  });
-
   attachPasswordToggles();
 }
 
@@ -609,16 +596,20 @@ function renderForgotPassword() {
   root.innerHTML = `
     <main class="signin-shell">
       <form class="signin-card" id="forgotPasswordForm">
-        <div class="brand">${APP_NAME}</div>
-        <h1>Reset Password</h1>
-        <p class="helper">Enter your account email address. We’ll send a secure password reset link.</p>
-        <label class="field">
-          <span>Email Address</span>
-          <input name="email" type="email" autocomplete="email" required />
-        </label>
-        <div class="auth-actions">
-          <button class="primary" type="submit">Send Reset Link</button>
-          <button class="secondary" type="button" data-action="back-to-signin">Back to Sign In</button>
+        <div class="signin-card-main">
+          ${brandLogo("signin")}
+          <div class="signin-heading">
+            <h1>Reset Password</h1>
+            <p>Enter your account email and we’ll send a secure password reset link.</p>
+          </div>
+          <label class="field">
+            <span>Email Address</span>
+            <input name="email" type="email" autocomplete="email" placeholder="Enter your email address" required />
+          </label>
+          <div class="auth-actions">
+            <button class="primary" type="submit">Send Reset Link</button>
+            <button class="secondary" type="button" data-action="back-to-signin">Back to Sign In</button>
+          </div>
         </div>
       </form>
       ${toastHtml()}
@@ -689,7 +680,7 @@ function navHtml() {
   return `
     <header class="topbar">
       <div class="topbar-inner">
-        <div class="brand">${APP_NAME}</div>
+        ${brandLogo("nav")}
         <nav class="nav" aria-label="Client portal">
           ${navButton("messages", `Messages ${unreadCount ? `<span class="count">${unreadCount}</span>` : ""}`)}
           ${navButton("dashboard", "Dashboard")}
@@ -706,7 +697,7 @@ function adminNavHtml() {
   return `
     <header class="topbar admin-topbar">
       <div class="topbar-inner admin-topbar-inner">
-        <div class="brand">${APP_NAME}</div>
+        ${brandLogo("nav")}
         <nav class="nav" aria-label="Admin portal">
           ${navButton("admin-dashboard", "Dashboard")}
           ${canManage ? navButton("admin-clients", "Clients") : ""}
@@ -723,6 +714,21 @@ function adminNavHtml() {
 
 function navButton(page, label) {
   return `<button class="${state.page === page ? "active" : ""}" data-page="${page}">${label}</button>`;
+}
+
+function brandLogo(variant = "nav") {
+  return `
+    <div class="brand brand-logo brand-logo-${variant}" aria-label="${APP_NAME}">
+      <span class="brand-mark" aria-hidden="true">
+        <span class="brand-ticket"></span>
+        <span class="brand-chat"></span>
+      </span>
+      <span class="brand-copy">
+        <strong>${APP_NAME}</strong>
+        <small>Client workspace</small>
+      </span>
+    </div>
+  `;
 }
 
 function requestTitle() {
@@ -1009,6 +1015,7 @@ function adminRequestDetailPage() {
         ${statusTracker(request)}
         <section class="card">
           <p class="section-label">Conversation Summary</p>
+          <p class="helper">Showing the latest 4 messages. Open the full conversation to see everything.</p>
           ${requestMessages.slice(-4).map((message) => `
             <div class="list-row">
               <strong>${escapeHtml(message.profiles?.full_name || "User")}</strong>
@@ -1445,7 +1452,7 @@ function escapeHtml(value) {
 
 function render() {
   if (state.loading) {
-    root.innerHTML = `<main class="signin-shell"><p>Loading ${APP_NAME}...</p>${toastHtml()}</main>`;
+    root.innerHTML = `<main class="signin-shell"><section class="signin-card"><div class="signin-card-main">${brandLogo("signin")}<p class="helper center-text">Loading ${APP_NAME}...</p></div></section>${toastHtml()}</main>`;
     return;
   }
 
@@ -1462,13 +1469,15 @@ function render() {
     root.innerHTML = `
       <main class="signin-shell">
         <section class="signin-card">
-          <div class="brand">${APP_NAME}</div>
-          <h1>Account Setup Required</h1>
-          <p class="helper">${escapeHtml(state.loadError)}</p>
-          <p class="helper">Check Supabase Auth and public.profiles for this email, then sign in again.</p>
-          <div class="quick-login">
-            <button class="primary" data-action="logout">Sign Out</button>
-            <button class="secondary" data-action="retry-load">Retry</button>
+          <div class="signin-card-main">
+            ${brandLogo("signin")}
+            <h1>Unable to Load Account</h1>
+            <p class="helper">${escapeHtml(state.loadError)}</p>
+            <p class="helper">Please retry. If this continues, ask an admin to check the app deployment and Supabase configuration.</p>
+            <div class="quick-login">
+              <button class="primary" data-action="logout">Sign Out</button>
+              <button class="secondary" data-action="retry-load">Retry</button>
+            </div>
           </div>
         </section>
         ${toastHtml()}
@@ -1686,7 +1695,7 @@ function attachEvents() {
           showToast("Client updated.");
         } else {
           await createClient(values);
-          showToast("Client created. In production, send a magic-link invitation next.");
+          showToast("Client created. Ask the client to sign up if they do not have an account yet.");
         }
         state.clients = await loadClients();
         render();
