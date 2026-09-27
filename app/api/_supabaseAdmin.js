@@ -159,7 +159,7 @@ export async function currentProfile(request) {
 
   const profile = await selectOne(
     "profiles",
-    `?select=id,full_name,email,role,client_id&or=(id.eq.${encodeValue(user.id)},email.eq.${encodeValue(normalizeEmail(user.email))})&limit=1`
+    `?select=id,full_name,email,role,client_id,job_title,phone,must_change_password&or=(id.eq.${encodeValue(user.id)},email.eq.${encodeValue(normalizeEmail(user.email))})&limit=1`
   );
 
   if (!profile?.id) {

@@ -60,7 +60,7 @@ const state = {
 };
 
 const adminPages = ["admin-dashboard", "admin-clients", "admin-requests", "admin-request-detail", "admin-messages", "admin-team", "admin-settings"];
-const clientPages = ["messages", "dashboard", "history", "request", "account"];
+const clientPages = ["messages", "dashboard", "request", "account"];
 const managementRoles = ["owner", "project_manager"];
 const workRoles = ["developer", "reviewer", "assignee"];
 const internalRoles = [...managementRoles, ...workRoles];
@@ -690,7 +690,6 @@ function navHtml() {
         <nav class="nav" aria-label="Client portal">
           ${navButton("messages", `Messages ${unreadCount ? `<span class="count">${unreadCount}</span>` : ""}`)}
           ${navButton("dashboard", "Dashboard")}
-          ${navButton("history", "History")}
           ${navButton("account", "Account")}
           <button class="nav-logout" data-action="logout">Logout</button>
         </nav>
@@ -1277,25 +1276,11 @@ function clientRequestSwitcher() {
 }
 
 function dashboardPage() {
-  if (!state.activeRequest) {
-    return emptyCard("Dashboard", "No active requests are currently linked to this client account.");
-  }
-
   return `
     <section class="page">
-      <h1>${escapeHtml(requestTitle())}: ${statusLabel(state.activeRequest.status)}</h1>
-      ${clientRequestSwitcher()}
-
-      <section class="card">
-        <p class="section-label">Services</p>
-        ${requestServices(state.activeRequest).map((service) => `<div class="list-row">${escapeHtml(service)}</div>`).join("") || `<div class="list-row">Accessibility Service</div>`}
-        <p class="card-note">Need something else? Just ask in <a href="#" data-jump="messages">Messages</a>.</p>
-      </section>
-
-      <section class="card">
-        <p class="section-label">Deliverables</p>
-        ${state.deliverables.map(deliverableRow).join("") || `<p class="helper">No Deliverables Have Been Released Yet.</p>`}
-      </section>
+      <h1>Clients Dashboard</h1>
+      <p class="subtitle">Review your requests, status, services, and deliverables from one place.</p>
+      ${clientRequestCards(state.requests)}
     </section>
   `;
 }
@@ -1307,7 +1292,7 @@ function clientRequestPage() {
 
   return `
     <section class="page">
-      <button class="secondary back-button" data-page="history">Back to History</button>
+      <button class="secondary back-button" data-page="dashboard">Back to Dashboard</button>
       <div class="heading-accent">
         <h1>${escapeHtml(state.activeRequest.title)}</h1>
         <p class="subtitle">${escapeHtml(displayRequestNumber(state.activeRequest))} · ${statusLabel(state.activeRequest.status)} ${requestUnreadBadge(state.activeRequest.id)}</p>
@@ -1348,22 +1333,24 @@ function historyPage() {
   return `
     <section class="page">
       <h1>Request History</h1>
-      ${
-        state.history.map((request) => `
-          <section class="card history-card clickable-row" data-client-open-request="${request.id}">
-            <h2>${escapeHtml(request.title)} ${requestUnreadBadge(request.id)}</h2>
-            <p>${escapeHtml(request.description || "Request linked to this client account.")}</p>
-            <div class="deliverable-row">
-              <span>${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(request.service_type || "Accessibility Service")}</span>
-              <time>${formatDate(request.closed_at || request.created_at)}</time>
-              <span class="status-pill">${statusLabel(request.status)}</span>
-            </div>
-            <p class="helper open-request-link">Open This Request</p>
-          </section>
-        `).join("") || emptyCard("No Requests Yet", "Requests linked to this client account will appear here.")
-      }
+      ${clientRequestCards(state.history)}
     </section>
   `;
+}
+
+function clientRequestCards(requests) {
+  return requests.map((request) => `
+    <section class="card history-card clickable-row" data-client-open-request="${request.id}">
+      <h2>${escapeHtml(request.title)} ${requestUnreadBadge(request.id)}</h2>
+      <p>${escapeHtml(request.description || "Request linked to this client account.")}</p>
+      <div class="deliverable-row">
+        <span>${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(request.service_type || "Accessibility Service")}</span>
+        <time>${formatDate(request.due_date || request.closed_at || request.created_at)}</time>
+        <span class="status-pill">${statusLabel(request.status)}</span>
+      </div>
+      <button class="primary small-action" type="button" data-client-open-request-button="${request.id}">Open Request</button>
+    </section>
+  `).join("") || emptyCard("No Requests Yet", "Requests linked to this client account will appear here.");
 }
 
 function accountPage() {
@@ -1665,6 +1652,13 @@ function attachEvents() {
   document.querySelectorAll("[data-client-open-request]").forEach((card) => {
     card.addEventListener("click", async () => {
       await goToPage("request", { requestId: card.dataset.clientOpenRequest });
+    });
+  });
+
+  document.querySelectorAll("[data-client-open-request-button]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      await goToPage("request", { requestId: button.dataset.clientOpenRequestButton });
     });
   });
 

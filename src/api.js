@@ -489,6 +489,14 @@ export async function loadProfile() {
       : { ...demoProfile, email: session?.user?.email || demoProfile.email };
   }
 
+  try {
+    return await appApi("/profile");
+  } catch (error) {
+    if (!isServerRouteMissing(error) && !String(error.message || "").includes("Server team API is not configured")) {
+      throw error;
+    }
+  }
+
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError) throw userError;
   const authUser = userData.user;
