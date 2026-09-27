@@ -734,7 +734,6 @@ function brandLogo(variant = "nav") {
       </span>
       <span class="brand-copy">
         <strong>${APP_NAME}</strong>
-        <small>Client workspace</small>
       </span>
     </div>
   `;
@@ -1295,8 +1294,8 @@ function clientRequestSwitcher() {
 function dashboardPage() {
   return `
     <section class="page">
-      <h1>Clients Dashboard</h1>
-      <p class="subtitle">Review your requests, status, services, and deliverables from one place.</p>
+      <p class="section-label green">Dashboard</p>
+      <h1>Review your requests, status, services, and deliverables.</h1>
       ${clientRequestCards(state.requests)}
     </section>
   `;

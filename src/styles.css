@@ -154,13 +154,6 @@ a:hover { text-decoration: underline; }
   letter-spacing: -0.03em;
 }
 
-.brand-copy small {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0;
-}
-
 .brand-logo-signin {
   justify-content: center;
   width: fit-content;
@@ -174,10 +167,6 @@ a:hover { text-decoration: underline; }
 
 .brand-logo-signin .brand-copy strong {
   font-size: 16px;
-}
-
-.brand-logo-signin .brand-copy small {
-  font-size: 11px;
 }
 
 .nav {
@@ -257,7 +246,7 @@ h2 {
 }
 
 .subtitle {
-  margin: 0 0 36px;
+  margin: 0 0 24px;
   color: #000;
 }
 
@@ -276,7 +265,7 @@ h2 {
   grid-template-columns: auto 1fr;
   align-items: center;
   gap: 18px;
-  margin: 42px 0 32px;
+  margin: 28px 0 24px;
 }
 
 .date-row span {
@@ -866,11 +855,11 @@ h2 {
 }
 
 .signin-card {
-  width: min(100%, 440px);
+  width: min(100%, 520px);
   background: #fff;
   border: 2px solid var(--line);
   border-radius: 16px;
-  padding: 34px;
+  padding: 42px;
   box-shadow: var(--shadow-soft);
 }
 
@@ -927,7 +916,7 @@ h2 {
   justify-content: space-between;
   align-items: flex-start;
   gap: 28px;
-  margin-bottom: 34px;
+  margin-bottom: 24px;
 }
 
 .metric-grid {
