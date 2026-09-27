@@ -107,6 +107,37 @@ async function localApi(path, options = {}) {
   return payload;
 }
 
+async function appApi(path, options = {}) {
+  let accessToken = "";
+  try {
+    const { data } = await supabase.auth.getSession();
+    accessToken = data?.session?.access_token || "";
+  } catch {
+    accessToken = "";
+  }
+
+  const response = await fetch(`/api${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      ...(options.headers || {})
+    }
+  });
+
+  const contentType = response.headers.get("content-type") || "";
+  const payload = contentType.includes("application/json")
+    ? await response.json()
+    : await response.text();
+
+  if (!response.ok) {
+    const message = typeof payload === "string" ? payload : payload?.error;
+    throw new Error(message || `Server API failed: ${response.status}`);
+  }
+
+  return payload;
+}
+
 function isServerRouteMissing(error) {
   const message = String(error?.message || "");
   return message.includes("The page could not be found")
@@ -209,7 +240,7 @@ const demoRequests = [
     title: "Northwind Health WCAG Audit + VPAT",
     description: "Your team is fixing the issues listed in the audit report. Tell us when you are ready and we will begin validation.",
     service_type: "WCAG 2.1 AA Audit - marketing site and member portal",
-    status: "remediation",
+    status: "in_progress",
     due_date: "2026-09-30",
     created_at: "2026-08-24T00:00:00.000Z",
     updated_at: "2026-09-18T08:30:00.000Z",
@@ -494,11 +525,14 @@ export async function loadProfile() {
   return data;
 }
 
-export async function updateOwnProfile({ fullName, jobTitle, phone }) {
+export async function updateOwnProfile({ fullName, email, jobTitle, phone }) {
   if (useLocalAdminProxy()) {
+    const body = { fullName, email };
+    if (jobTitle !== undefined) body.jobTitle = jobTitle;
+    if (phone !== undefined) body.phone = phone;
     return localApi("/profile", {
       method: "PUT",
-      body: JSON.stringify({ fullName, jobTitle, phone })
+      body: JSON.stringify(body)
     });
   }
 
@@ -507,13 +541,16 @@ export async function updateOwnProfile({ fullName, jobTitle, phone }) {
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError) throw userError;
 
+  const updates = {
+    full_name: fullName,
+    email: normalizeEmail(email || userData.user.email)
+  };
+  if (jobTitle !== undefined) updates.job_title = jobTitle || null;
+  if (phone !== undefined) updates.phone = phone || null;
+
   const { data, error } = await supabase
     .from("profiles")
-    .update({
-      full_name: fullName,
-      job_title: jobTitle || null,
-      phone: phone || null
-    })
+    .update(updates)
     .eq("id", userData.user.id)
     .select("id, full_name, email, role, client_id, job_title, phone, must_change_password, clients(id, name, primary_contact_name, primary_contact_email, billing_email, created_at)")
     .single();
@@ -1083,6 +1120,14 @@ export async function loadMessages(requestId) {
   if (useLocalAdminProxy()) return localApi(`/messages?requestId=${encodeURIComponent(requestId)}`);
   if (useDemo()) return demoMessages.filter((message) => message.request_id === requestId);
 
+  try {
+    return await appApi(`/messages?requestId=${encodeURIComponent(requestId)}`);
+  } catch (error) {
+    if (!isServerRouteMissing(error) && !String(error.message || "").includes("Server team API is not configured")) {
+      throw error;
+    }
+  }
+
   const { data, error } = await supabase
     .from("request_messages")
     .select("id, request_id, sender_id, message, is_internal, created_at, profiles(full_name, role)")
@@ -1092,7 +1137,26 @@ export async function loadMessages(requestId) {
   if (error) throw error;
 
   const attachments = await loadRequestAttachments(requestId);
-  return mergeMessagesAndAttachments(data ?? [], attachments);
+  return mergeMessagesAndAttachments(await enrichMessageProfiles(data ?? []), attachments);
+}
+
+async function enrichMessageProfiles(messages) {
+  const missingProfileSenderIds = [...new Set(messages
+    .filter((message) => message.sender_id && !message.profiles?.full_name)
+    .map((message) => message.sender_id))];
+  if (!missingProfileSenderIds.length) return messages;
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, full_name, role")
+    .in("id", missingProfileSenderIds);
+
+  if (error) return messages;
+  const profileMap = Object.fromEntries((data ?? []).map((profile) => [profile.id, profile]));
+  return messages.map((message) => ({
+    ...message,
+    profiles: message.profiles?.full_name ? message.profiles : profileMap[message.sender_id] || message.profiles
+  }));
 }
 
 async function loadRequestAttachments(requestId) {
@@ -1275,7 +1339,7 @@ export async function loadClosedRequests() {
   const { data, error } = await supabase
     .from("requests")
     .select("id, request_number, client_id, title, description, service_type, status, closed_at, created_at")
-    .in("status", ["delivered", "closed"])
+    .in("status", ["completed", "delivered", "documentation_issued", "closed"])
     .order("closed_at", { ascending: false, nullsFirst: false });
 
   if (error) throw error;

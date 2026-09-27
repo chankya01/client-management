@@ -87,9 +87,47 @@ function withTimeout(promise, label, ms = LOAD_TIMEOUT_MS) {
 }
 
 function statusLabel(status) {
-  return String(status || "new")
+  const normalizedStatus = workflowStatusKey(status);
+  const labels = {
+    new: "Enquiry",
+    scoping: "Scoping",
+    agreement: "Agreement",
+    payment: "Payment",
+    in_progress: "In Progress",
+    validation: "Validation",
+    completed: "Completed",
+    cancelled: "Cancelled"
+  };
+  return labels[normalizedStatus] || String(status || "new")
     .replaceAll("_", " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function statusDescription(status) {
+  const normalizedStatus = workflowStatusKey(status);
+  const descriptions = {
+    new: "Client provided project details.",
+    scoping: "Scope and quote are being prepared.",
+    agreement: "Agreement details are being handled with the client.",
+    payment: "Payment is pending, received, or being confirmed.",
+    in_progress: "Audit, tracker setup, remediation, or assigned work is in progress.",
+    validation: "Fixes are being validated.",
+    completed: "Process complete.",
+    cancelled: "Request cancelled."
+  };
+  return descriptions[normalizedStatus] || "Pending";
+}
+
+function workflowStatusKey(status) {
+  if (["quote_sent"].includes(status)) return "scoping";
+  if (["agreement_pending", "agreement_acknowledged"].includes(status)) return "agreement";
+  if (["remediation", "client_fixes", "delivered", "tracker_uploaded"].includes(status)) return "in_progress";
+  if (["documentation_issued", "closed"].includes(status)) return "completed";
+  return status || "new";
+}
+
+function isTerminalRequestStatus(status) {
+  return ["completed", "cancelled"].includes(workflowStatusKey(status));
 }
 
 function roleLabel(role) {
@@ -159,8 +197,16 @@ function serviceCheckboxes(selectedText) {
 }
 
 function statusTracker(request) {
-  const steps = ["new", "scoping", "agreement_pending", "in_progress", "validation", "delivered", "closed"];
-  const currentIndex = Math.max(0, steps.indexOf(request?.status || "new"));
+  const steps = [
+    "new",
+    "scoping",
+    "agreement",
+    "payment",
+    "in_progress",
+    "validation",
+    "completed"
+  ];
+  const currentIndex = Math.max(0, steps.indexOf(workflowStatusKey(request?.status)));
   return `
     <section class="card">
       <p class="section-label">Status Tracker</p>
@@ -170,7 +216,7 @@ function statusTracker(request) {
             <span class="timeline-dot"></span>
             <div>
               <strong>${statusLabel(step)}</strong>
-              <small>${index < currentIndex ? "Completed" : index === currentIndex ? "Current Stage" : "Pending"}</small>
+              <small>${index < currentIndex ? "Completed" : index === currentIndex ? statusDescription(step) : "Pending"}</small>
             </div>
           </div>
         `).join("")}
@@ -317,6 +363,10 @@ function serviceVersionMessage({ versionLabel, services }) {
   return `${versionLabel}: ${services || "No services selected"}.`;
 }
 
+function statusChangeMessage({ previousStatus, nextStatus, actorName }) {
+  return `Status updated by ${actorName || "Team Member"}: ${statusLabel(previousStatus)} → ${statusLabel(nextStatus)}.`;
+}
+
 function readStateKey() {
   return `requestManagementReadState:${state.profile?.id || "anonymous"}`;
 }
@@ -459,7 +509,7 @@ async function loadPortalData() {
   state.team = isInternal() ? await loadTeam() : [];
   const lastRequestId = localStorage.getItem(LAST_REQUEST_KEY);
   state.activeRequest = state.requests.find((request) => request.id === lastRequestId)
-    || state.requests.find((request) => !["closed", "cancelled"].includes(request.status))
+    || state.requests.find((request) => !isTerminalRequestStatus(request.status))
     || state.requests[0]
     || null;
   state.selectedRequestId = state.activeRequest?.id || null;
@@ -743,7 +793,7 @@ function displayRequestNumber(request) {
 }
 
 function adminDashboardPage() {
-  const activeRequests = state.requests.filter((request) => !["closed", "cancelled"].includes(request.status));
+  const activeRequests = state.requests.filter((request) => !isTerminalRequestStatus(request.status));
   const workspaceLabel = canAccessManagementPages() ? "Admin Workspace" : "Work Workspace";
   const permissionText = canAccessManagementPages()
     ? "management permissions."
@@ -784,8 +834,18 @@ function clientStatusOptions(selected) {
 }
 
 function requestStatusOptions(selected) {
-  return ["new", "scoping", "agreement_pending", "in_progress", "validation", "delivered", "closed", "cancelled"].map((status) => (
-    `<option value="${status}" ${selected === status ? "selected" : ""}>${statusLabel(status)}</option>`
+  const selectedStatus = workflowStatusKey(selected);
+  return [
+    "new",
+    "scoping",
+    "agreement",
+    "payment",
+    "in_progress",
+    "validation",
+    "completed",
+    "cancelled"
+  ].map((status) => (
+    `<option value="${status}" ${selectedStatus === status ? "selected" : ""}>${statusLabel(status)}</option>`
   )).join("");
 }
 
@@ -908,7 +968,6 @@ function adminRequestRows(requests, { source = "requests" } = {}) {
       </div>
       <div class="row-actions">
         ${requestUnreadBadge(request.id)}
-        ${source === "dashboard" ? `<button class="secondary small-action" data-open-request-button="${request.id}">Open</button>` : ""}
         ${canManageRequests() ? `<button class="secondary small-action" data-edit-request="${request.id}">Edit</button>` : ""}
         ${canDelete() ? `<button class="danger-link" data-delete-request="${request.id}">Delete</button>` : ""}
       </div>
@@ -1079,9 +1138,8 @@ function adminSettingsPage() {
             <p class="section-label">Profile</p>
             <form class="admin-form profile-form" id="profileForm">
               <label class="field"><span>Name</span><input name="fullName" value="${escapeHtml(state.profile.full_name || "")}" required /></label>
-              <label class="field"><span>Email</span><input value="${escapeHtml(state.profile.email || "")}" disabled /></label>
+              <label class="field"><span>Email</span><input name="email" type="email" value="${escapeHtml(state.profile.email || "")}" required /></label>
               <label class="field"><span>Role</span><input value="${escapeHtml(roleLabel(state.profile.role))}" disabled /></label>
-              <label class="field"><span>Job Title</span><input name="jobTitle" value="${escapeHtml(state.profile.job_title || "")}" /></label>
               <button class="primary" type="submit">Update Profile</button>
             </form>
           </section>
@@ -1097,53 +1155,22 @@ function adminSettingsPage() {
         <div>
           <p class="section-label green">Workspace Controls</p>
           <h1>Settings</h1>
-          <p class="subtitle">Operational defaults for requests, notifications, services, and client access.</p>
+          <p class="subtitle">Manage the workspace basics and your account password.</p>
         </div>
-        <button class="primary" type="button" onclick="return false;">Save Settings</button>
       </div>
       <div class="settings-grid">
         <section class="card">
           <p class="section-label">Organization Profile</p>
           ${accountRow("Workspace Name", APP_NAME)}
           ${accountRow("Default Admin", state.profile.full_name)}
-          ${accountRow("Default Timezone", "Asia/Kolkata")}
           ${accountRow("Support Email", "support@accessible.org")}
         </section>
         ${passwordSection("Password and Account")}
         <section class="card">
-          <p class="section-label">Request Workflow</p>
-          <div class="list-row">New request -> Scoping -> Agreement -> In progress -> Validation -> Closed</div>
-          <div class="list-row">Default request prefix: REQ</div>
-          <div class="list-row">Next request number: ${1000 + state.requests.length + 1}</div>
-          <div class="list-row">Auto-assign new requests to workspace admin</div>
-        </section>
-        <section class="card">
-          <p class="section-label">Permission Policy</p>
-          <div class="list-row">Admin: full create, update, delete, and settings access</div>
-          <div class="list-row">Project manager: manage clients, requests, team, and conversations</div>
-          <div class="list-row">Developer/reviewer: view assigned work and participate in request chat</div>
-          <div class="list-row">Client: messages, attachments, dashboard, history, and account only</div>
-        </section>
-        <section class="card">
-          <p class="section-label">Notifications</p>
-          <div class="list-row">Email all request participants when a new message is posted</div>
-          <div class="list-row">Email assigned team when request status changes</div>
-          <div class="list-row">Notify admin when deliverables are uploaded</div>
-          <div class="list-row">Send client reminder if awaiting response for 3 business days</div>
-        </section>
-        <section class="card">
-          <p class="section-label">Service Catalog</p>
-          <div class="list-row">WCAG 2.1 AA audit</div>
-          <div class="list-row">VPAT / ACR creation</div>
-          <div class="list-row">Accessibility remediation support</div>
-          <div class="list-row">Validation and regression testing</div>
-        </section>
-        <section class="card">
-          <p class="section-label">Storage and Files</p>
-          <div class="list-row">Request attachments: private bucket</div>
-          <div class="list-row">Deliverables: private bucket with signed downloads</div>
-          <div class="list-row">Agreements: private bucket, owner/project manager upload</div>
-          <div class="list-row">Maximum upload size policy: 25 MB per file</div>
+          <p class="section-label">Current Workspace</p>
+          ${accountRow("Clients", state.clients.length)}
+          ${accountRow("Active Requests", state.requests.filter((request) => !isTerminalRequestStatus(request.status)).length)}
+          ${accountRow("Team Members", state.team.length)}
         </section>
       </div>
     </section>
@@ -1187,18 +1214,31 @@ function messagesPage() {
 function messageCard(message) {
   const isClient = message.profiles?.role === "client";
   const messageRequest = state.requests.find((request) => request.id === message.request_id) || state.activeRequest;
-  const sender = isClient ? clientName(messageRequest?.client_id) : (message.profiles?.full_name || "Team member");
+  const sender = isClient ? clientName(messageRequest?.client_id) : (message.profiles?.full_name || "Team Member");
+  const author = message.profiles?.full_name || sender;
   const attachment = message.attachment;
+  const messageText = String(message.message || "");
+  const isLongMessage = messageText.length > 420 || messageText.split(/\r?\n/).length > 8;
   return `
     <article class="message-card ${isClient ? "client" : "team"}">
       <div class="message-head">
-        <span class="sender ${isClient ? "client-name" : ""}">${sender}</span>
+        <span class="sender ${isClient ? "client-name" : ""}">${escapeHtml(sender)}</span>
         <time class="time">${formatTime(message.created_at)}</time>
       </div>
-      ${attachment ? attachmentCard(attachment) : `<p>${escapeHtml(message.message)}</p>`}
-      <span class="author">${escapeHtml(message.profiles?.full_name || "Team member")}</span>
+      ${attachment ? attachmentCard(attachment) : `
+        <div class="message-text ${isLongMessage ? "is-collapsed" : ""}" data-message-text>${formatMessageText(messageText)}</div>
+        ${isLongMessage ? `<button class="message-toggle" type="button" data-action="toggle-message">Show More</button>` : ""}
+      `}
+      <span class="author">${escapeHtml(author)}</span>
     </article>
   `;
+}
+
+function formatMessageText(text) {
+  return escapeHtml(text)
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/\n/g, "<br />");
 }
 
 function attachmentCard(file) {
@@ -1281,7 +1321,7 @@ function clientRequestPage() {
       </section>
       ${statusTracker(state.activeRequest)}
       <section class="card">
-        <p class="section-label">Services in This Request</p>
+        <p class="section-label">Services in this request</p>
         ${requestServices(state.activeRequest).map((service) => `<div class="list-row">${escapeHtml(service)}</div>`).join("") || `<p class="helper">No Services Listed.</p>`}
       </section>
       <section class="card">
@@ -1602,13 +1642,6 @@ function attachEvents() {
     });
   });
 
-  document.querySelectorAll("[data-open-request-button]").forEach((button) => {
-    button.addEventListener("click", async (event) => {
-      event.stopPropagation();
-      await goToPage("admin-request-detail", { requestId: button.dataset.openRequestButton });
-    });
-  });
-
   document.querySelectorAll("[data-chat-request]").forEach((button) => {
     button.addEventListener("click", async () => {
       await setActiveRequest(button.dataset.chatRequest, { markRead: true });
@@ -1743,6 +1776,17 @@ function attachEvents() {
         if (state.editingRequestId) {
           await updateRequest(state.editingRequestId, requestPayload);
           await setRequestAssignments(state.editingRequestId, assignedProfileIds, state.profile.id);
+          if (previousRequest && previousRequest.status !== requestPayload.status) {
+            await createMessage(
+              state.editingRequestId,
+              state.profile.id,
+              statusChangeMessage({
+                previousStatus: previousRequest.status,
+                nextStatus: requestPayload.status,
+                actorName: state.profile.full_name
+              })
+            );
+          }
           if (previousRequest && previousRequest.service_type !== requestPayload.serviceType) {
             const versionLabel = nextServiceVersionLabel(state.editingRequestId);
             await createMessage(
@@ -1965,6 +2009,15 @@ function attachEvents() {
       } catch (error) {
         showAppError(error, "Download attachment");
       }
+    });
+  });
+
+  document.querySelectorAll("[data-action='toggle-message']").forEach((button) => {
+    button.addEventListener("click", () => {
+      const text = button.closest(".message-card")?.querySelector("[data-message-text]");
+      if (!text) return;
+      const isCollapsed = text.classList.toggle("is-collapsed");
+      button.textContent = isCollapsed ? "Show More" : "Show Less";
     });
   });
 

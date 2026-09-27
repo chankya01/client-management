@@ -409,14 +409,16 @@ async function handleApi(req, res, url) {
   if (path === "/profile" && method === "PUT") {
     const profile = await currentProfile(url);
     const body = await readJson(req);
+    const updates = {
+      full_name: body.fullName,
+      email: normalizeEmail(body.email || profile.email)
+    };
+    if (body.jobTitle !== undefined) updates.job_title = body.jobTitle || null;
+    if (body.phone !== undefined) updates.phone = body.phone || null;
     const rows = await supabaseFetch(rest("profiles", `?id=eq.${encode(profile.id)}&select=id,full_name,email,role,client_id,job_title,phone,must_change_password,clients(id,name,primary_contact_name,primary_contact_email,billing_email,created_at)`), {
       method: "PATCH",
       headers: { Prefer: "return=representation" },
-      body: JSON.stringify({
-        full_name: body.fullName,
-        job_title: body.jobTitle || null,
-        phone: body.phone || null
-      })
+      body: JSON.stringify(updates)
     });
     return json(res, 200, rows[0]);
   }
@@ -551,7 +553,7 @@ async function handleApi(req, res, url) {
       assignmentFilter = `&id=in.(${requestIds.map(encode).join(",")})`;
     }
     const query = closed
-      ? `?select=id,request_number,client_id,title,description,service_type,status,closed_at,created_at&status=in.(delivered,closed)${clientFilter}${assignmentFilter}&order=closed_at.desc.nullslast`
+      ? `?select=id,request_number,client_id,title,description,service_type,status,closed_at,created_at&status=in.(completed,delivered,documentation_issued,closed)${clientFilter}${assignmentFilter}&order=closed_at.desc.nullslast`
       : `?select=id,request_number,client_id,title,description,service_type,status,due_date,created_at,updated_at,closed_at${clientFilter}${assignmentFilter}&order=updated_at.desc`;
     return json(res, 200, await supabaseFetch(rest("requests", query)));
   }
