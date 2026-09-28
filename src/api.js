@@ -518,9 +518,15 @@ export async function loadProfile() {
   try {
     return await appApi("/profile");
   } catch (error) {
-    if (!isServerRouteMissing(error) && !String(error.message || "").includes("Server team API is not configured")) {
+    const message = String(error.message || "");
+    if (
+      message.includes("Please sign in again")
+      || message.includes("session expired")
+      || message.includes("Your session expired")
+    ) {
       throw error;
     }
+    console.warn("[Clients] Server profile route failed; trying browser profile fallback.", error);
   }
 
   const { data: userData, error: userError } = await supabase.auth.getUser();
@@ -530,7 +536,7 @@ export async function loadProfile() {
   const { data, error } = await supabase
     .from("profiles")
     .select("id, full_name, email, role, client_id, job_title, phone, must_change_password, clients(id, name, primary_contact_name, primary_contact_email, billing_email, created_at)")
-    .eq("id", authUser.id)
+    .or(`id.eq.${authUser.id},email.eq.${normalizeEmail(authUser.email)}`)
     .maybeSingle();
 
   if (error) {
@@ -538,7 +544,7 @@ export async function loadProfile() {
       const fallback = await supabase
         .from("profiles")
         .select("id, full_name, email, role, client_id, job_title, phone, clients(id, name, primary_contact_name, primary_contact_email, billing_email, created_at)")
-        .eq("id", authUser.id)
+        .or(`id.eq.${authUser.id},email.eq.${normalizeEmail(authUser.email)}`)
         .maybeSingle();
       if (fallback.error) throw fallback.error;
       if (fallback.data) return { ...fallback.data, must_change_password: false };

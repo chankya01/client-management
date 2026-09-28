@@ -70,7 +70,7 @@ const managementRoles = ["owner", "project_manager"];
 const workRoles = ["developer", "reviewer", "assignee"];
 const internalRoles = [...managementRoles, ...workRoles];
 const workPortalPages = ["admin-dashboard", "admin-requests", "admin-request-detail", "admin-messages", "admin-team", "admin-settings"];
-const LOAD_TIMEOUT_MS = 8000;
+const LOAD_TIMEOUT_MS = 20000;
 const LAST_PAGE_KEY = "requestManagementLastPage";
 const LAST_REQUEST_KEY = "requestManagementLastRequest";
 const serviceCatalog = [
@@ -89,6 +89,15 @@ function withTimeout(promise, label, ms = LOAD_TIMEOUT_MS) {
       window.setTimeout(() => reject(new Error(`${label} took too long. Please sign out and sign in again, or check Supabase profile/RLS setup.`)), ms);
     })
   ]);
+}
+
+async function safeLoad(label, loader, fallback) {
+  try {
+    return await loader();
+  } catch (error) {
+    console.warn(`[${APP_NAME}] ${label} failed`, error);
+    return fallback;
+  }
 }
 
 function statusLabel(status) {
@@ -512,17 +521,9 @@ async function returnToSignInAfterLoadFailure(error, context = "Account loading"
     render();
     return;
   }
-  try {
-    await signOut();
-  } catch (signOutError) {
-    console.warn(`[${APP_NAME}] Sign out after load failure failed`, signOutError);
-  }
-  resetSessionState();
   state.loading = false;
-  state.loadError = "";
-  state.authView = "signin";
+  state.loadError = error?.message || "Account data could not be loaded.";
   render();
-  showToast("Please sign in again.");
 }
 
 async function boot() {
@@ -565,30 +566,34 @@ async function boot() {
 async function loadPortalData() {
   state.profile = await loadProfile();
   const loadedRequests = await loadRequests();
-  state.requestAssignments = isInternal() ? await loadRequestAssignments() : [];
-  state.requestClientContacts = canAccessManagementPages() ? await loadRequestClientContacts() : [];
+  state.requestAssignments = isInternal()
+    ? await safeLoad("Request assignment loading", loadRequestAssignments, [])
+    : [];
+  state.requestClientContacts = canAccessManagementPages()
+    ? await safeLoad("Request contact loading", loadRequestClientContacts, [])
+    : [];
   state.requests = isInternal() && !canAccessManagementPages()
     ? loadedRequests.filter((request) => state.requestAssignments.some((assignment) => (
       assignment.request_id === request.id && assignment.profile_id === state.profile.id
     )))
     : loadedRequests;
-  state.clients = isInternal() ? await loadClients() : [];
-  state.team = isInternal() ? await loadTeam() : [];
+  state.clients = isInternal() ? await safeLoad("Client loading", loadClients, []) : [];
+  state.team = isInternal() ? await safeLoad("Team loading", loadTeam, []) : [];
   const lastRequestId = localStorage.getItem(LAST_REQUEST_KEY);
   state.activeRequest = state.requests.find((request) => request.id === lastRequestId)
     || state.requests.find((request) => !isTerminalRequestStatus(request.status))
     || state.requests[0]
     || null;
   state.selectedRequestId = state.activeRequest?.id || null;
-  state.history = isInternal() ? await loadClosedRequests() : state.requests;
+  state.history = isInternal() ? await safeLoad("History loading", loadClosedRequests, state.requests) : state.requests;
   state.messagesByRequest = {};
 
   if (state.activeRequest) {
-    state.messages = await loadMessages(state.activeRequest.id);
+    state.messages = await safeLoad("Message loading", () => loadMessages(state.activeRequest.id), []);
     state.messagesByRequest[state.activeRequest.id] = state.messages;
     calculateUnreadCounts();
     state.messages = state.messagesByRequest[state.activeRequest.id] || [];
-    state.deliverables = await loadDeliverables(state.activeRequest.id);
+    state.deliverables = await safeLoad("Deliverable loading", () => loadDeliverables(state.activeRequest.id), []);
   } else {
     state.messages = [];
     state.deliverables = [];
@@ -1633,8 +1638,22 @@ function render() {
   }
 
   if (state.loadError) {
-    resetSessionState();
-    renderSignIn();
+    root.innerHTML = `
+      <main class="signin-shell">
+        <section class="signin-card">
+          ${brandLogo("signin")}
+          <h1>Unable to Load Account</h1>
+          <p class="helper">${escapeHtml(state.loadError)}</p>
+          <p class="helper">Your sign-in session is still active. Please retry, or sign out and sign in again if the issue continues.</p>
+          <div class="signin-actions">
+            <button class="primary" type="button" data-action="retry-load">Retry</button>
+            <button class="secondary" type="button" data-action="logout">Sign Out</button>
+          </div>
+        </section>
+        ${toastHtml()}
+      </main>
+    `;
+    attachEvents();
     return;
   }
 
