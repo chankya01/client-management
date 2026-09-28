@@ -1362,11 +1362,10 @@ function mergeMessagesAndAttachments(messages, attachments) {
 
 export async function createMessage(requestId, senderId, message, { notify = true } = {}) {
   if (useLocalAdminProxy()) {
-    await localApi("/messages", {
+    return localApi("/messages", {
       method: "POST",
       body: JSON.stringify({ requestId, senderId, message, notify })
     });
-    return;
   }
 
   if (useDemo()) {
@@ -1383,7 +1382,7 @@ export async function createMessage(requestId, senderId, message, { notify = tru
     return;
   }
 
-  await appApi("/messages", {
+  return appApi("/messages", {
     method: "POST",
     body: JSON.stringify({ requestId, senderId, message, notify })
   });

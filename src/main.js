@@ -1865,8 +1865,14 @@ function attachEvents() {
           state.editingClientId = null;
           showToast("Client updated.");
         } else {
-          await createClient(values);
-          showToast("Client created. Ask the client to sign up if they do not have an account yet.");
+          const createdClient = await createClient(values);
+          if (createdClient?.account_setup_email?.sent) {
+            showToast("Client created and invite email sent.");
+          } else if (createdClient?.account_setup_email?.reason) {
+            showToast(`Client created, but invite email was not sent: ${createdClient.account_setup_email.reason}`);
+          } else {
+            showToast("Client created.");
+          }
         }
         state.clients = await loadClients();
         render();
@@ -2134,7 +2140,7 @@ function attachEvents() {
         if (file) await uploadRequestAttachment({ request: state.activeRequest, profile: state.profile, file });
         clearMessageDraft(state.activeRequest.id);
         await refreshActiveMessages({ markRead: true });
-        showToast("Message sent.");
+        showToast(message ? "Message sent." : "Attachment uploaded.");
         render();
       } catch (error) {
         showAppError(error, "Send client message");
@@ -2159,7 +2165,7 @@ function attachEvents() {
         if (file) await uploadRequestAttachment({ request: state.activeRequest, profile: state.profile, file });
         clearMessageDraft(state.activeRequest.id);
         await refreshActiveMessages({ markRead: true });
-        showToast("Message sent.");
+        showToast(message ? "Message sent." : "Attachment uploaded.");
         render();
       } catch (error) {
         showAppError(error, "Send internal message");

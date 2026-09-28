@@ -231,16 +231,30 @@ export async function generatePasswordSetupLink(email) {
 
 export async function sendAccountSetupEmail({ email, name, reason }) {
   const normalizedEmail = normalizeEmail(email);
-  if (!normalizedEmail) return;
+  if (!normalizedEmail) return { sent: false, reason: "No email address was provided." };
   if (!resendApiKey) {
-    console.warn("[Clients] RESEND_API_KEY is not configured. Skipping account setup email.");
-    return;
+    const reasonText = "RESEND_API_KEY is not configured.";
+    console.warn(`[Clients] ${reasonText} Skipping account setup email.`);
+    return { sent: false, reason: reasonText };
+  }
+  if (notificationFrom.includes("yourdomain.com") || notificationFrom.includes("example.com")) {
+    const reasonText = "NOTIFICATION_FROM still uses a placeholder domain. Add a verified Resend sender/domain.";
+    console.warn(`[Clients] ${reasonText}`);
+    return { sent: false, reason: reasonText };
   }
 
-  const setupLink = await generatePasswordSetupLink(normalizedEmail);
+  let setupLink;
+  try {
+    setupLink = await generatePasswordSetupLink(normalizedEmail);
+  } catch (error) {
+    const reasonText = error?.message || "Could not generate password setup link.";
+    console.warn("[Clients] Account setup link generation failed", reasonText);
+    return { sent: false, reason: reasonText };
+  }
   if (!setupLink) {
-    console.warn(`[Clients] Supabase did not return a password setup link for ${normalizedEmail}.`);
-    return;
+    const reasonText = "Supabase did not return a password setup link.";
+    console.warn(`[Clients] ${reasonText} ${normalizedEmail}`);
+    return { sent: false, reason: reasonText };
   }
 
   const greeting = name ? `Hi ${name},` : "Hi,";
@@ -262,7 +276,11 @@ export async function sendAccountSetupEmail({ email, name, reason }) {
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
     console.warn("[Clients] Account setup email failed", detail);
+    return { sent: false, reason: detail || `Resend returned ${response.status}.` };
   }
+
+  const payload = await response.json().catch(() => ({}));
+  return { sent: true, id: payload?.id || null };
 }
 
 export function handleApiError(error) {

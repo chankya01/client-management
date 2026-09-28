@@ -9,6 +9,7 @@ import {
   supabaseAdminFetch,
   tablePath
 } from "../_supabaseAdmin.js";
+import { appConfig } from "../../src/config.js";
 
 function senderIdsFromMessages(messages) {
   return [...new Set((messages || []).map((message) => message.sender_id).filter(Boolean))];
@@ -125,6 +126,10 @@ async function requestIsVisibleToProfile(requestRow, profile) {
 }
 
 async function notificationRecipients(requestRow, senderProfile) {
+  const configuredAdmins = (appConfig.adminEmails || []).map((email) => ({
+    email: normalizeEmail(email),
+    name: "Admin"
+  }));
   const [admins, assignments, clientProfiles, requestContacts] = await Promise.all([
     supabaseAdminFetch(
       tablePath("profiles", "?select=id,full_name,email,role&role=in.(owner,project_manager)")
@@ -150,6 +155,7 @@ async function notificationRecipients(requestRow, senderProfile) {
     : [];
 
   return uniqueRecipients([
+    ...configuredAdmins,
     ...(admins || []),
     ...(assignedProfiles || []),
     ...(clientProfiles || []),
@@ -166,12 +172,14 @@ async function sendMessageNotification({ requestRow, senderProfile }) {
   const from = process.env.NOTIFICATION_FROM || "Clients <notifications@example.com>";
   const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "";
   if (!apiKey) {
-    console.warn("[Clients] RESEND_API_KEY is not configured. Skipping message email notification.");
-    return;
+    throw new Error("RESEND_API_KEY is not configured. Message was not sent.");
+  }
+  if (from.includes("yourdomain.com") || from.includes("example.com")) {
+    throw new Error("NOTIFICATION_FROM still uses a placeholder domain. Add a verified Resend sender/domain.");
   }
 
   const recipients = await notificationRecipients(requestRow, senderProfile);
-  if (!recipients.length) return;
+  if (!recipients.length) throw new Error("No email recipients were found for this message.");
 
   const label = requestLabel(requestRow);
   const senderName = senderProfile.full_name || senderProfile.email || "someone";
@@ -195,7 +203,15 @@ async function sendMessageNotification({ requestRow, senderProfile }) {
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
     console.warn("[Clients] Message notification email failed", detail);
+    throw new Error(detail || `Resend returned ${response.status}.`);
   }
+
+  const payload = await response.json().catch(() => ({}));
+  return {
+    sent: true,
+    id: payload?.id || null,
+    recipients: recipients.map((recipient) => recipient.email)
+  };
 }
 
 export async function GET(request) {
@@ -255,11 +271,11 @@ export async function POST(request) {
       })
     });
 
-    if (body.notify !== false) {
-      await sendMessageNotification({ requestRow, senderProfile: profile });
-    }
+    const notification = body.notify !== false
+      ? await sendMessageNotification({ requestRow, senderProfile: profile })
+      : { sent: false, reason: "Notification disabled for this message." };
 
-    return apiJson({ ok: true });
+    return apiJson({ ok: true, notification });
   } catch (error) {
     return handleApiError(error);
   }

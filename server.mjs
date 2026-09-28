@@ -410,6 +410,10 @@ async function safeRows(table, query) {
 }
 
 async function requestNotificationRecipients(requestRow, senderProfile) {
+  const configuredAdmins = [adminEmail].filter(Boolean).map((email) => ({
+    email,
+    name: "Admin"
+  }));
   const [admins, assignments, clientProfiles, requestContacts] = await Promise.all([
     supabaseFetch(rest("profiles", "?select=id,full_name,email,role&role=in.(owner,project_manager)")),
     supabaseFetch(rest("request_assignments", `?select=profile_id,user_id&request_id=eq.${encode(requestRow.id)}`)),
@@ -421,6 +425,7 @@ async function requestNotificationRecipients(requestRow, senderProfile) {
     ? await supabaseFetch(rest("profiles", `?select=id,full_name,email,role&id=in.(${assignedIds.map(encode).join(",")})`))
     : [];
   return uniqueRecipients([
+    ...configuredAdmins,
     ...(admins || []),
     ...(assignedProfiles || []),
     ...(clientProfiles || []),
@@ -430,11 +435,13 @@ async function requestNotificationRecipients(requestRow, senderProfile) {
 
 async function sendMessageNotification({ requestRow, senderProfile }) {
   if (!resendApiKey) {
-    console.warn("RESEND_API_KEY is not configured. Skipping message email notification.");
-    return;
+    throw new Error("RESEND_API_KEY is not configured. Message was not sent.");
+  }
+  if (notificationFrom.includes("yourdomain.com") || notificationFrom.includes("example.com")) {
+    throw new Error("NOTIFICATION_FROM still uses a placeholder domain. Add a verified Resend sender/domain.");
   }
   const recipients = await requestNotificationRecipients(requestRow, senderProfile);
-  if (!recipients.length) return;
+  if (!recipients.length) throw new Error("No email recipients were found for this message.");
   const label = requestRow.request_number || requestRow.title || "the request";
   const senderName = senderProfile.full_name || senderProfile.email || "someone";
   const link = appUrl ? `\n\nOpen Clients: ${appUrl}` : "";
@@ -453,8 +460,16 @@ async function sendMessageNotification({ requestRow, senderProfile }) {
     })
   });
   if (!response.ok) {
-    console.warn("Message notification email failed", await response.text().catch(() => ""));
+    const detail = await response.text().catch(() => "");
+    console.warn("Message notification email failed", detail);
+    throw new Error(detail || `Resend returned ${response.status}.`);
   }
+  const payload = await response.json().catch(() => ({}));
+  return {
+    sent: true,
+    id: payload?.id || null,
+    recipients: recipients.map((recipient) => recipient.email)
+  };
 }
 
 async function generatePasswordSetupLink(email) {
@@ -472,16 +487,30 @@ async function generatePasswordSetupLink(email) {
 
 async function sendAccountSetupEmail({ email, name, reason }) {
   const normalizedEmail = normalizeEmail(email);
-  if (!normalizedEmail) return;
+  if (!normalizedEmail) return { sent: false, reason: "No email address was provided." };
   if (!resendApiKey) {
-    console.warn("RESEND_API_KEY is not configured. Skipping account setup email.");
-    return;
+    const reasonText = "RESEND_API_KEY is not configured.";
+    console.warn(`${reasonText} Skipping account setup email.`);
+    return { sent: false, reason: reasonText };
+  }
+  if (notificationFrom.includes("yourdomain.com") || notificationFrom.includes("example.com")) {
+    const reasonText = "NOTIFICATION_FROM still uses a placeholder domain. Add a verified Resend sender/domain.";
+    console.warn(reasonText);
+    return { sent: false, reason: reasonText };
   }
 
-  const setupLink = await generatePasswordSetupLink(normalizedEmail);
+  let setupLink;
+  try {
+    setupLink = await generatePasswordSetupLink(normalizedEmail);
+  } catch (error) {
+    const reasonText = error?.message || "Could not generate password setup link.";
+    console.warn("Account setup link generation failed", reasonText);
+    return { sent: false, reason: reasonText };
+  }
   if (!setupLink) {
-    console.warn(`Supabase did not return a password setup link for ${normalizedEmail}.`);
-    return;
+    const reasonText = "Supabase did not return a password setup link.";
+    console.warn(`${reasonText} ${normalizedEmail}`);
+    return { sent: false, reason: reasonText };
   }
 
   const greeting = name ? `Hi ${name},` : "Hi,";
@@ -501,8 +530,13 @@ async function sendAccountSetupEmail({ email, name, reason }) {
   });
 
   if (!response.ok) {
-    console.warn("Account setup email failed", await response.text().catch(() => ""));
+    const detail = await response.text().catch(() => "");
+    console.warn("Account setup email failed", detail);
+    return { sent: false, reason: detail || `Resend returned ${response.status}.` };
   }
+
+  const payload = await response.json().catch(() => ({}));
+  return { sent: true, id: payload?.id || null };
 }
 
 async function handleApi(req, res, url) {
@@ -607,12 +641,15 @@ async function handleApi(req, res, url) {
         })
       });
     }
-    await sendAccountSetupEmail({
+    const accountSetupEmail = await sendAccountSetupEmail({
       email,
       name: body.contactName,
       reason: `You have been added to Clients for ${body.name}. Please create your password to view requests and messages.`
     });
-    return json(res, 200, rows[0]);
+    return json(res, 200, {
+      ...rows[0],
+      account_setup_email: accountSetupEmail
+    });
   }
 
   const clientMatch = path.match(/^\/clients\/([^/]+)$/);
@@ -987,10 +1024,10 @@ async function handleApi(req, res, url) {
         is_internal: false
       })
     });
-    if (body.notify !== false) {
-      await sendMessageNotification({ requestRow: request, senderProfile: profile });
-    }
-    return json(res, 200, { ok: true });
+    const notification = body.notify !== false
+      ? await sendMessageNotification({ requestRow: request, senderProfile: profile })
+      : { sent: false, reason: "Notification disabled for this message." };
+    return json(res, 200, { ok: true, notification });
   }
 
   if (path === "/attachments" && method === "POST") {

@@ -79,13 +79,16 @@ export async function POST(request) {
       });
     }
 
-    await sendAccountSetupEmail({
+    const accountSetupEmail = await sendAccountSetupEmail({
       email,
       name: contactName,
       reason: `You have been added to Clients for ${name}. Please create your password to view requests and messages.`
     });
 
-    return apiJson(client);
+    return apiJson({
+      ...client,
+      account_setup_email: accountSetupEmail
+    });
   } catch (error) {
     return handleApiError(error);
   }
