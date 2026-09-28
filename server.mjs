@@ -14,6 +14,9 @@ const clientEmail = normalizeEmail(env.CLIENT_EMAIL || "client@example.com");
 const clientName = env.CLIENT_NAME || "Test Client";
 const clientContactName = env.CLIENT_CONTACT_NAME || "Test Client User";
 const defaultTempPassword = env.DEFAULT_TEMP_PASSWORD || "RequestManagement@123";
+const resendApiKey = env.RESEND_API_KEY;
+const notificationFrom = env.NOTIFICATION_FROM || "Clients <notifications@example.com>";
+const appUrl = env.APP_URL || env.NEXT_PUBLIC_APP_URL || "";
 
 if (!supabaseUrl || !serviceRoleKey) {
   console.warn("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY. /api calls will fail until .env is configured.");
@@ -386,6 +389,122 @@ async function currentProfile(url) {
     : ensureAdminProfile();
 }
 
+function uniqueRecipients(recipients, senderEmail) {
+  const sender = normalizeEmail(senderEmail);
+  const map = new Map();
+  (recipients || []).forEach((recipient) => {
+    const email = normalizeEmail(recipient.email);
+    if (!email || email === sender) return;
+    if (!map.has(email)) map.set(email, { email, name: recipient.name || recipient.full_name || email });
+  });
+  return [...map.values()];
+}
+
+async function safeRows(table, query) {
+  try {
+    return await supabaseFetch(rest(table, query));
+  } catch (error) {
+    if (String(error.message || "").includes(table)) return [];
+    throw error;
+  }
+}
+
+async function requestNotificationRecipients(requestRow, senderProfile) {
+  const [admins, assignments, clientProfiles, requestContacts] = await Promise.all([
+    supabaseFetch(rest("profiles", "?select=id,full_name,email,role&role=in.(owner,project_manager)")),
+    supabaseFetch(rest("request_assignments", `?select=profile_id,user_id&request_id=eq.${encode(requestRow.id)}`)),
+    supabaseFetch(rest("profiles", `?select=id,full_name,email,role&client_id=eq.${encode(requestRow.client_id)}&role=eq.client`)),
+    safeRows("request_client_contacts", `?select=name,email,profile_id&request_id=eq.${encode(requestRow.id)}`)
+  ]);
+  const assignedIds = [...new Set((assignments || []).flatMap((assignment) => [assignment.profile_id, assignment.user_id]).filter(Boolean))];
+  const assignedProfiles = assignedIds.length
+    ? await supabaseFetch(rest("profiles", `?select=id,full_name,email,role&id=in.(${assignedIds.map(encode).join(",")})`))
+    : [];
+  return uniqueRecipients([
+    ...(admins || []),
+    ...(assignedProfiles || []),
+    ...(clientProfiles || []),
+    ...(requestContacts || [])
+  ], senderProfile.email);
+}
+
+async function sendMessageNotification({ requestRow, senderProfile }) {
+  if (!resendApiKey) {
+    console.warn("RESEND_API_KEY is not configured. Skipping message email notification.");
+    return;
+  }
+  const recipients = await requestNotificationRecipients(requestRow, senderProfile);
+  if (!recipients.length) return;
+  const label = requestRow.request_number || requestRow.title || "the request";
+  const senderName = senderProfile.full_name || senderProfile.email || "someone";
+  const link = appUrl ? `\n\nOpen Clients: ${appUrl}` : "";
+  const text = `Hi,\n\nThere is an update on ${label} from ${senderName}. Please sign in to view it.${link}`;
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${resendApiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      from: notificationFrom,
+      to: recipients.map((recipient) => recipient.email),
+      subject: `Update on ${label}`,
+      text
+    })
+  });
+  if (!response.ok) {
+    console.warn("Message notification email failed", await response.text().catch(() => ""));
+  }
+}
+
+async function generatePasswordSetupLink(email) {
+  const redirectTo = appUrl ? `${appUrl}?mode=password-reset&type=recovery` : undefined;
+  const payload = await supabaseFetch("/auth/v1/admin/generate_link", {
+    method: "POST",
+    body: JSON.stringify({
+      type: "recovery",
+      email: normalizeEmail(email),
+      ...(redirectTo ? { options: { redirect_to: redirectTo } } : {})
+    })
+  });
+  return payload?.properties?.action_link || payload?.action_link || payload?.actionLink || null;
+}
+
+async function sendAccountSetupEmail({ email, name, reason }) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return;
+  if (!resendApiKey) {
+    console.warn("RESEND_API_KEY is not configured. Skipping account setup email.");
+    return;
+  }
+
+  const setupLink = await generatePasswordSetupLink(normalizedEmail);
+  if (!setupLink) {
+    console.warn(`Supabase did not return a password setup link for ${normalizedEmail}.`);
+    return;
+  }
+
+  const greeting = name ? `Hi ${name},` : "Hi,";
+  const text = `${greeting}\n\n${reason || "You have been added to Clients."}\n\nCreate your password and sign in here:\n${setupLink}\n\nIf you were not expecting this, you can ignore this email.`;
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${resendApiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      from: notificationFrom,
+      to: [normalizedEmail],
+      subject: "You have been added to Clients",
+      text
+    })
+  });
+
+  if (!response.ok) {
+    console.warn("Account setup email failed", await response.text().catch(() => ""));
+  }
+}
+
 async function handleApi(req, res, url) {
   const method = req.method || "GET";
   const path = url.pathname.replace(/^\/api/, "") || "/";
@@ -488,6 +607,11 @@ async function handleApi(req, res, url) {
         })
       });
     }
+    await sendAccountSetupEmail({
+      email,
+      name: body.contactName,
+      reason: `You have been added to Clients for ${body.name}. Please create your password to view requests and messages.`
+    });
     return json(res, 200, rows[0]);
   }
 
@@ -553,7 +677,14 @@ async function handleApi(req, res, url) {
   if (path === "/requests" && method === "GET") {
     const closed = url.searchParams.get("closed") === "1";
     const profile = await currentProfile(url);
-    const clientFilter = profile.role === "client" ? `&client_id=eq.${encode(profile.client_id)}` : "";
+    let clientFilter = profile.role === "client" ? `&client_id=eq.${encode(profile.client_id)}` : "";
+    if (profile.role === "client") {
+      const contacts = await safeRows("request_client_contacts", `?select=request_id&email=eq.${encode(profile.email)}`);
+      const contactRequestIds = (contacts || []).map((contact) => contact.request_id).filter(Boolean);
+      if (contactRequestIds.length) {
+        clientFilter = `&or=(client_id.eq.${encode(profile.client_id)},id.in.(${contactRequestIds.map(encode).join(",")}))`;
+      }
+    }
     let assignmentFilter = "";
     if (["developer", "reviewer", "assignee"].includes(profile.role)) {
       const assignments = await supabaseFetch(rest("request_assignments", `?select=request_id&profile_id=eq.${encode(profile.id)}`));
@@ -569,6 +700,86 @@ async function handleApi(req, res, url) {
 
   if (path === "/request-assignments" && method === "GET") {
     return json(res, 200, await supabaseFetch(rest("request_assignments", "?select=request_id,profile_id,assigned_by,created_at")));
+  }
+
+  if (path === "/request-client-contacts" && method === "GET") {
+    return json(res, 200, await safeRows("request_client_contacts", "?select=id,request_id,profile_id,name,email,created_at"));
+  }
+
+  const clientContactMatch = path.match(/^\/request-client-contacts\/([^/]+)$/);
+  if (clientContactMatch && method === "PUT") {
+    const body = await readJson(req);
+    const requestId = clientContactMatch[1];
+    const contacts = Array.from(new Map((body.contacts || [])
+      .map((contact) => ({
+        name: String(contact.name || "").trim(),
+        email: normalizeEmail(contact.email)
+      }))
+      .filter((contact) => contact.email)
+      .map((contact) => [contact.email, contact])).values());
+
+    const linkedRequest = await selectOne("requests", `?select=id,client_id,request_number,title&id=eq.${encode(requestId)}&limit=1`);
+    if (!linkedRequest) return json(res, 404, { error: "Request not found." });
+    const existingContacts = await safeRows("request_client_contacts", `?select=email&request_id=eq.${encode(requestId)}`);
+    const existingEmails = new Set((existingContacts || []).map((contact) => normalizeEmail(contact.email)));
+    try {
+      await supabaseFetch(rest("request_client_contacts", `?request_id=eq.${encode(requestId)}`), { method: "DELETE" });
+    } catch (error) {
+      if (!String(error.message || "").includes("request_client_contacts")) throw error;
+    }
+
+    if (contacts.length) {
+      const profileByEmail = {};
+      for (const contact of contacts) {
+        let profile = await selectOne("profiles", `?select=id,email,role,client_id&email=eq.${encode(contact.email)}&limit=1`);
+        if (!profile) {
+          const authUser = await createAuthUser(contact.email, contact.name || contact.email);
+          const rows = await supabaseFetch(rest("profiles", "?select=id,email,role,client_id"), {
+            method: "POST",
+            headers: { Prefer: "return=representation" },
+            body: JSON.stringify({
+              id: authUser.id,
+              full_name: contact.name || contact.email,
+              email: contact.email,
+              role: "client",
+              client_id: linkedRequest.client_id,
+              job_title: "Client Contact",
+              is_active: true,
+              must_change_password: true
+            })
+          });
+          profile = rows?.[0] || null;
+        }
+        if (profile?.role === "client" && !profile.client_id) {
+          const rows = await supabaseFetch(rest("profiles", `?id=eq.${encode(profile.id)}&select=id,email,role,client_id`), {
+            method: "PATCH",
+            headers: { Prefer: "return=representation" },
+            body: JSON.stringify({ client_id: linkedRequest.client_id })
+          });
+          profile = rows?.[0] || profile;
+        }
+        if (profile?.role === "client") profileByEmail[contact.email] = profile;
+      }
+      await supabaseFetch(rest("request_client_contacts"), {
+        method: "POST",
+        body: JSON.stringify(contacts.map((contact) => ({
+          request_id: requestId,
+          profile_id: profileByEmail[contact.email]?.id || null,
+          name: contact.name || null,
+          email: contact.email
+        })))
+      });
+      const requestLabel = linkedRequest.request_number || linkedRequest.title || "this request";
+      for (const contact of contacts) {
+        if (existingEmails.has(contact.email)) continue;
+        await sendAccountSetupEmail({
+          email: contact.email,
+          name: contact.name,
+          reason: `You have been added to ${requestLabel} in Clients. Please create your password to view request updates and messages.`
+        });
+      }
+    }
+    return json(res, 200, { ok: true });
   }
 
   const assignmentMatch = path.match(/^\/request-assignments\/([^/]+)$/);
@@ -687,6 +898,11 @@ async function handleApi(req, res, url) {
         must_change_password: true
       })
     });
+    await sendAccountSetupEmail({
+      email,
+      name: body.fullName,
+      reason: "You have been added as a team member in Clients. Please create your password to view assigned requests and messages."
+    });
     return json(res, 200, rows[0]);
   }
 
@@ -755,9 +971,12 @@ async function handleApi(req, res, url) {
   if (path === "/messages" && method === "POST") {
     const body = await readJson(req);
     const profile = await currentProfile(url);
+    const request = await selectOne("requests", `?select=id,request_number,title,client_id&id=eq.${encode(body.requestId)}&limit=1`);
     if (profile.role === "client") {
-      const request = await selectOne("requests", `?select=id,client_id&id=eq.${encode(body.requestId)}&limit=1`);
-      if (!request || request.client_id !== profile.client_id) return json(res, 403, { error: "This request is not linked to the client test profile." });
+      const contacts = await safeRows("request_client_contacts", `?select=id&request_id=eq.${encode(body.requestId)}&email=eq.${encode(profile.email)}&limit=1`);
+      if (!request || (request.client_id !== profile.client_id && !contacts.length)) {
+        return json(res, 403, { error: "This request is not linked to the client test profile." });
+      }
     }
     await supabaseFetch(rest("request_messages"), {
       method: "POST",
@@ -768,6 +987,9 @@ async function handleApi(req, res, url) {
         is_internal: false
       })
     });
+    if (body.notify !== false) {
+      await sendMessageNotification({ requestRow: request, senderProfile: profile });
+    }
     return json(res, 200, { ok: true });
   }
 

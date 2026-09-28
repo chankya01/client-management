@@ -1,4 +1,5 @@
 import {
+  completePasswordRecoverySession,
   createClient,
   createMessage,
   createRequest,
@@ -15,11 +16,13 @@ import {
   loadMessages,
   loadProfile,
   loadRequestAssignments,
+  loadRequestClientContacts,
   loadRequests,
   loadTeam,
   onAuthStateChange,
   sendMagicLink,
   sendPasswordReset,
+  setRequestClientContacts,
   setRequestAssignments,
   signInWithPassword,
   signOut,
@@ -47,13 +50,14 @@ const state = {
   clients: [],
   team: [],
   requestAssignments: [],
+  requestClientContacts: [],
   messageDrafts: {},
   selectedRequestId: null,
   editingClientId: null,
   editingRequestId: null,
   editingTeamId: null,
   showPasswordForm: false,
-  authView: "signin",
+  authView: isPasswordRecoveryFlow() ? "reset-password" : "signin",
   page: "messages",
   loading: true,
   loadError: "",
@@ -525,23 +529,29 @@ async function boot() {
   const generation = ++loadGeneration;
   const recoveryFlow = isPasswordRecoveryFlow();
   try {
-    state.session = await withTimeout(getSession(), "Session check");
+    state.session = recoveryFlow
+      ? await withTimeout(completePasswordRecoverySession(), "Password reset session")
+      : await withTimeout(getSession(), "Session check");
     if (state.session) {
+      if (recoveryFlow) {
+        state.authView = "reset-password";
+        state.loading = false;
+        render();
+        return;
+      }
       await withTimeout(loadPortalData(), "Account data loading");
       const params = new URLSearchParams(window.location.search);
       const routePage = params.get("page");
       const routeRequestId = params.get("request");
-      if (recoveryFlow) {
-        state.showPasswordForm = true;
-        state.page = passwordRecoveryPage();
-        clearPasswordRecoveryUrl();
-      } else if (routePage && pageIsAllowed(routePage)) {
+      if (routePage && pageIsAllowed(routePage)) {
         state.page = routePage;
         if (routeRequestId) await setActiveRequest(routeRequestId, { page: routePage });
       } else {
         state.page = savedPage() || defaultPage();
       }
       syncBrowserHistory({ replace: true });
+    } else if (recoveryFlow) {
+      state.authView = "reset-password";
     }
   } catch (error) {
     await returnToSignInAfterLoadFailure(error, "Initial account loading");
@@ -556,6 +566,7 @@ async function loadPortalData() {
   state.profile = await loadProfile();
   const loadedRequests = await loadRequests();
   state.requestAssignments = isInternal() ? await loadRequestAssignments() : [];
+  state.requestClientContacts = canAccessManagementPages() ? await loadRequestClientContacts() : [];
   state.requests = isInternal() && !canAccessManagementPages()
     ? loadedRequests.filter((request) => state.requestAssignments.some((assignment) => (
       assignment.request_id === request.id && assignment.profile_id === state.profile.id
@@ -696,6 +707,53 @@ function renderForgotPassword() {
   });
 }
 
+function renderResetPassword() {
+  root.innerHTML = `
+    <main class="signin-shell">
+      <form class="signin-card" id="resetPasswordForm">
+        ${brandLogo("signin")}
+        <h1>Set New Password</h1>
+        <p class="helper">Enter and confirm your new password.</p>
+        <label class="field">
+          <span>New Password</span>
+          <input name="password" type="password" autocomplete="new-password" minlength="8" required />
+        </label>
+        <label class="field">
+          <span>Confirm Password</span>
+          <input name="confirmPassword" type="password" autocomplete="new-password" minlength="8" required />
+        </label>
+        <label class="password-toggle">
+          <input type="checkbox" data-toggle-password="password,confirmPassword" />
+          <span>Show Password</span>
+        </label>
+        <button class="primary" type="submit">Update Password</button>
+      </form>
+      ${toastHtml()}
+    </main>
+  `;
+
+  document.getElementById("resetPasswordForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const values = Object.fromEntries(new FormData(event.currentTarget));
+    if (values.password !== values.confirmPassword) {
+      showToast("Passwords do not match.");
+      return;
+    }
+    try {
+      await updatePassword(values.password);
+      clearPasswordRecoveryUrl();
+      await signOut();
+      resetSessionState();
+      renderSignIn();
+      showToast("Password updated. Please sign in with your new password.");
+    } catch (error) {
+      showAppError(error);
+    }
+  });
+
+  attachPasswordToggles();
+}
+
 async function completeSignIn(session) {
   state.session = session;
   state.loading = true;
@@ -826,6 +884,37 @@ function assignedPeopleText(requestId) {
     .filter((member) => assignedIds.has(member.id))
     .map((member) => member.full_name);
   return names.length ? names.join(", ") : "Not Assigned";
+}
+
+function clientContactsForRequest(requestId) {
+  return state.requestClientContacts.filter((contact) => contact.request_id === requestId);
+}
+
+function formatClientContactsForInput(requestId) {
+  return clientContactsForRequest(requestId)
+    .map((contact) => contact.name ? `${contact.name} <${contact.email}>` : contact.email)
+    .join("\n");
+}
+
+function parseClientContactInput(value) {
+  return String(value || "")
+    .split(/[\n,;]+/)
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      const match = entry.match(/^(.*?)<([^>]+)>$/);
+      if (match) {
+        return {
+          name: match[1].trim(),
+          email: match[2].trim().toLowerCase()
+        };
+      }
+      return {
+        name: "",
+        email: entry.toLowerCase()
+      };
+    })
+    .filter((contact) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email));
 }
 
 function assignmentCheckboxes(selectedIds = []) {
@@ -994,6 +1083,11 @@ function adminRequestsPage() {
             <label class="field"><span>Client</span><select name="clientId" required>${state.clients.map((client) => `<option value="${client.id}" ${editingRequest?.client_id === client.id ? "selected" : ""}>${escapeHtml(client.name)}</option>`).join("")}</select></label>
             <label class="field"><span>Title</span><input name="title" value="${escapeHtml(editingRequest?.title || "")}" required /></label>
             <label class="field wide"><span>Description</span><input name="description" value="${escapeHtml(editingRequest?.description || "")}" /></label>
+            <label class="field wide">
+              <span>Client Followers</span>
+              <textarea name="clientFollowers" placeholder="name@example.com or Name <name@example.com>">${escapeHtml(editingRequest ? formatClientContactsForInput(editingRequest.id) : "")}</textarea>
+              <small>Add extra client-side people who should receive updates for this request.</small>
+            </label>
             ${serviceCheckboxes(editingRequest?.service_type || "")}
             ${assignmentCheckboxes(selectedAssignees)}
             <label class="field"><span>Due Date</span><input name="dueDate" type="date" value="${editingRequest?.due_date || ""}" /></label>
@@ -1523,11 +1617,18 @@ function render() {
   }
 
   if (!state.session) {
-    if (state.authView === "forgot-password") {
+    if (state.authView === "reset-password") {
+      renderResetPassword();
+    } else if (state.authView === "forgot-password") {
       renderForgotPassword();
     } else {
       renderSignIn();
     }
+    return;
+  }
+
+  if (state.authView === "reset-password") {
+    renderResetPassword();
     return;
   }
 
@@ -1804,6 +1905,7 @@ function attachEvents() {
       const values = Object.fromEntries(formData);
       const selectedServices = formData.getAll("services").map(String);
       const assignedProfileIds = formData.getAll("assignedProfileIds").map(String);
+      const clientContacts = parseClientContactInput(values.clientFollowers);
       if (!selectedServices.length) {
         showToast("Select at least one service.");
         return;
@@ -1823,6 +1925,7 @@ function attachEvents() {
         if (state.editingRequestId) {
           await updateRequest(state.editingRequestId, requestPayload);
           await setRequestAssignments(state.editingRequestId, assignedProfileIds, state.profile.id);
+          await setRequestClientContacts(state.editingRequestId, clientContacts);
           if (previousRequest && previousRequest.status !== requestPayload.status) {
             await createMessage(
               state.editingRequestId,
@@ -1831,7 +1934,8 @@ function attachEvents() {
                 previousStatus: previousRequest.status,
                 nextStatus: requestPayload.status,
                 actorName: state.profile.full_name
-              })
+              }),
+              { notify: false }
             );
           }
           if (previousRequest && previousRequest.service_type !== requestPayload.serviceType) {
@@ -1839,7 +1943,8 @@ function attachEvents() {
             await createMessage(
               state.editingRequestId,
               state.profile.id,
-              serviceVersionMessage({ versionLabel, services: requestPayload.serviceType })
+              serviceVersionMessage({ versionLabel, services: requestPayload.serviceType }),
+              { notify: false }
             );
           }
           state.editingRequestId = null;
@@ -1847,10 +1952,12 @@ function attachEvents() {
         } else {
           const createdRequest = await createRequest(requestPayload);
           await setRequestAssignments(createdRequest.id, assignedProfileIds, state.profile.id);
+          await setRequestClientContacts(createdRequest.id, clientContacts);
           await createMessage(
             createdRequest.id,
             state.profile.id,
-            serviceVersionMessage({ versionLabel: "Services v1", services: requestPayload.serviceType })
+            serviceVersionMessage({ versionLabel: "Services v1", services: requestPayload.serviceType }),
+            { notify: false }
           );
           showToast("Request created and linked to the selected client.");
         }
@@ -2187,6 +2294,7 @@ function resetSessionState() {
   state.clients = [];
   state.team = [];
   state.requestAssignments = [];
+  state.requestClientContacts = [];
   state.messageDrafts = {};
   state.selectedRequestId = null;
   state.editingClientId = null;
@@ -2204,19 +2312,20 @@ onAuthStateChange((session, event) => {
     state.session = session;
     const recoveryFlow = isPasswordRecoveryFlow(event);
     if (session) {
+      if (recoveryFlow) {
+        state.authView = "reset-password";
+        state.loading = false;
+        state.loadError = "";
+        render();
+        return;
+      }
       const hasExistingPortal = Boolean(state.profile);
       state.loading = !hasExistingPortal;
       state.loadError = "";
       if (!hasExistingPortal) render();
       try {
         await withTimeout(loadPortalData(), "Account data loading");
-        if (recoveryFlow) {
-          state.showPasswordForm = true;
-          state.page = passwordRecoveryPage();
-          clearPasswordRecoveryUrl();
-        } else {
-          state.page = savedPage() || defaultPage();
-        }
+        state.page = savedPage() || defaultPage();
       } catch (error) {
         await returnToSignInAfterLoadFailure(error, `${event || "Auth"} account loading`, {
           keepCurrentPortal: hasExistingPortal

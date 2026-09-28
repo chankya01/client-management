@@ -27,9 +27,20 @@ CLIENT_EMAIL=...
 CLIENT_NAME=...
 CLIENT_CONTACT_NAME=...
 DEFAULT_TEMP_PASSWORD=...
+RESEND_API_KEY=...
+NOTIFICATION_FROM=...
+APP_URL=...
 ```
 
 Important: `.env` is ignored by git. Do not paste service-role keys into browser code or commit them.
+
+Run the latest SQL migration in Supabase before testing request followers:
+
+```text
+sql/2026-09-28-request-client-contacts.sql
+```
+
+Email notifications are skipped safely when `RESEND_API_KEY` is not configured. `APP_URL` should point to the deployed or local app URL that should open after someone clicks a password setup link.
 
 ## 3. Run admin/developer local view
 
@@ -105,4 +116,3 @@ npm run build
 ```
 
 Only push/deploy after the build passes and the local checklist looks good.
-

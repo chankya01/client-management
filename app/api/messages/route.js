@@ -3,6 +3,9 @@ import {
   currentProfile,
   encodeValue,
   handleApiError,
+  internalRoles,
+  managementRoles,
+  normalizeEmail,
   supabaseAdminFetch,
   tablePath
 } from "../_supabaseAdmin.js";
@@ -77,6 +80,124 @@ function mergeMessagesAndAttachments(messages, attachments) {
   ));
 }
 
+async function safeFetchRows(path) {
+  try {
+    return await supabaseAdminFetch(path);
+  } catch (error) {
+    const message = String(error.message || "");
+    if (message.includes("request_client_contacts")) return [];
+    throw error;
+  }
+}
+
+function uniqueRecipients(recipients, senderEmail) {
+  const sender = normalizeEmail(senderEmail);
+  const map = new Map();
+  (recipients || []).forEach((recipient) => {
+    const email = normalizeEmail(recipient.email);
+    if (!email || email === sender) return;
+    if (!map.has(email)) {
+      map.set(email, {
+        email,
+        name: recipient.name || recipient.full_name || email
+      });
+    }
+  });
+  return [...map.values()];
+}
+
+async function requestIsVisibleToProfile(requestRow, profile) {
+  if (managementRoles.has(profile.role)) return true;
+  if (profile.role === "client") {
+    if (requestRow.client_id === profile.client_id) return true;
+    const contacts = await safeFetchRows(
+      tablePath("request_client_contacts", `?select=id&request_id=eq.${encodeValue(requestRow.id)}&or=(profile_id.eq.${encodeValue(profile.id)},email.eq.${encodeValue(normalizeEmail(profile.email))})&limit=1`)
+    );
+    return Boolean(contacts?.length);
+  }
+  if (internalRoles.has(profile.role)) {
+    const assignments = await supabaseAdminFetch(
+      tablePath("request_assignments", `?select=request_id&request_id=eq.${encodeValue(requestRow.id)}&or=(profile_id.eq.${encodeValue(profile.id)},user_id.eq.${encodeValue(profile.id)})&limit=1`)
+    );
+    return Boolean(assignments?.length);
+  }
+  return false;
+}
+
+async function notificationRecipients(requestRow, senderProfile) {
+  const [admins, assignments, clientProfiles, requestContacts] = await Promise.all([
+    supabaseAdminFetch(
+      tablePath("profiles", "?select=id,full_name,email,role&role=in.(owner,project_manager)")
+    ),
+    supabaseAdminFetch(
+      tablePath("request_assignments", `?select=profile_id,user_id&request_id=eq.${encodeValue(requestRow.id)}`)
+    ),
+    supabaseAdminFetch(
+      tablePath("profiles", `?select=id,full_name,email,role&client_id=eq.${encodeValue(requestRow.client_id)}&role=eq.client`)
+    ),
+    safeFetchRows(
+      tablePath("request_client_contacts", `?select=name,email,profile_id&request_id=eq.${encodeValue(requestRow.id)}`)
+    )
+  ]);
+
+  const assignedIds = [...new Set((assignments || [])
+    .flatMap((assignment) => [assignment.profile_id, assignment.user_id])
+    .filter(Boolean))];
+  const assignedProfiles = assignedIds.length
+    ? await supabaseAdminFetch(
+      tablePath("profiles", `?select=id,full_name,email,role&id=in.(${assignedIds.map(encodeValue).join(",")})`)
+    )
+    : [];
+
+  return uniqueRecipients([
+    ...(admins || []),
+    ...(assignedProfiles || []),
+    ...(clientProfiles || []),
+    ...(requestContacts || [])
+  ], senderProfile.email);
+}
+
+function requestLabel(requestRow) {
+  return requestRow.request_number || requestRow.title || "the request";
+}
+
+async function sendMessageNotification({ requestRow, senderProfile }) {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.NOTIFICATION_FROM || "Clients <notifications@example.com>";
+  const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "";
+  if (!apiKey) {
+    console.warn("[Clients] RESEND_API_KEY is not configured. Skipping message email notification.");
+    return;
+  }
+
+  const recipients = await notificationRecipients(requestRow, senderProfile);
+  if (!recipients.length) return;
+
+  const label = requestLabel(requestRow);
+  const senderName = senderProfile.full_name || senderProfile.email || "someone";
+  const link = appUrl ? `\n\nOpen Clients: ${appUrl}` : "";
+  const text = `Hi,\n\nThere is an update on ${label} from ${senderName}. Please sign in to view it.${link}`;
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      from,
+      to: recipients.map((recipient) => recipient.email),
+      subject: `Update on ${label}`,
+      text
+    })
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    console.warn("[Clients] Message notification email failed", detail);
+  }
+}
+
 export async function GET(request) {
   try {
     const url = new URL(request.url);
@@ -101,6 +222,44 @@ export async function GET(request) {
     const attachments = await loadRequestAttachments(requestId);
 
     return apiJson(mergeMessagesAndAttachments(enrichedMessages, attachments));
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+export async function POST(request) {
+  try {
+    const profile = await currentProfile(request);
+    const body = await request.json();
+    const requestId = body.requestId;
+    const message = String(body.message || "").trim();
+    if (!requestId) return apiJson({ error: "Request id is required." }, 400);
+    if (!message) return apiJson({ error: "Message is required." }, 400);
+
+    const requests = await supabaseAdminFetch(
+      tablePath("requests", `?select=id,request_number,title,client_id&id=eq.${encodeValue(requestId)}&limit=1`)
+    );
+    const requestRow = requests?.[0];
+    if (!requestRow) return apiJson({ error: "Request not found." }, 404);
+
+    const canAccess = await requestIsVisibleToProfile(requestRow, profile);
+    if (!canAccess) return apiJson({ error: "This request is not linked to your account." }, 403);
+
+    await supabaseAdminFetch(tablePath("request_messages"), {
+      method: "POST",
+      body: JSON.stringify({
+        request_id: requestId,
+        sender_id: profile.id,
+        message,
+        is_internal: false
+      })
+    });
+
+    if (body.notify !== false) {
+      await sendMessageNotification({ requestRow, senderProfile: profile });
+    }
+
+    return apiJson({ ok: true });
   } catch (error) {
     return handleApiError(error);
   }

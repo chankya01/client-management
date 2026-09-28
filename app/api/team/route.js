@@ -8,6 +8,7 @@ import {
   normalizeEmail,
   requireProfileRole,
   selectOne,
+  sendAccountSetupEmail,
   supabaseAdminFetch,
   tablePath,
   teamRoles
@@ -78,6 +79,12 @@ export async function POST(request) {
         body: JSON.stringify(payload)
       }
     );
+
+    await sendAccountSetupEmail({
+      email,
+      name: body.fullName,
+      reason: "You have been added as a team member in Clients. Please create your password to view assigned requests and messages."
+    });
 
     return apiJson(rows?.[0] || null);
   } catch (error) {

@@ -420,6 +420,23 @@ export async function sendPasswordReset(email) {
   if (error) throw error;
 }
 
+export async function completePasswordRecoverySession() {
+  if (isLocalAdminMode() || useDemo()) return demoSession();
+  if (!supabase) return null;
+
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get("code");
+  if (code) {
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) throw error;
+    return data.session;
+  }
+
+  const { data, error } = await supabase.auth.getSession();
+  if (error) throw error;
+  return data.session;
+}
+
 export async function updatePassword(password) {
   if (useLocalAdminProxy()) {
     await localApi("/password", {
@@ -631,6 +648,87 @@ export async function loadRequestAssignments() {
   }));
 }
 
+export async function loadRequestClientContacts() {
+  if (useDemo()) return [];
+  try {
+    return await localApi("/request-client-contacts");
+  } catch (error) {
+    if (useLocalAdminProxy()) throw error;
+  }
+  try {
+    return await appApi("/request-client-contacts");
+  } catch (error) {
+    if (!isServerRouteMissing(error) && !String(error.message || "").includes("request_client_contacts")) throw error;
+  }
+
+  const { data, error } = await supabase
+    .from("request_client_contacts")
+    .select("id, request_id, profile_id, name, email, created_at");
+
+  if (error) {
+    if (String(error.message || "").includes("request_client_contacts")) return [];
+    throw error;
+  }
+  return data ?? [];
+}
+
+export async function setRequestClientContacts(requestId, contacts = []) {
+  const normalizedContacts = (contacts || [])
+    .map((contact) => ({
+      name: String(contact.name || "").trim(),
+      email: normalizeEmail(contact.email)
+    }))
+    .filter((contact) => contact.email);
+
+  if (useDemo()) return;
+  try {
+    await localApi(`/request-client-contacts/${requestId}`, {
+      method: "PUT",
+      body: JSON.stringify({ contacts: normalizedContacts })
+    });
+    return;
+  } catch (error) {
+    if (useLocalAdminProxy()) throw error;
+  }
+  try {
+    await appApi(`/request-client-contacts/${requestId}`, {
+      method: "PUT",
+      body: JSON.stringify({ contacts: normalizedContacts })
+    });
+    return;
+  } catch (error) {
+    if (!isServerRouteMissing(error) && !String(error.message || "").includes("request_client_contacts")) throw error;
+  }
+
+  const deleted = await supabase
+    .from("request_client_contacts")
+    .delete()
+    .eq("request_id", requestId);
+  if (deleted.error) {
+    if (String(deleted.error.message || "").includes("request_client_contacts")) return;
+    throw deleted.error;
+  }
+
+  if (!normalizedContacts.length) return;
+
+  const uniqueContacts = Array.from(new Map(normalizedContacts.map((contact) => [contact.email, contact])).values());
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, email")
+    .in("email", uniqueContacts.map((contact) => contact.email));
+  const profileByEmail = Object.fromEntries((profiles || []).map((profile) => [normalizeEmail(profile.email), profile]));
+
+  const { error } = await supabase
+    .from("request_client_contacts")
+    .insert(uniqueContacts.map((contact) => ({
+      request_id: requestId,
+      profile_id: profileByEmail[contact.email]?.id || null,
+      name: contact.name || null,
+      email: contact.email
+    })));
+  if (error) throw error;
+}
+
 export async function loadClients() {
   if (useLocalAdminProxy()) return localApi("/clients");
   if (useDemo()) return demoClients;
@@ -683,6 +781,15 @@ export async function createClient({ name, contactName, email, billingEmail, sta
     };
     demoClients.unshift(client);
     return client;
+  }
+
+  try {
+    return await appApi("/clients", {
+      method: "POST",
+      body: JSON.stringify({ name, contactName, email: normalizedEmail, billingEmail, status })
+    });
+  } catch (error) {
+    if (!String(error.message || "").includes("Server team API is not configured")) throw error;
   }
 
   const existing = await findClientByEmail(normalizedEmail);
@@ -1247,11 +1354,11 @@ function mergeMessagesAndAttachments(messages, attachments) {
   ));
 }
 
-export async function createMessage(requestId, senderId, message) {
+export async function createMessage(requestId, senderId, message, { notify = true } = {}) {
   if (useLocalAdminProxy()) {
     await localApi("/messages", {
       method: "POST",
-      body: JSON.stringify({ requestId, senderId, message })
+      body: JSON.stringify({ requestId, senderId, message, notify })
     });
     return;
   }
@@ -1270,14 +1377,10 @@ export async function createMessage(requestId, senderId, message) {
     return;
   }
 
-  const { error } = await supabase.from("request_messages").insert({
-    request_id: requestId,
-    sender_id: senderId,
-    message,
-    is_internal: false
+  await appApi("/messages", {
+    method: "POST",
+    body: JSON.stringify({ requestId, senderId, message, notify })
   });
-
-  if (error) throw error;
 }
 
 export async function uploadRequestAttachment({ request, profile, file }) {

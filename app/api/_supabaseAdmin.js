@@ -16,6 +16,10 @@ const anonKey = process.env.SUPABASE_ANON_KEY
   || process.env.VITE_SUPABASE_ANON_KEY
   || appConfig.supabaseAnonKey;
 
+const resendApiKey = process.env.RESEND_API_KEY;
+const notificationFrom = process.env.NOTIFICATION_FROM || "Clients <notifications@example.com>";
+const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "";
+
 export const managementRoles = new Set(["owner", "project_manager"]);
 export const internalRoles = new Set(["owner", "project_manager", "developer", "reviewer", "assignee"]);
 export const teamRoles = new Set(["owner", "project_manager", "developer", "reviewer", "assignee"]);
@@ -209,6 +213,56 @@ export async function createAuthUser(email, fullName, password = process.env.DEF
       user_metadata: { full_name: fullName || normalizedEmail }
     })
   });
+}
+
+export async function generatePasswordSetupLink(email) {
+  const normalizedEmail = normalizeEmail(email);
+  const redirectTo = appUrl ? `${appUrl}?mode=password-reset&type=recovery` : undefined;
+  const payload = await supabaseAdminFetch("/auth/v1/admin/generate_link", {
+    method: "POST",
+    body: JSON.stringify({
+      type: "recovery",
+      email: normalizedEmail,
+      ...(redirectTo ? { options: { redirect_to: redirectTo } } : {})
+    })
+  });
+  return payload?.properties?.action_link || payload?.action_link || payload?.actionLink || null;
+}
+
+export async function sendAccountSetupEmail({ email, name, reason }) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return;
+  if (!resendApiKey) {
+    console.warn("[Clients] RESEND_API_KEY is not configured. Skipping account setup email.");
+    return;
+  }
+
+  const setupLink = await generatePasswordSetupLink(normalizedEmail);
+  if (!setupLink) {
+    console.warn(`[Clients] Supabase did not return a password setup link for ${normalizedEmail}.`);
+    return;
+  }
+
+  const greeting = name ? `Hi ${name},` : "Hi,";
+  const text = `${greeting}\n\n${reason || "You have been added to Clients."}\n\nCreate your password and sign in here:\n${setupLink}\n\nIf you were not expecting this, you can ignore this email.`;
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${resendApiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      from: notificationFrom,
+      to: [normalizedEmail],
+      subject: "You have been added to Clients",
+      text
+    })
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    console.warn("[Clients] Account setup email failed", detail);
+  }
 }
 
 export function handleApiError(error) {

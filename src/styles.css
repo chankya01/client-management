@@ -231,6 +231,10 @@ body:has(.admin-page) main {
   width: min(100%, 1120px);
 }
 
+body:has(.client-message-layout) main {
+  width: min(100%, 1120px);
+}
+
 h1 {
   margin: 0 0 6px;
   font-size: 30px;
@@ -510,6 +514,11 @@ h2 {
 .client-message-layout .request-switcher {
   margin: 0;
   padding: 18px;
+}
+
+.client-message-layout .message-card,
+.client-message-layout .composer {
+  width: 100%;
 }
 
 .checkbox-field {
