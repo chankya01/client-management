@@ -47,6 +47,7 @@ const state = {
   clients: [],
   team: [],
   requestAssignments: [],
+  messageDrafts: {},
   selectedRequestId: null,
   editingClientId: null,
   editingRequestId: null,
@@ -388,7 +389,11 @@ function saveReadState(readState) {
 
 function messageNeedsRead(message) {
   const senderRole = message.profiles?.role;
-  return isInternal() ? senderRole === "client" : senderRole !== "client";
+  if (message.sender_id && message.sender_id === state.profile?.id) return false;
+  if (!isInternal()) return senderRole !== "client";
+  if (senderRole === "client") return true;
+  if (senderRole) return false;
+  return !state.team.some((member) => member.id === message.sender_id);
 }
 
 function calculateUnreadCounts() {
@@ -412,29 +417,13 @@ function requestUnreadBadge(requestId) {
   return count ? `<span class="count">${count}</span>` : "";
 }
 
-function pendingReadText(requestId) {
-  const count = state.unreadCounts[requestId] || 0;
-  return count ? `<span class="pending-read">${count} pending read</span>` : "";
+function messageDraftValue(requestId) {
+  return escapeHtml(state.messageDrafts[requestId] || "");
 }
 
-function pendingMessagesSummary() {
-  const pendingRequests = state.requests.filter((request) => Number(state.unreadCounts[request.id] || 0) > 0);
-  if (!pendingRequests.length) return "";
-
-  return `
-    <section class="card pending-summary" aria-label="Pending messages by request">
-      <p class="section-label">Pending Messages</p>
-      ${pendingRequests.map((request) => `
-        <button type="button" data-pending-request="${request.id}">
-          <span>
-            <strong>${escapeHtml(displayRequestNumber(request))}</strong>
-            ${escapeHtml(request.title)}
-          </span>
-          <span class="count">${state.unreadCounts[request.id]}</span>
-        </button>
-      `).join("")}
-    </section>
-  `;
+function clearMessageDraft(requestId) {
+  if (!requestId) return;
+  delete state.messageDrafts[requestId];
 }
 
 function isConversationPage(page) {
@@ -851,7 +840,6 @@ function adminDashboardPage() {
         ${metricCard("Team Members", state.team.length)}
         ${metricCard("Access", roleLabel(state.profile.role))}
       </div>
-      ${pendingMessagesSummary()}
       <section class="card">
         <p class="section-label">Recent Requests</p>
         ${adminRequestRows(state.requests, { source: "dashboard" })}
@@ -1000,7 +988,6 @@ function adminRequestRows(requests, { source = "requests" } = {}) {
           <span class="request-status-text">${statusLabel(request.status)}</span>
         </span>
         ${isInternal() ? `<span class="assigned-line">Tagged: ${escapeHtml(assignedPeopleText(request.id))}</span>` : ""}
-        ${pendingReadText(request.id)}
       </div>
       <div class="row-actions">
         ${requestUnreadBadge(request.id)}
@@ -1069,7 +1056,6 @@ function adminMessagesPage() {
           <p class="subtitle">${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(request.title)} · ${escapeHtml(clientName(request.client_id))}</p>
         </div>
       </div>
-      ${pendingMessagesSummary()}
       <div class="message-layout">
         <aside class="card message-request-list">
           <p class="section-label">Requests</p>
@@ -1078,7 +1064,7 @@ function adminMessagesPage() {
               <span>
                 <strong>${escapeHtml(displayRequestNumber(item))}</strong>
                 <span>${escapeHtml(item.title)}</span>
-                ${pendingReadText(item.id)}
+                <span>${escapeHtml(clientName(item.client_id))}</span>
               </span>
               ${requestUnreadBadge(item.id)}
             </button>
@@ -1088,7 +1074,7 @@ function adminMessagesPage() {
           ${state.messages.map(messageCard).join("") || emptyMessage()}
           <form class="card composer" id="internalMessageForm">
             <label class="section-label" for="internalMessageText">New Message</label>
-            <textarea id="internalMessageText" name="message" placeholder="Write a message to the client or project team"></textarea>
+            <textarea id="internalMessageText" name="message" data-message-draft="${request.id}" placeholder="Write a message to the client or project team">${messageDraftValue(request.id)}</textarea>
             <div class="selected-file-row" data-selected-file-for="internalAttachmentInput" hidden>
               <span data-selected-file-name></span>
               <button class="remove-file-button" type="button" data-clear-file="internalAttachmentInput" aria-label="Remove selected file">×</button>
@@ -1239,7 +1225,7 @@ function messagesPage() {
       ${state.messages.map(messageCard).join("") || emptyMessage()}
       <form class="card composer" id="messageForm">
         <label class="section-label" for="messageText">New Message</label>
-        <textarea id="messageText" name="message" placeholder="Write a message about ${escapeHtml(requestTitle())}"></textarea>
+        <textarea id="messageText" name="message" data-message-draft="${state.activeRequest.id}" placeholder="Write a message about ${escapeHtml(requestTitle())}">${messageDraftValue(state.activeRequest.id)}</textarea>
         <div class="selected-file-row" data-selected-file-for="attachmentInput" hidden>
           <span data-selected-file-name></span>
           <button class="remove-file-button" type="button" data-clear-file="attachmentInput" aria-label="Remove selected file">×</button>
@@ -1310,7 +1296,6 @@ function clientRequestSwitcher() {
           <span>
             <strong>${escapeHtml(displayRequestNumber(request))}</strong>
             ${escapeHtml(request.title)}
-            ${pendingReadText(request.id)}
           </span>
           ${requestUnreadBadge(request.id)}
         </button>
@@ -1324,7 +1309,6 @@ function dashboardPage() {
     <section class="page">
       <h1>Dashboard</h1>
       <p class="subtitle">Review your requests, status, services, and deliverables.</p>
-      ${pendingMessagesSummary()}
       ${clientRequestCards(state.requests)}
     </section>
   `;
@@ -1680,13 +1664,6 @@ function attachEvents() {
     });
   });
 
-  document.querySelectorAll("[data-pending-request]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const requestId = button.dataset.pendingRequest;
-      await goToPage(isInternal() ? "admin-messages" : "messages", { requestId });
-    });
-  });
-
   document.querySelectorAll("[data-open-request-messages]").forEach((button) => {
     button.addEventListener("click", async () => {
       await goToPage("admin-messages", { requestId: button.dataset.openRequestMessages });
@@ -1976,6 +1953,12 @@ function attachEvents() {
 
   attachFileInputRemovers();
 
+  document.querySelectorAll("[data-message-draft]").forEach((textarea) => {
+    textarea.addEventListener("input", () => {
+      state.messageDrafts[textarea.dataset.messageDraft] = textarea.value;
+    });
+  });
+
   const form = document.getElementById("messageForm");
   if (form) {
     form.addEventListener("submit", async (event) => {
@@ -1991,8 +1974,9 @@ function attachEvents() {
       try {
         if (message) await createMessage(state.activeRequest.id, state.profile.id, message);
         if (file) await uploadRequestAttachment({ request: state.activeRequest, profile: state.profile, file });
+        clearMessageDraft(state.activeRequest.id);
         await refreshActiveMessages({ markRead: true });
-        showToast("Message sent. Related people can be notified by email from your backend.");
+        showToast("Message sent.");
         render();
       } catch (error) {
         showAppError(error, "Send client message");
@@ -2015,8 +1999,9 @@ function attachEvents() {
       try {
         if (message) await createMessage(state.activeRequest.id, state.profile.id, message);
         if (file) await uploadRequestAttachment({ request: state.activeRequest, profile: state.profile, file });
+        clearMessageDraft(state.activeRequest.id);
         await refreshActiveMessages({ markRead: true });
-        showToast("Message sent on the request conversation.");
+        showToast("Message sent.");
         render();
       } catch (error) {
         showAppError(error, "Send internal message");
@@ -2170,6 +2155,7 @@ function resetSessionState() {
   state.clients = [];
   state.team = [];
   state.requestAssignments = [];
+  state.messageDrafts = {};
   state.selectedRequestId = null;
   state.editingClientId = null;
   state.editingRequestId = null;
