@@ -9,7 +9,7 @@ import {
   supabaseAdminFetch,
   tablePath
 } from "../_supabaseAdmin.js";
-import { appConfig } from "../../src/config.js";
+import { appConfig } from "../../../src/config.js";
 
 function senderIdsFromMessages(messages) {
   return [...new Set((messages || []).map((message) => message.sender_id).filter(Boolean))];
