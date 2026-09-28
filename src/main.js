@@ -555,7 +555,14 @@ async function boot() {
       state.authView = "reset-password";
     }
   } catch (error) {
-    await returnToSignInAfterLoadFailure(error, "Initial account loading");
+    if (recoveryFlow) {
+      console.warn(`[${APP_NAME}] Password reset session setup`, error);
+      state.authView = "reset-password";
+      state.loadError = "";
+      showToast("Enter your new password to continue. If this fails, request a fresh reset link.");
+    } else {
+      await returnToSignInAfterLoadFailure(error, "Initial account loading");
+    }
   } finally {
     if (generation !== loadGeneration) return;
     state.loading = false;
@@ -2362,6 +2369,14 @@ onAuthStateChange((session, event) => {
         render();
       }
     } else {
+      if (recoveryFlow) {
+        state.session = null;
+        state.authView = "reset-password";
+        state.loadError = "";
+        state.loading = false;
+        render();
+        return;
+      }
       resetSessionState();
       state.loadError = "";
       state.loading = false;
