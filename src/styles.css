@@ -507,6 +507,11 @@ h2 {
   gap: 2px;
 }
 
+.client-message-layout .request-switcher {
+  margin: 0;
+  padding: 18px;
+}
+
 .checkbox-field {
   border: 0;
   padding: 0;

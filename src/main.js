@@ -481,6 +481,46 @@ async function refreshActiveMessages({ markRead = false } = {}) {
   calculateUnreadCounts();
 }
 
+async function preloadUnreadCounts(generation = loadGeneration) {
+  const requestsToLoad = state.requests.filter((request) => !state.messagesByRequest[request.id]);
+  if (!requestsToLoad.length) return;
+  try {
+    const messageEntries = await Promise.all(requestsToLoad.map(async (request) => [
+      request.id,
+      await loadMessages(request.id)
+    ]));
+    if (generation !== loadGeneration) return;
+    messageEntries.forEach(([requestId, messages]) => {
+      state.messagesByRequest[requestId] = messages;
+    });
+    calculateUnreadCounts();
+    render();
+  } catch (error) {
+    console.warn(`[${APP_NAME}] Unable to preload unread counts`, error);
+  }
+}
+
+async function returnToSignInAfterLoadFailure(error, context = "Account loading", { keepCurrentPortal = false } = {}) {
+  console.error(`[${APP_NAME}] ${context}`, error);
+  if (keepCurrentPortal && state.profile) {
+    state.loading = false;
+    state.loadError = "";
+    render();
+    return;
+  }
+  try {
+    await signOut();
+  } catch (signOutError) {
+    console.warn(`[${APP_NAME}] Sign out after load failure failed`, signOutError);
+  }
+  resetSessionState();
+  state.loading = false;
+  state.loadError = "";
+  state.authView = "signin";
+  render();
+  showToast("Please sign in again.");
+}
+
 async function boot() {
   const generation = ++loadGeneration;
   const recoveryFlow = isPasswordRecoveryFlow();
@@ -504,7 +544,7 @@ async function boot() {
       syncBrowserHistory({ replace: true });
     }
   } catch (error) {
-    state.loadError = error.message;
+    await returnToSignInAfterLoadFailure(error, "Initial account loading");
   } finally {
     if (generation !== loadGeneration) return;
     state.loading = false;
@@ -530,20 +570,21 @@ async function loadPortalData() {
     || null;
   state.selectedRequestId = state.activeRequest?.id || null;
   state.history = isInternal() ? await loadClosedRequests() : state.requests;
-  const messageEntries = await Promise.all(state.requests.map(async (request) => [
-    request.id,
-    await loadMessages(request.id)
-  ]));
-  state.messagesByRequest = Object.fromEntries(messageEntries);
-  calculateUnreadCounts();
+  state.messagesByRequest = {};
 
   if (state.activeRequest) {
+    state.messages = await loadMessages(state.activeRequest.id);
+    state.messagesByRequest[state.activeRequest.id] = state.messages;
+    calculateUnreadCounts();
     state.messages = state.messagesByRequest[state.activeRequest.id] || [];
     state.deliverables = await loadDeliverables(state.activeRequest.id);
   } else {
     state.messages = [];
     state.deliverables = [];
+    calculateUnreadCounts();
   }
+
+  preloadUnreadCounts(loadGeneration);
 }
 
 function renderSignIn() {
@@ -1220,24 +1261,28 @@ function messagesPage() {
         <h1>Messages</h1>
         <p class="subtitle message-subtitle">${escapeHtml(requestFromName)} · ${escapeHtml(requestTitle())}</p>
       </div>
-      ${clientRequestSwitcher()}
-      <div class="date-row conversation-row"><span>Conversation</span></div>
-      ${state.messages.map(messageCard).join("") || emptyMessage()}
-      <form class="card composer" id="messageForm">
-        <label class="section-label" for="messageText">New Message</label>
-        <textarea id="messageText" name="message" data-message-draft="${state.activeRequest.id}" placeholder="Write a message about ${escapeHtml(requestTitle())}">${messageDraftValue(state.activeRequest.id)}</textarea>
-        <div class="selected-file-row" data-selected-file-for="attachmentInput" hidden>
-          <span data-selected-file-name></span>
-          <button class="remove-file-button" type="button" data-clear-file="attachmentInput" aria-label="Remove selected file">×</button>
-        </div>
-        <div class="composer-actions">
-          <label class="file-control">
-            Attachment
-            <input id="attachmentInput" name="attachment" type="file" />
-          </label>
-          <button class="primary" type="submit">Send Message</button>
-        </div>
-      </form>
+      <div class="message-layout client-message-layout">
+        ${clientRequestSwitcher()}
+        <section>
+          <div class="date-row conversation-row"><span>Conversation</span></div>
+          ${state.messages.map(messageCard).join("") || emptyMessage()}
+          <form class="card composer" id="messageForm">
+            <label class="section-label" for="messageText">New Message</label>
+            <textarea id="messageText" name="message" data-message-draft="${state.activeRequest.id}" placeholder="Write a message about ${escapeHtml(requestTitle())}">${messageDraftValue(state.activeRequest.id)}</textarea>
+            <div class="selected-file-row" data-selected-file-for="attachmentInput" hidden>
+              <span data-selected-file-name></span>
+              <button class="remove-file-button" type="button" data-clear-file="attachmentInput" aria-label="Remove selected file">×</button>
+            </div>
+            <div class="composer-actions">
+              <label class="file-control">
+                Attachment
+                <input id="attachmentInput" name="attachment" type="file" />
+              </label>
+              <button class="primary" type="submit">Send Message</button>
+            </div>
+          </form>
+        </section>
+      </div>
     </section>
   `;
 }
@@ -1287,9 +1332,9 @@ function attachmentCard(file) {
 }
 
 function clientRequestSwitcher() {
-  if (isInternal() || state.requests.length <= 1) return "";
+  if (isInternal() || !state.requests.length) return "";
   return `
-    <section class="card request-switcher">
+    <aside class="card request-switcher message-request-list">
       <p class="section-label">Requests</p>
       ${state.requests.map((request) => `
         <button class="${request.id === state.activeRequest?.id ? "active" : ""}" data-client-request="${request.id}">
@@ -1300,7 +1345,7 @@ function clientRequestSwitcher() {
           ${requestUnreadBadge(request.id)}
         </button>
       `).join("")}
-    </section>
+    </aside>
   `;
 }
 
@@ -1487,22 +1532,8 @@ function render() {
   }
 
   if (state.loadError) {
-    root.innerHTML = `
-      <main class="signin-shell">
-        <section class="signin-card">
-          ${brandLogo("signin")}
-          <h1>Unable to Load Account</h1>
-          <p class="helper">${escapeHtml(state.loadError)}</p>
-          <p class="helper">Please retry. If this continues, ask an admin to check the app deployment and Supabase configuration.</p>
-          <div class="quick-login">
-            <button class="primary" data-action="logout">Sign Out</button>
-            <button class="secondary" data-action="retry-load">Retry</button>
-          </div>
-        </section>
-        ${toastHtml()}
-      </main>
-    `;
-    attachEvents();
+    resetSessionState();
+    renderSignIn();
     return;
   }
 
@@ -1636,7 +1667,8 @@ function attachEvents() {
         await withTimeout(loadPortalData(), "Account data loading");
         state.page = savedPage() || defaultPage();
       } catch (error) {
-        state.loadError = error.message;
+        await returnToSignInAfterLoadFailure(error, "Retry account loading");
+        return;
       } finally {
         if (generation !== loadGeneration) return;
         state.loading = false;
@@ -2186,7 +2218,10 @@ onAuthStateChange((session, event) => {
           state.page = savedPage() || defaultPage();
         }
       } catch (error) {
-        state.loadError = `${event || "Auth"}: ${error.message}`;
+        await returnToSignInAfterLoadFailure(error, `${event || "Auth"} account loading`, {
+          keepCurrentPortal: hasExistingPortal
+        });
+        return;
       } finally {
         if (generation !== loadGeneration) return;
         state.loading = false;
