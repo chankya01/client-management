@@ -421,6 +421,101 @@ function statusChangeMessage({ previousStatus, nextStatus, actorName }) {
   return `Status updated by ${actorName || "Team Member"}: ${statusLabel(previousStatus)} → ${statusLabel(nextStatus)}.`;
 }
 
+function displayText(value, fallback = "Not Set") {
+  const text = String(value || "").trim();
+  return text || fallback;
+}
+
+function canonicalText(value) {
+  return String(value || "").trim().replace(/\s+/g, " ");
+}
+
+function canonicalServices(value) {
+  return requestServices({ service_type: value })
+    .map((service) => service.toLowerCase())
+    .sort()
+    .join("|");
+}
+
+function teamNamesForIds(profileIds = []) {
+  const profileIdSet = new Set(profileIds.filter(Boolean));
+  const names = state.team
+    .filter((member) => profileIdSet.has(member.id))
+    .map((member) => member.full_name);
+  const missingIds = [...profileIdSet].filter((id) => !state.team.some((member) => member.id === id));
+  return [...names, ...missingIds].sort((left, right) => left.localeCompare(right));
+}
+
+function contactsForDisplay(contacts = []) {
+  return contacts
+    .map((contact) => ({
+      name: String(contact.name || "").trim(),
+      email: String(contact.email || "").trim().toLowerCase()
+    }))
+    .filter((contact) => contact.email)
+    .sort((left, right) => left.email.localeCompare(right.email));
+}
+
+function listDisplay(items = [], fallback = "None") {
+  return items.length ? items.join(", ") : fallback;
+}
+
+function contactDisplay(contacts = []) {
+  return listDisplay(contactsForDisplay(contacts).map((contact) => (
+    contact.name ? `${contact.name} <${contact.email}>` : contact.email
+  )));
+}
+
+function contactComparison(contacts = []) {
+  return contactsForDisplay(contacts)
+    .map((contact) => `${contact.name.toLowerCase()}<${contact.email}>`)
+    .join("|");
+}
+
+function requestUpdateMessage({
+  previousRequest,
+  nextRequest,
+  previousAssignedIds,
+  nextAssignedIds,
+  previousContacts,
+  nextContacts,
+  actorName
+}) {
+  const changes = [];
+  const addChange = (label, before, after, beforeCompare = before, afterCompare = after) => {
+    if (beforeCompare === afterCompare) return;
+    changes.push(`- ${label}: ${before} → ${after}`);
+  };
+
+  addChange("Client", clientName(previousRequest.client_id), clientName(nextRequest.clientId), previousRequest.client_id, nextRequest.clientId);
+  addChange("Title", displayText(previousRequest.title), displayText(nextRequest.title), canonicalText(previousRequest.title), canonicalText(nextRequest.title));
+  addChange("Description", displayText(previousRequest.description), displayText(nextRequest.description), canonicalText(previousRequest.description), canonicalText(nextRequest.description));
+  addChange("Services", displayText(previousRequest.service_type), displayText(nextRequest.serviceType), canonicalServices(previousRequest.service_type), canonicalServices(nextRequest.serviceType));
+  addChange("Due Date", formatDate(previousRequest.due_date), formatDate(nextRequest.dueDate), previousRequest.due_date || "", nextRequest.dueDate || "");
+  addChange("Status", statusLabel(previousRequest.status), statusLabel(nextRequest.status), workflowStatusKey(previousRequest.status), workflowStatusKey(nextRequest.status));
+
+  const previousTeamNames = teamNamesForIds(previousAssignedIds);
+  const nextTeamNames = teamNamesForIds(nextAssignedIds);
+  addChange(
+    "Tagged Team Members",
+    listDisplay(previousTeamNames),
+    listDisplay(nextTeamNames),
+    [...previousAssignedIds].sort().join("|"),
+    [...nextAssignedIds].sort().join("|")
+  );
+
+  addChange(
+    "Client Followers",
+    contactDisplay(previousContacts),
+    contactDisplay(nextContacts),
+    contactComparison(previousContacts),
+    contactComparison(nextContacts)
+  );
+
+  if (!changes.length) return "";
+  return [`Request updated by ${actorName || "Team Member"}:`, ...changes].join("\n");
+}
+
 function readStateKey() {
   return `requestManagementReadState:${state.profile?.id || "anonymous"}`;
 }
@@ -1297,11 +1392,13 @@ function adminMessagesPage() {
               <button class="remove-file-button" type="button" data-clear-file="internalAttachmentInput" aria-label="Remove selected file">×</button>
             </div>
             <div class="composer-actions">
-              <label class="file-control">
-                Attachment
-                <input id="internalAttachmentInput" name="attachment" type="file" />
-              </label>
-              <span class="helper">Visible on the request conversation.</span>
+              <div class="composer-meta">
+                <label class="file-control">
+                  Attachment
+                  <input id="internalAttachmentInput" name="attachment" type="file" />
+                </label>
+                <span class="helper">Visible on the request conversation.</span>
+              </div>
               <button class="primary" type="submit">Send Message</button>
             </div>
           </form>
@@ -1450,10 +1547,12 @@ function messagesPage() {
               <button class="remove-file-button" type="button" data-clear-file="attachmentInput" aria-label="Remove selected file">×</button>
             </div>
             <div class="composer-actions">
-              <label class="file-control">
-                Attachment
-                <input id="attachmentInput" name="attachment" type="file" />
-              </label>
+              <div class="composer-meta">
+                <label class="file-control">
+                  Attachment
+                  <input id="attachmentInput" name="attachment" type="file" />
+                </label>
+              </div>
               <button class="primary" type="submit">Send Message</button>
             </div>
           </form>
@@ -2030,6 +2129,8 @@ function attachEvents() {
       await withActionLock("request-form", event.currentTarget, async () => {
         try {
         const previousRequest = state.requests.find((request) => request.id === state.editingRequestId);
+        const previousAssignedIds = state.editingRequestId ? assignedProfileIdsForRequest(state.editingRequestId) : [];
+        const previousContacts = state.editingRequestId ? clientContactsForRequest(state.editingRequestId) : [];
         const requestPayload = {
           clientId: values.clientId,
           title: values.title,
@@ -2044,26 +2145,19 @@ function attachEvents() {
           await updateRequest(state.editingRequestId, requestPayload);
           await setRequestAssignments(state.editingRequestId, assignedProfileIds, state.profile.id);
           await setRequestClientContacts(state.editingRequestId, clientContacts);
-          if (previousRequest && previousRequest.status !== requestPayload.status) {
-            await createMessage(
-              state.editingRequestId,
-              state.profile.id,
-              statusChangeMessage({
-                previousStatus: previousRequest.status,
-                nextStatus: requestPayload.status,
-                actorName: state.profile.full_name
-              }),
-              { notify: false }
-            );
-          }
-          if (previousRequest && previousRequest.service_type !== requestPayload.serviceType) {
-            const versionLabel = nextServiceVersionLabel(state.editingRequestId);
-            await createMessage(
-              state.editingRequestId,
-              state.profile.id,
-              serviceVersionMessage({ versionLabel, services: requestPayload.serviceType }),
-              { notify: false }
-            );
+          if (previousRequest) {
+            const updateMessage = requestUpdateMessage({
+              previousRequest,
+              nextRequest: requestPayload,
+              previousAssignedIds,
+              nextAssignedIds: assignedProfileIds,
+              previousContacts,
+              nextContacts: clientContacts,
+              actorName: state.profile.full_name
+            });
+            if (updateMessage) {
+              await createMessage(state.editingRequestId, state.profile.id, updateMessage);
+            }
           }
           state.editingRequestId = null;
           showToast("Request updated.");

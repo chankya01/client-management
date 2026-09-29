@@ -652,11 +652,18 @@ h2 {
 
 .composer-actions {
   margin-top: 24px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 24px;
+  align-items: center;
+}
+
+.composer-meta {
   display: flex;
   flex-wrap: wrap;
-  justify-content: space-between;
   gap: 18px;
   align-items: center;
+  min-width: 0;
 }
 
 .file-control {
@@ -1380,6 +1387,14 @@ button:disabled,
 
   .message-request-list {
     position: static;
+  }
+
+  .composer-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .composer-actions .primary {
+    justify-self: start;
   }
 }
 
