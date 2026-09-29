@@ -1106,6 +1106,13 @@ function clientContactsForRequest(requestId) {
   return state.requestClientContacts.filter((contact) => contact.request_id === requestId);
 }
 
+function requestCcSummary(requestId) {
+  const contacts = clientContactsForRequest(requestId);
+  return contacts.length
+    ? contacts.map((contact) => contact.name || contact.email).join(", ")
+    : "None";
+}
+
 function requestCcPanel() {
   if (isInternal() || !state.activeRequest) return "";
   const contacts = clientContactsForRequest(state.activeRequest.id);
@@ -1704,7 +1711,6 @@ function clientMessageSidebar() {
   return `
     <aside class="client-message-sidebar">
       ${clientRequestSwitcher()}
-      ${requestCcPanel()}
     </aside>
   `;
 }
@@ -1738,6 +1744,7 @@ function clientRequestPage() {
         ${accountRow("Created", formatDate(state.activeRequest.created_at))}
         <p class="card-note">${escapeHtml(state.activeRequest.description || "No description added.")}</p>
       </section>
+      ${requestCcPanel()}
       ${statusTracker(state.activeRequest)}
       <section class="card">
         <p class="section-label">Services in this request</p>
@@ -1777,6 +1784,7 @@ function clientRequestCards(requests) {
     <section class="card history-card clickable-row" data-client-open-request="${request.id}">
       <h2>${escapeHtml(request.title)} ${requestUnreadBadge(request.id)}</h2>
       <p>${escapeHtml(request.description || "Request linked to this client account.")}</p>
+      <p class="helper">CC Contacts: ${escapeHtml(requestCcSummary(request.id))}</p>
       <div class="deliverable-row">
         <span>${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(request.service_type || "Accessibility Service")}</span>
         <time>${formatDate(request.due_date || request.closed_at || request.created_at)}</time>
@@ -2158,12 +2166,13 @@ function attachEvents() {
   if (clientContactForm) {
     clientContactForm.addEventListener("submit", async (event) => {
       event.preventDefault();
-      const values = Object.fromEntries(new FormData(event.currentTarget));
-      await withActionLock("client-contact-form", event.currentTarget, async () => {
+      const form = event.currentTarget;
+      const values = Object.fromEntries(new FormData(form));
+      await withActionLock("client-contact-form", form, async () => {
         try {
           const contact = await createClientContact(values);
           state.clientContacts = await loadClientContacts();
-          event.currentTarget.reset();
+          form.reset();
           if (contact?.account_setup_email?.sent) {
             showToast("CC contact added and setup email sent.");
           } else {
@@ -2182,7 +2191,8 @@ function attachEvents() {
     clientCcContactForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       if (!state.activeRequest?.id) return;
-      const values = Object.fromEntries(new FormData(event.currentTarget));
+      const form = event.currentTarget;
+      const values = Object.fromEntries(new FormData(form));
       const contactName = String(values.name || "").trim();
       const contactEmail = normalizeEmail(values.email);
       if (!contactEmail) {
@@ -2190,14 +2200,14 @@ function attachEvents() {
         return;
       }
 
-      await withActionLock(`client-cc-${state.activeRequest.id}`, event.currentTarget, async () => {
+      await withActionLock(`client-cc-${state.activeRequest.id}`, form, async () => {
         try {
           const result = await addRequestClientContact(state.activeRequest.id, {
             name: contactName,
             email: contactEmail
           });
           state.requestClientContacts = await loadRequestClientContacts();
-          event.currentTarget.reset();
+          form.reset();
 
           if (!result?.already_exists) {
             const displayName = contactName || contactEmail;
@@ -2621,7 +2631,8 @@ function attachEvents() {
   if (passwordForm) {
     passwordForm.addEventListener("submit", async (event) => {
       event.preventDefault();
-      const values = Object.fromEntries(new FormData(event.currentTarget));
+      const form = event.currentTarget;
+      const values = Object.fromEntries(new FormData(form));
       if (values.password !== values.confirmPassword) {
         showToast("Passwords do not match.");
         return;
@@ -2631,7 +2642,7 @@ function attachEvents() {
         state.profile = { ...state.profile, must_change_password: false };
         state.showPasswordForm = false;
         clearPasswordRecoveryUrl();
-        event.currentTarget.reset();
+        form.reset();
         showToast("Password updated.");
         render();
       } catch (error) {
