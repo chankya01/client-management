@@ -306,7 +306,7 @@ export async function sendRequestAccessEmail({ email, name, requestLabel }) {
 
   const greeting = name ? `Hi ${name},` : "Hi,";
   const link = appUrl ? `\n\nSign in here:\n${appUrl}` : "";
-  const text = `${greeting}\n\nYou have been added to ${requestLabel || "a request"} in Clients. You can sign in to view request updates and messages.${link}\n\nIf you were not expecting this, you can ignore this email.`;
+  const text = `${greeting}\n\nYou have been CC’d on ${requestLabel || "a request"} in Clients. You can sign in to view request updates and messages.${link}\n\nIf you were not expecting this, you can ignore this email.`;
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -316,7 +316,7 @@ export async function sendRequestAccessEmail({ email, name, requestLabel }) {
     body: JSON.stringify({
       from: notificationFrom,
       to: [normalizedEmail],
-      subject: `You have been added to ${requestLabel || "a request"}`,
+      subject: `You have been CC’d on ${requestLabel || "a request"}`,
       text
     })
   });

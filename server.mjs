@@ -514,7 +514,7 @@ async function sendAccountSetupEmail({ email, name, reason }) {
   }
 
   const greeting = name ? `Hi ${name},` : "Hi,";
-  const text = `${greeting}\n\n${reason || "You have been added to Clients."}\n\nCreate your password and sign in here:\n${setupLink}\n\nIf you were not expecting this, you can ignore this email.`;
+  const text = `${greeting}\n\n${reason || "You have been added to Clients."}\n\nSet up your account by creating your password here:\n${setupLink}\n\nAfter setting your password, you can sign in to view request updates and messages.\n\nIf you were not expecting this, you can ignore this email.`;
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -524,7 +524,7 @@ async function sendAccountSetupEmail({ email, name, reason }) {
     body: JSON.stringify({
       from: notificationFrom,
       to: [normalizedEmail],
-      subject: "You have been added to Clients",
+      subject: "Set up your Clients account",
       text
     })
   });
@@ -759,12 +759,6 @@ async function handleApi(req, res, url) {
     if (!linkedRequest) return json(res, 404, { error: "Request not found." });
     const existingContacts = await safeRows("request_client_contacts", `?select=email&request_id=eq.${encode(requestId)}`);
     const existingEmails = new Set((existingContacts || []).map((contact) => normalizeEmail(contact.email)));
-    try {
-      await supabaseFetch(rest("request_client_contacts", `?request_id=eq.${encode(requestId)}`), { method: "DELETE" });
-    } catch (error) {
-      if (!String(error.message || "").includes("request_client_contacts")) throw error;
-    }
-
     if (contacts.length) {
       const profileByEmail = {};
       for (const contact of contacts) {
@@ -797,6 +791,27 @@ async function handleApi(req, res, url) {
         }
         if (profile?.role === "client") profileByEmail[contact.email] = profile;
       }
+      const requestLabel = linkedRequest.request_number || linkedRequest.title || "this request";
+      for (const contact of contacts) {
+        if (existingEmails.has(contact.email)) continue;
+        await sendAccountSetupEmail({
+          email: contact.email,
+          name: contact.name,
+          reason: `You have been CC’d on ${requestLabel} in Clients. Please set up your account to view request updates and messages.`
+        });
+      }
+    }
+    try {
+      await supabaseFetch(rest("request_client_contacts", `?request_id=eq.${encode(requestId)}`), { method: "DELETE" });
+    } catch (error) {
+      if (!String(error.message || "").includes("request_client_contacts")) throw error;
+    }
+    if (contacts.length) {
+      const profileByEmail = {};
+      for (const contact of contacts) {
+        const profile = await selectOne("profiles", `?select=id,email,role,client_id&email=eq.${encode(contact.email)}&limit=1`);
+        if (profile?.role === "client") profileByEmail[contact.email] = profile;
+      }
       await supabaseFetch(rest("request_client_contacts"), {
         method: "POST",
         body: JSON.stringify(contacts.map((contact) => ({
@@ -806,15 +821,6 @@ async function handleApi(req, res, url) {
           email: contact.email
         })))
       });
-      const requestLabel = linkedRequest.request_number || linkedRequest.title || "this request";
-      for (const contact of contacts) {
-        if (existingEmails.has(contact.email)) continue;
-        await sendAccountSetupEmail({
-          email: contact.email,
-          name: contact.name,
-          reason: `You have been added to ${requestLabel} in Clients. Please create your password to view request updates and messages.`
-        });
-      }
     }
     return json(res, 200, { ok: true });
   }

@@ -1,6 +1,8 @@
 import {
+  addRequestClientContact,
   completePasswordRecoverySession,
   createClient,
+  createClientContact,
   createMessage,
   createRequest,
   createSignedDownload,
@@ -10,6 +12,7 @@ import {
   deleteTeamMember,
   getSession,
   isLocalAutoLoginMode,
+  loadClientContacts,
   loadClients,
   loadClosedRequests,
   loadDeliverables,
@@ -48,6 +51,7 @@ const state = {
   deliverables: [],
   history: [],
   clients: [],
+  clientContacts: [],
   team: [],
   requestAssignments: [],
   requestClientContacts: [],
@@ -55,6 +59,7 @@ const state = {
   clientDraft: {},
   pendingActions: new Set(),
   selectedRequestId: null,
+  requestClientSelection: null,
   editingClientId: null,
   editingRequestId: null,
   editingTeamId: null,
@@ -106,6 +111,10 @@ async function safeLoad(label, loader, fallback) {
     console.warn(`[${APP_NAME}] ${label} failed`, error);
     return fallback;
   }
+}
+
+function normalizeEmail(email) {
+  return String(email || "").trim().toLowerCase();
 }
 
 function statusLabel(status) {
@@ -515,7 +524,7 @@ function requestUpdateMessage({
   );
 
   addChange(
-    "Client Followers",
+    "CC Contacts",
     contactDisplay(previousContacts),
     contactDisplay(nextContacts),
     contactComparison(previousContacts),
@@ -762,24 +771,35 @@ async function loadPortalData() {
     loadedRequests,
     requestAssignments,
     requestClientContacts,
+    clientContacts,
     clients,
     team,
     history
   ] = await Promise.all([
     loadRequests(),
     isInternal() ? safeLoad("Request assignment loading", loadRequestAssignments, []) : Promise.resolve([]),
-    canAccessManagementPages() ? safeLoad("Request contact loading", loadRequestClientContacts, []) : Promise.resolve([]),
+    (canAccessManagementPages() || state.profile?.role === "client") ? safeLoad("Request contact loading", loadRequestClientContacts, []) : Promise.resolve([]),
+    canAccessManagementPages() ? safeLoad("Client contact loading", loadClientContacts, []) : Promise.resolve([]),
     isInternal() ? safeLoad("Client loading", loadClients, []) : Promise.resolve([]),
     isInternal() ? safeLoad("Team loading", loadTeam, []) : Promise.resolve([]),
     isInternal() ? safeLoad("History loading", loadClosedRequests, null) : Promise.resolve(null)
   ]);
   state.requestAssignments = requestAssignments;
   state.requestClientContacts = requestClientContacts;
-  state.requests = isInternal() && !canAccessManagementPages()
-    ? loadedRequests.filter((request) => state.requestAssignments.some((assignment) => (
+  state.clientContacts = clientContacts;
+  if (isInternal() && !canAccessManagementPages()) {
+    state.requests = loadedRequests.filter((request) => state.requestAssignments.some((assignment) => (
       assignment.request_id === request.id && assignment.profile_id === state.profile.id
-    )))
-    : loadedRequests;
+    )));
+  } else if (state.profile?.role === "client"
+    && normalizeEmail(state.profile.email) !== normalizeEmail(state.profile.clients?.primary_contact_email)) {
+    state.requests = loadedRequests.filter((request) => state.requestClientContacts.some((contact) => (
+      contact.request_id === request.id
+      && (contact.profile_id === state.profile.id || normalizeEmail(contact.email) === normalizeEmail(state.profile.email))
+    )));
+  } else {
+    state.requests = loadedRequests;
+  }
   state.clients = clients;
   state.team = team;
   const lastRequestId = localStorage.getItem(LAST_REQUEST_KEY);
@@ -1055,6 +1075,15 @@ function clientName(clientId) {
   return state.clients.find((client) => client.id === clientId)?.name || organizationName();
 }
 
+function organizationContacts(clientId) {
+  const client = state.clients.find((item) => item.id === clientId);
+  const primaryEmail = normalizeEmail(client?.primary_contact_email);
+  return state.clientContacts
+    .filter((contact) => contact.client_id === clientId)
+    .filter((contact) => normalizeEmail(contact.email) !== primaryEmail)
+    .sort((left, right) => String(left.full_name || "").localeCompare(String(right.full_name || "")));
+}
+
 function assignableTeamMembers() {
   return state.team.filter((member) => member.role !== "client");
 }
@@ -1077,31 +1106,53 @@ function clientContactsForRequest(requestId) {
   return state.requestClientContacts.filter((contact) => contact.request_id === requestId);
 }
 
-function formatClientContactsForInput(requestId) {
-  return clientContactsForRequest(requestId)
-    .map((contact) => contact.name ? `${contact.name} <${contact.email}>` : contact.email)
-    .join("\n");
+function requestCcPanel() {
+  if (isInternal() || !state.activeRequest) return "";
+  const contacts = clientContactsForRequest(state.activeRequest.id);
+  return `
+    <section class="card request-cc-panel">
+      <p class="section-label">CC Contacts</p>
+      <div class="cc-contact-list">
+        ${contacts.map((contact) => `
+          <div class="cc-contact-row">
+            <strong>${escapeHtml(contact.name || contact.email)}</strong>
+            <span>${escapeHtml(contact.email)}</span>
+          </div>
+        `).join("") || `<p class="helper">No CC contacts added yet.</p>`}
+      </div>
+      <form class="mini-form" id="clientCcContactForm">
+        <label>
+          Name
+          <input name="name" type="text" placeholder="Contact name" />
+        </label>
+        <label>
+          Email
+          <input name="email" type="email" placeholder="contact@example.com" required />
+        </label>
+        <button class="primary small-action" type="submit">Add CC</button>
+      </form>
+    </section>
+  `;
 }
 
-function parseClientContactInput(value) {
-  return String(value || "")
-    .split(/[\n,;]+/)
-    .map((entry) => entry.trim())
-    .filter(Boolean)
-    .map((entry) => {
-      const match = entry.match(/^(.*?)<([^>]+)>$/);
-      if (match) {
-        return {
-          name: match[1].trim(),
-          email: match[2].trim().toLowerCase()
-        };
-      }
-      return {
-        name: "",
-        email: entry.toLowerCase()
-      };
-    })
-    .filter((contact) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email));
+function ccContactCheckboxes(clientId, selectedContacts = []) {
+  const contacts = organizationContacts(clientId);
+  const selectedEmails = new Set(selectedContacts.map((contact) => normalizeEmail(contact.email)));
+  const client = state.clients.find((item) => item.id === clientId);
+  return `
+    <fieldset class="field wide checkbox-field">
+      <legend>CC Contacts</legend>
+      <small>Add client-side contacts who should be CC’d on this request.</small>
+      <div class="checkbox-list compact-list">
+        ${contacts.map((contact) => `
+          <label>
+            <input type="checkbox" name="ccContactEmails" value="${escapeHtml(contact.email)}" ${selectedEmails.has(normalizeEmail(contact.email)) ? "checked" : ""} />
+            <span>${escapeHtml(contact.full_name || contact.email)} · ${escapeHtml(contact.email)}</span>
+          </label>
+        `).join("") || `<p class="helper">No additional contacts for ${escapeHtml(client?.name || "this organization")} yet. Add contacts from Client Management first.</p>`}
+      </div>
+    </fieldset>
+  `;
 }
 
 function assignmentCheckboxes(selectedIds = []) {
@@ -1234,11 +1285,27 @@ function adminClientsPage() {
         </form>
       </section>
       <section class="card">
+        <p class="section-label">Add CC Contact</p>
+        <form class="admin-form" id="clientContactForm">
+          <label class="field"><span>Organization</span><select name="clientId" required>${state.clients.map((client) => `<option value="${client.id}">${escapeHtml(client.name)}</option>`).join("")}</select></label>
+          <label class="field"><span>Contact Name</span><input name="fullName" required /></label>
+          <label class="field"><span>Email</span><input name="email" type="email" required /></label>
+          <div class="form-actions wide">
+            <button class="primary" type="submit">Add Contact</button>
+          </div>
+          <small class="helper wide">New contacts receive an account setup email. Existing contacts can be CC’d on requests.</small>
+        </form>
+      </section>
+      <section class="card">
         <p class="section-label">Client List</p>
         ${clientStatusBar()}
         ${state.clients.map((client) => `
           <div class="admin-row">
-            <div><strong>${escapeHtml(client.name)}</strong><span>${escapeHtml(client.primary_contact_name || "-")} · ${escapeHtml(client.primary_contact_email || "-")}</span></div>
+            <div>
+              <strong>${escapeHtml(client.name)}</strong>
+              <span>Primary: ${escapeHtml(client.primary_contact_name || "-")} · ${escapeHtml(client.primary_contact_email || "-")}</span>
+              <span>CC Contacts: ${escapeHtml(listDisplay(organizationContacts(client.id).map((contact) => `${contact.full_name || contact.email} <${contact.email}>`), "None"))}</span>
+            </div>
             <div class="row-actions">
               <span class="status-pill">${escapeHtml(statusLabel(client.status || "signed"))}</span>
               <button class="secondary small-action" data-edit-client="${client.id}">Edit</button>
@@ -1255,6 +1322,8 @@ function adminRequestsPage() {
   const editingRequest = state.requests.find((request) => request.id === state.editingRequestId);
   const requestStatus = editingRequest?.status || "new";
   const selectedAssignees = editingRequest ? assignedProfileIdsForRequest(editingRequest.id) : [];
+  const selectedClientId = state.requestClientSelection || editingRequest?.client_id || state.clients[0]?.id || "";
+  const selectedCcContacts = editingRequest ? clientContactsForRequest(editingRequest.id) : [];
   return `
     <section class="admin-page">
       <div class="admin-heading">
@@ -1267,14 +1336,10 @@ function adminRequestsPage() {
         <section class="card">
           <p class="section-label">${editingRequest ? "Edit Request" : "Create Request"}</p>
           <form class="admin-form" id="requestForm">
-            <label class="field"><span>Client</span><select name="clientId" required>${state.clients.map((client) => `<option value="${client.id}" ${editingRequest?.client_id === client.id ? "selected" : ""}>${escapeHtml(client.name)}</option>`).join("")}</select></label>
+            <label class="field"><span>Client</span><select name="clientId" required>${state.clients.map((client) => `<option value="${client.id}" ${selectedClientId === client.id ? "selected" : ""}>${escapeHtml(client.name)}</option>`).join("")}</select></label>
             <label class="field"><span>Title</span><input name="title" value="${escapeHtml(editingRequest?.title || "")}" required /></label>
             <label class="field wide"><span>Description</span><input name="description" value="${escapeHtml(editingRequest?.description || "")}" /></label>
-            <label class="field wide">
-              <span>Client Followers</span>
-              <textarea name="clientFollowers" placeholder="name@example.com or Name <name@example.com>">${escapeHtml(editingRequest ? formatClientContactsForInput(editingRequest.id) : "")}</textarea>
-              <small>Add extra client-side people who should receive updates for this request.</small>
-            </label>
+            ${ccContactCheckboxes(selectedClientId, selectedCcContacts)}
             ${serviceCheckboxes(editingRequest?.service_type || "")}
             ${assignmentCheckboxes(selectedAssignees)}
             <label class="field"><span>Due Date</span><input name="dueDate" type="date" value="${editingRequest?.due_date || ""}" /></label>
@@ -1545,7 +1610,7 @@ function messagesPage() {
         <p class="subtitle message-subtitle">${escapeHtml(requestFromName)} · ${escapeHtml(requestTitle())}</p>
       </div>
       <div class="message-layout client-message-layout">
-        ${clientRequestSwitcher()}
+        ${clientMessageSidebar()}
         <section>
           <div class="date-row conversation-row"><span>Conversation</span></div>
           ${state.messages.map(messageCard).join("") || emptyMessage()}
@@ -1630,6 +1695,16 @@ function clientRequestSwitcher() {
           ${requestUnreadBadge(request.id)}
         </button>
       `).join("")}
+    </aside>
+  `;
+}
+
+function clientMessageSidebar() {
+  if (isInternal()) return "";
+  return `
+    <aside class="client-message-sidebar">
+      ${clientRequestSwitcher()}
+      ${requestCcPanel()}
     </aside>
   `;
 }
@@ -2079,6 +2154,83 @@ function attachEvents() {
     });
   }
 
+  const clientContactForm = document.getElementById("clientContactForm");
+  if (clientContactForm) {
+    clientContactForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const values = Object.fromEntries(new FormData(event.currentTarget));
+      await withActionLock("client-contact-form", event.currentTarget, async () => {
+        try {
+          const contact = await createClientContact(values);
+          state.clientContacts = await loadClientContacts();
+          event.currentTarget.reset();
+          if (contact?.account_setup_email?.sent) {
+            showToast("CC contact added and setup email sent.");
+          } else {
+            showToast("CC contact added.");
+          }
+          render();
+        } catch (error) {
+          showAppError(error, "Add CC contact");
+        }
+      });
+    });
+  }
+
+  const clientCcContactForm = document.getElementById("clientCcContactForm");
+  if (clientCcContactForm) {
+    clientCcContactForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!state.activeRequest?.id) return;
+      const values = Object.fromEntries(new FormData(event.currentTarget));
+      const contactName = String(values.name || "").trim();
+      const contactEmail = normalizeEmail(values.email);
+      if (!contactEmail) {
+        showToast("Enter a CC contact email.");
+        return;
+      }
+
+      await withActionLock(`client-cc-${state.activeRequest.id}`, event.currentTarget, async () => {
+        try {
+          const result = await addRequestClientContact(state.activeRequest.id, {
+            name: contactName,
+            email: contactEmail
+          });
+          state.requestClientContacts = await loadRequestClientContacts();
+          event.currentTarget.reset();
+
+          if (!result?.already_exists) {
+            const displayName = contactName || contactEmail;
+            try {
+              await createMessage(
+                state.activeRequest.id,
+                state.profile.id,
+                `${state.profile.full_name || "A client contact"} added ${displayName} as a CC contact.`,
+                { excludeEmails: [contactEmail] }
+              );
+              await refreshActiveMessages({ markRead: true });
+            } catch (messageError) {
+              console.warn("[Clients] CC contact activity message failed", messageError);
+            }
+          }
+
+          if (result?.already_exists && result?.cc_contact_email?.sent) {
+            showToast("CC contact was already added. Setup email was sent again.");
+          } else if (result?.already_exists) {
+            showToast("CC contact is already on this request.");
+          } else if (result?.cc_contact_email?.type === "account_setup") {
+            showToast("CC contact added and setup email sent.");
+          } else {
+            showToast("CC contact added and access email sent.");
+          }
+          render();
+        } catch (error) {
+          showAppError(error, "Add request CC contact");
+        }
+      });
+    });
+  }
+
   document.querySelectorAll("[data-edit-client]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -2131,7 +2283,13 @@ function attachEvents() {
       const values = Object.fromEntries(formData);
       const selectedServices = formData.getAll("services").map(String);
       const assignedProfileIds = formData.getAll("assignedProfileIds").map(String);
-      const clientContacts = parseClientContactInput(values.clientFollowers);
+      const selectedCcEmails = new Set(formData.getAll("ccContactEmails").map(normalizeEmail));
+      const clientContacts = organizationContacts(values.clientId)
+        .filter((contact) => selectedCcEmails.has(normalizeEmail(contact.email)))
+        .map((contact) => ({
+          name: contact.full_name || "",
+          email: contact.email
+        }));
       if (!selectedServices.length) {
         showToast("Select at least one service.");
         return;
@@ -2141,7 +2299,7 @@ function attachEvents() {
         const previousRequest = state.requests.find((request) => request.id === state.editingRequestId);
         const previousAssignedIds = state.editingRequestId ? assignedProfileIdsForRequest(state.editingRequestId) : [];
         const previousContacts = state.editingRequestId ? clientContactsForRequest(state.editingRequestId) : [];
-        const addedFollowerEmails = newContactEmails(previousContacts, clientContacts);
+        const addedCcEmails = newContactEmails(previousContacts, clientContacts);
         const requestPayload = {
           clientId: values.clientId,
           title: values.title,
@@ -2168,11 +2326,12 @@ function attachEvents() {
             });
             if (updateMessage) {
               await createMessage(state.editingRequestId, state.profile.id, updateMessage, {
-                excludeEmails: addedFollowerEmails
+                excludeEmails: addedCcEmails
               });
             }
           }
           state.editingRequestId = null;
+          state.requestClientSelection = null;
           showToast("Request updated.");
         } else {
           const createdRequest = await createRequest(requestPayload);
@@ -2184,6 +2343,7 @@ function attachEvents() {
             serviceVersionMessage({ versionLabel: "Services v1", services: requestPayload.serviceType }),
             { notify: false }
           );
+          state.requestClientSelection = null;
           showToast("Request created and linked to the selected client.");
         }
         await loadPortalData();
@@ -2207,6 +2367,7 @@ function attachEvents() {
           state.team = team;
           state.requestAssignments = assignments;
           state.editingRequestId = button.dataset.editRequest;
+          state.requestClientSelection = state.requests.find((request) => request.id === state.editingRequestId)?.client_id || null;
           state.page = "admin-requests";
           rememberPage();
           render();
@@ -2222,6 +2383,15 @@ function attachEvents() {
   if (cancelRequestEdit) {
     cancelRequestEdit.addEventListener("click", () => {
       state.editingRequestId = null;
+      state.requestClientSelection = null;
+      render();
+    });
+  }
+
+  const requestClientSelect = document.querySelector("#requestForm select[name='clientId']");
+  if (requestClientSelect) {
+    requestClientSelect.addEventListener("change", (event) => {
+      state.requestClientSelection = event.currentTarget.value;
       render();
     });
   }
@@ -2243,6 +2413,7 @@ function attachEvents() {
           state.activeRequest = state.requests[0] || null;
           state.selectedRequestId = null;
           state.editingRequestId = null;
+          state.requestClientSelection = null;
           state.page = "admin-requests";
           rememberPage();
           showToast("Request deleted.");
@@ -2552,6 +2723,7 @@ function resetSessionState() {
   state.deliverables = [];
   state.history = [];
   state.clients = [];
+  state.clientContacts = [];
   state.team = [];
   state.requestAssignments = [];
   state.requestClientContacts = [];
@@ -2559,6 +2731,7 @@ function resetSessionState() {
   state.clientDraft = {};
   state.pendingActions = new Set();
   state.selectedRequestId = null;
+  state.requestClientSelection = null;
   state.editingClientId = null;
   state.editingRequestId = null;
   state.editingTeamId = null;

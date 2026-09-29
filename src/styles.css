@@ -516,6 +516,62 @@ h2 {
   padding: 18px;
 }
 
+.client-message-sidebar {
+  display: grid;
+  gap: 18px;
+}
+
+.request-cc-panel {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.cc-contact-list {
+  display: grid;
+  gap: 10px;
+}
+
+.cc-contact-row {
+  display: grid;
+  gap: 2px;
+  border-top: 2px solid var(--line);
+  padding-top: 10px;
+}
+
+.cc-contact-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.cc-contact-row span {
+  color: var(--muted);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.mini-form {
+  display: grid;
+  gap: 12px;
+}
+
+.mini-form label {
+  display: grid;
+  gap: 6px;
+  font-weight: 700;
+}
+
+.mini-form input {
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.mini-form .small-action {
+  justify-self: start;
+}
+
 .client-message-layout .message-card,
 .client-message-layout .composer {
   width: 100%;

@@ -111,7 +111,13 @@ function uniqueRecipients(recipients, senderEmail, excludedEmails = []) {
 async function requestIsVisibleToProfile(requestRow, profile) {
   if (managementRoles.has(profile.role)) return true;
   if (profile.role === "client") {
-    if (requestRow.client_id === profile.client_id) return true;
+    const client = await supabaseAdminFetch(
+      tablePath("clients", `?select=primary_contact_email&id=eq.${encodeValue(requestRow.client_id)}&limit=1`)
+    );
+    if (
+      requestRow.client_id === profile.client_id
+      && normalizeEmail(client?.[0]?.primary_contact_email) === normalizeEmail(profile.email)
+    ) return true;
     const contacts = await safeFetchRows(
       tablePath("request_client_contacts", `?select=id&request_id=eq.${encodeValue(requestRow.id)}&or=(profile_id.eq.${encodeValue(profile.id)},email.eq.${encodeValue(normalizeEmail(profile.email))})&limit=1`)
     );
@@ -131,12 +137,15 @@ async function notificationRecipients(requestRow, senderProfile, excludedEmails 
     email: normalizeEmail(email),
     name: "Admin"
   }));
-  const [admins, assignments, clientProfiles, requestContacts] = await Promise.all([
+  const [admins, assignments, client, clientProfiles, requestContacts] = await Promise.all([
     supabaseAdminFetch(
       tablePath("profiles", "?select=id,full_name,email,role&role=in.(owner,project_manager)")
     ),
     supabaseAdminFetch(
       tablePath("request_assignments", `?select=profile_id,user_id&request_id=eq.${encodeValue(requestRow.id)}`)
+    ),
+    supabaseAdminFetch(
+      tablePath("clients", `?select=primary_contact_email&id=eq.${encodeValue(requestRow.client_id)}&limit=1`)
     ),
     supabaseAdminFetch(
       tablePath("profiles", `?select=id,full_name,email,role&client_id=eq.${encodeValue(requestRow.client_id)}&role=eq.client`)
@@ -159,7 +168,9 @@ async function notificationRecipients(requestRow, senderProfile, excludedEmails 
     ...configuredAdmins,
     ...(admins || []),
     ...(assignedProfiles || []),
-    ...(clientProfiles || []),
+    ...(clientProfiles || []).filter((profile) => (
+      normalizeEmail(profile.email) === normalizeEmail(client?.[0]?.primary_contact_email)
+    )),
     ...(requestContacts || [])
   ], senderProfile.email, excludedEmails);
 }
@@ -259,7 +270,7 @@ export async function GET(request) {
         tablePath("requests", `?select=id,client_id&id=eq.${encodeValue(requestId)}&limit=1`)
       );
       const linkedRequest = rows?.[0];
-      if (!linkedRequest || linkedRequest.client_id !== profile.client_id) {
+      if (!linkedRequest || !(await requestIsVisibleToProfile(linkedRequest, profile))) {
         return apiJson({ error: "This request is not linked to your client profile." }, 403);
       }
     }

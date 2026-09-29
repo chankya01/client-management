@@ -757,6 +757,43 @@ export async function setRequestClientContacts(requestId, contacts = []) {
   if (error) throw error;
 }
 
+export async function addRequestClientContact(requestId, contact = {}) {
+  const normalizedContact = {
+    name: String(contact.name || "").trim(),
+    email: normalizeEmail(contact.email)
+  };
+  if (!normalizedContact.email) throw new Error("Enter a CC contact email.");
+
+  if (useDemo()) {
+    return {
+      ok: true,
+      contact: {
+        id: `demo-cc-${Date.now()}`,
+        request_id: requestId,
+        profile_id: null,
+        name: normalizedContact.name || null,
+        email: normalizedContact.email,
+        created_at: new Date().toISOString()
+      },
+      cc_contact_email: { sent: true, type: "account_setup" }
+    };
+  }
+
+  try {
+    return await localApi(`/request-client-contacts/${requestId}`, {
+      method: "POST",
+      body: JSON.stringify({ contact: normalizedContact })
+    });
+  } catch (error) {
+    if (useLocalAdminProxy()) throw error;
+  }
+
+  return appApi(`/request-client-contacts/${requestId}`, {
+    method: "POST",
+    body: JSON.stringify({ contact: normalizedContact })
+  });
+}
+
 export async function loadClients() {
   if (useLocalAdminProxy()) return localApi("/clients");
   if (useDemo()) return demoClients;
@@ -768,6 +805,45 @@ export async function loadClients() {
 
   if (error) throw error;
   return data ?? [];
+}
+
+export async function loadClientContacts() {
+  if (useDemo()) return demoTeam.filter((member) => member.role === "client");
+  try {
+    return await appApi("/client-contacts");
+  } catch (error) {
+    if (!isServerRouteMissing(error)) throw error;
+  }
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, full_name, email, role, client_id, job_title, must_change_password")
+    .eq("role", "client")
+    .order("full_name", { ascending: true });
+
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function createClientContact({ clientId, fullName, email }) {
+  const normalizedEmail = normalizeEmail(email);
+  if (useDemo()) {
+    const contact = {
+      id: crypto.randomUUID(),
+      full_name: fullName,
+      email: normalizedEmail,
+      role: "client",
+      client_id: clientId,
+      job_title: "Client Contact",
+      must_change_password: true
+    };
+    demoTeam.push(contact);
+    return contact;
+  }
+  return appApi("/client-contacts", {
+    method: "POST",
+    body: JSON.stringify({ clientId, fullName, email: normalizedEmail })
+  });
 }
 
 export async function loadTeam() {
