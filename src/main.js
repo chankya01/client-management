@@ -402,7 +402,7 @@ function syncBrowserHistory({ replace = false } = {}) {
 }
 
 function closeServiceDropdownsOnOutsideClick(event) {
-  if (event.target.closest?.("[data-service-dropdown], [data-assignment-dropdown]")) return;
+  if (event.target.closest?.("[data-service-dropdown], [data-assignment-dropdown], [data-cc-dropdown]")) return;
   document.querySelectorAll("[data-service-menu]").forEach((menu) => {
     menu.hidden = true;
     const toggle = menu.closest("[data-service-dropdown]")?.querySelector("[data-action='toggle-services']");
@@ -411,6 +411,11 @@ function closeServiceDropdownsOnOutsideClick(event) {
   document.querySelectorAll("[data-assignment-menu]").forEach((menu) => {
     menu.hidden = true;
     const toggle = menu.closest("[data-assignment-dropdown]")?.querySelector("[data-action='toggle-assignments']");
+    toggle?.setAttribute("aria-expanded", "false");
+  });
+  document.querySelectorAll("[data-cc-menu]").forEach((menu) => {
+    menu.hidden = true;
+    const toggle = menu.closest("[data-cc-dropdown]")?.querySelector("[data-action='toggle-cc-contacts']");
     toggle?.setAttribute("aria-expanded", "false");
   });
 }
@@ -1106,18 +1111,11 @@ function clientContactsForRequest(requestId) {
   return state.requestClientContacts.filter((contact) => contact.request_id === requestId);
 }
 
-function requestCcSummary(requestId) {
-  const contacts = clientContactsForRequest(requestId);
-  return contacts.length
-    ? contacts.map((contact) => contact.name || contact.email).join(", ")
-    : "None";
-}
-
-function requestCcPanel() {
-  if (isInternal() || !state.activeRequest) return "";
-  const contacts = clientContactsForRequest(state.activeRequest.id);
+function requestCcPanel(request = state.activeRequest, { compact = false } = {}) {
+  if (isInternal() || !request) return "";
+  const contacts = clientContactsForRequest(request.id);
   return `
-    <section class="card request-cc-panel">
+    <section class="${compact ? "request-cc-panel compact" : "card request-cc-panel"}" data-no-card-open>
       <p class="section-label">CC Contacts</p>
       <div class="cc-contact-list">
         ${contacts.map((contact) => `
@@ -1127,7 +1125,7 @@ function requestCcPanel() {
           </div>
         `).join("") || `<p class="helper">No CC contacts added yet.</p>`}
       </div>
-      <form class="mini-form" id="clientCcContactForm">
+      <form class="mini-form" data-client-cc-contact-form data-request-id="${escapeHtml(request.id)}">
         <label>
           Name
           <input name="name" type="text" placeholder="Contact name" />
@@ -1146,19 +1144,28 @@ function ccContactCheckboxes(clientId, selectedContacts = []) {
   const contacts = organizationContacts(clientId);
   const selectedEmails = new Set(selectedContacts.map((contact) => normalizeEmail(contact.email)));
   const client = state.clients.find((item) => item.id === clientId);
+  const selectedSummary = contacts
+    .filter((contact) => selectedEmails.has(normalizeEmail(contact.email)))
+    .map((contact) => contact.full_name || contact.email)
+    .join(", ");
   return `
-    <fieldset class="field wide checkbox-field">
-      <legend>CC Contacts</legend>
-      <small>Add client-side contacts who should be CC’d on this request.</small>
-      <div class="checkbox-list compact-list">
+    <div class="field wide service-dropdown cc-dropdown" data-cc-dropdown>
+      <span>CC Contacts</span>
+      <button class="service-dropdown-toggle" type="button" data-action="toggle-cc-contacts" aria-expanded="false" ${clientId ? "" : "disabled"}>
+        <span data-cc-summary>${selectedSummary ? escapeHtml(selectedSummary) : "Select CC Contacts"}</span>
+        <span aria-hidden="true">▾</span>
+      </button>
+      <div class="service-dropdown-menu" data-cc-menu hidden>
         ${contacts.map((contact) => `
           <label>
-            <input type="checkbox" name="ccContactEmails" value="${escapeHtml(contact.email)}" ${selectedEmails.has(normalizeEmail(contact.email)) ? "checked" : ""} />
+            <input type="checkbox" name="ccContactEmails" value="${escapeHtml(contact.email)}" data-cc-name="${escapeHtml(contact.full_name || contact.email)}" ${selectedEmails.has(normalizeEmail(contact.email)) ? "checked" : ""} />
             <span>${escapeHtml(contact.full_name || contact.email)} · ${escapeHtml(contact.email)}</span>
           </label>
         `).join("") || `<p class="helper">No additional contacts for ${escapeHtml(client?.name || "this organization")} yet. Add contacts from Client Management first.</p>`}
+        <button class="secondary small-action" type="button" data-action="close-cc-contacts">Done</button>
       </div>
-    </fieldset>
+      <small class="helper">${clientId ? "Select one or more client-side contacts for this request." : "Select a client first to choose CC contacts."}</small>
+    </div>
   `;
 }
 
@@ -1294,7 +1301,7 @@ function adminClientsPage() {
       <section class="card">
         <p class="section-label">Add CC Contact</p>
         <form class="admin-form" id="clientContactForm">
-          <label class="field"><span>Organization</span><select name="clientId" required>${state.clients.map((client) => `<option value="${client.id}">${escapeHtml(client.name)}</option>`).join("")}</select></label>
+          <label class="field"><span>Organization</span><select name="clientId" required><option value="" selected disabled>Select Organization</option>${state.clients.map((client) => `<option value="${client.id}">${escapeHtml(client.name)}</option>`).join("")}</select></label>
           <label class="field"><span>Contact Name</span><input name="fullName" required /></label>
           <label class="field"><span>Email</span><input name="email" type="email" required /></label>
           <div class="form-actions wide">
@@ -1307,7 +1314,7 @@ function adminClientsPage() {
         <p class="section-label">Client List</p>
         ${clientStatusBar()}
         ${state.clients.map((client) => `
-          <div class="admin-row">
+          <div class="admin-row clickable-row" data-edit-client="${client.id}">
             <div>
               <strong>${escapeHtml(client.name)}</strong>
               <span>Primary: ${escapeHtml(client.primary_contact_name || "-")} · ${escapeHtml(client.primary_contact_email || "-")}</span>
@@ -1329,7 +1336,7 @@ function adminRequestsPage() {
   const editingRequest = state.requests.find((request) => request.id === state.editingRequestId);
   const requestStatus = editingRequest?.status || "new";
   const selectedAssignees = editingRequest ? assignedProfileIdsForRequest(editingRequest.id) : [];
-  const selectedClientId = state.requestClientSelection || editingRequest?.client_id || state.clients[0]?.id || "";
+  const selectedClientId = state.requestClientSelection || editingRequest?.client_id || "";
   const selectedCcContacts = editingRequest ? clientContactsForRequest(editingRequest.id) : [];
   return `
     <section class="admin-page">
@@ -1343,7 +1350,7 @@ function adminRequestsPage() {
         <section class="card">
           <p class="section-label">${editingRequest ? "Edit Request" : "Create Request"}</p>
           <form class="admin-form" id="requestForm">
-            <label class="field"><span>Client</span><select name="clientId" required>${state.clients.map((client) => `<option value="${client.id}" ${selectedClientId === client.id ? "selected" : ""}>${escapeHtml(client.name)}</option>`).join("")}</select></label>
+            <label class="field"><span>Client</span><select name="clientId" required><option value="" ${selectedClientId ? "" : "selected"} disabled>Select Client</option>${state.clients.map((client) => `<option value="${client.id}" ${selectedClientId === client.id ? "selected" : ""}>${escapeHtml(client.name)}</option>`).join("")}</select></label>
             <label class="field"><span>Title</span><input name="title" value="${escapeHtml(editingRequest?.title || "")}" required /></label>
             <label class="field wide"><span>Description</span><input name="description" value="${escapeHtml(editingRequest?.description || "")}" /></label>
             ${ccContactCheckboxes(selectedClientId, selectedCcContacts)}
@@ -1784,12 +1791,12 @@ function clientRequestCards(requests) {
     <section class="card history-card clickable-row" data-client-open-request="${request.id}">
       <h2>${escapeHtml(request.title)} ${requestUnreadBadge(request.id)}</h2>
       <p>${escapeHtml(request.description || "Request linked to this client account.")}</p>
-      <p class="helper">CC Contacts: ${escapeHtml(requestCcSummary(request.id))}</p>
       <div class="deliverable-row">
         <span>${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(request.service_type || "Accessibility Service")}</span>
         <time>${formatDate(request.due_date || request.closed_at || request.created_at)}</time>
         <span class="status-pill">${statusLabel(request.status)}</span>
       </div>
+      ${requestCcPanel(request, { compact: true })}
     </section>
   `).join("") || emptyCard("No Requests Yet", "Requests linked to this client account will appear here.");
 }
@@ -2043,6 +2050,43 @@ function attachEvents() {
     });
   });
 
+  document.querySelectorAll("[data-action='toggle-cc-contacts']").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const dropdown = button.closest("[data-cc-dropdown]");
+      const menu = dropdown?.querySelector("[data-cc-menu]");
+      if (menu) {
+        menu.hidden = !menu.hidden;
+        button.setAttribute("aria-expanded", String(!menu.hidden));
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-action='close-cc-contacts']").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const dropdown = button.closest("[data-cc-dropdown]");
+      const menu = dropdown?.querySelector("[data-cc-menu]");
+      const toggle = dropdown?.querySelector("[data-action='toggle-cc-contacts']");
+      if (menu) {
+        menu.hidden = true;
+        toggle?.setAttribute("aria-expanded", "false");
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-cc-dropdown] input[name='ccContactEmails']").forEach((checkbox) => {
+    checkbox.addEventListener("change", () => {
+      const dropdown = checkbox.closest("[data-cc-dropdown]");
+      const summary = dropdown?.querySelector("[data-cc-summary]");
+      const selected = Array.from(dropdown?.querySelectorAll("input[name='ccContactEmails']:checked") || [])
+        .map((input) => input.dataset.ccName || input.value);
+      if (summary) summary.textContent = selected.length ? selected.join(", ") : "Select CC Contacts";
+    });
+  });
+
   document.removeEventListener("click", closeServiceDropdownsOnOutsideClick);
   document.addEventListener("click", closeServiceDropdownsOnOutsideClick);
 
@@ -2099,7 +2143,8 @@ function attachEvents() {
   });
 
   document.querySelectorAll("[data-client-open-request]").forEach((card) => {
-    card.addEventListener("click", async () => {
+    card.addEventListener("click", async (event) => {
+      if (event.target.closest("[data-no-card-open], form, button, input, textarea, select, a")) return;
       await goToPage("request", { requestId: card.dataset.clientOpenRequest });
     });
   });
@@ -2186,12 +2231,16 @@ function attachEvents() {
     });
   }
 
-  const clientCcContactForm = document.getElementById("clientCcContactForm");
-  if (clientCcContactForm) {
+  document.querySelectorAll("[data-client-cc-contact-form]").forEach((clientCcContactForm) => {
+    clientCcContactForm.addEventListener("click", (event) => {
+      event.stopPropagation();
+    });
     clientCcContactForm.addEventListener("submit", async (event) => {
       event.preventDefault();
-      if (!state.activeRequest?.id) return;
+      event.stopPropagation();
       const form = event.currentTarget;
+      const requestId = form.dataset.requestId || state.activeRequest?.id;
+      if (!requestId) return;
       const values = Object.fromEntries(new FormData(form));
       const contactName = String(values.name || "").trim();
       const contactEmail = normalizeEmail(values.email);
@@ -2200,9 +2249,9 @@ function attachEvents() {
         return;
       }
 
-      await withActionLock(`client-cc-${state.activeRequest.id}`, form, async () => {
+      await withActionLock(`client-cc-${requestId}`, form, async () => {
         try {
-          const result = await addRequestClientContact(state.activeRequest.id, {
+          const result = await addRequestClientContact(requestId, {
             name: contactName,
             email: contactEmail
           });
@@ -2213,12 +2262,14 @@ function attachEvents() {
             const displayName = contactName || contactEmail;
             try {
               await createMessage(
-                state.activeRequest.id,
+                requestId,
                 state.profile.id,
                 `${state.profile.full_name || "A client contact"} added ${displayName} as a CC contact.`,
                 { excludeEmails: [contactEmail] }
               );
-              await refreshActiveMessages({ markRead: true });
+              if (state.activeRequest?.id === requestId) {
+                await refreshActiveMessages({ markRead: true });
+              }
             } catch (messageError) {
               console.warn("[Clients] CC contact activity message failed", messageError);
             }
@@ -2239,7 +2290,7 @@ function attachEvents() {
         }
       });
     });
-  }
+  });
 
   document.querySelectorAll("[data-edit-client]").forEach((button) => {
     button.addEventListener("click", (event) => {

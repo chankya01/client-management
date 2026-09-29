@@ -527,6 +527,12 @@ h2 {
   padding: 18px;
 }
 
+.request-cc-panel.compact {
+  border-top: 2px solid var(--line);
+  margin-top: 18px;
+  padding: 18px 0 0;
+}
+
 .cc-contact-list {
   display: grid;
   gap: 10px;
