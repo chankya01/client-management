@@ -951,12 +951,7 @@ function clientName(clientId) {
 }
 
 function assignableTeamMembers() {
-  return state.team.filter((member) => (
-    member.id !== state.profile?.id
-    && member.role !== "client"
-    && member.role !== "owner"
-    && member.role !== "project_manager"
-  ));
+  return state.team.filter((member) => member.role !== "client");
 }
 
 function assignedProfileIdsForRequest(requestId) {
@@ -2094,13 +2089,25 @@ function attachEvents() {
   }
 
   document.querySelectorAll("[data-edit-request]").forEach((button) => {
-    button.addEventListener("click", (event) => {
+    button.addEventListener("click", async (event) => {
       event.stopPropagation();
-      state.editingRequestId = button.dataset.editRequest;
-      state.page = "admin-requests";
-      rememberPage();
-      render();
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      await withActionLock(`edit-request-${button.dataset.editRequest}`, button, async () => {
+        try {
+          const [team, assignments] = await Promise.all([
+            loadTeam(),
+            loadRequestAssignments()
+          ]);
+          state.team = team;
+          state.requestAssignments = assignments;
+          state.editingRequestId = button.dataset.editRequest;
+          state.page = "admin-requests";
+          rememberPage();
+          render();
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        } catch (error) {
+          showAppError(error, "Load request edit form");
+        }
+      });
     });
   });
 
@@ -2404,6 +2411,8 @@ function attachPasswordToggles() {
 }
 
 async function handleLogout() {
+  if (!window.confirm("Are you sure you want to log out?")) return;
+
   try {
     await signOut();
     resetSessionState();
