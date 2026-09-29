@@ -59,6 +59,7 @@ const state = {
   clientDraft: {},
   pendingActions: new Set(),
   selectedRequestId: null,
+  selectedClientId: null,
   requestClientSelection: null,
   editingClientId: null,
   editingRequestId: null,
@@ -71,7 +72,7 @@ const state = {
   toast: ""
 };
 
-const adminPages = ["admin-dashboard", "admin-clients", "admin-requests", "admin-request-detail", "admin-messages", "admin-team", "admin-settings"];
+const adminPages = ["admin-dashboard", "admin-clients", "admin-client-detail", "admin-requests", "admin-request-detail", "admin-messages", "admin-team", "admin-settings"];
 const clientPages = ["messages", "dashboard", "request", "account"];
 const managementRoles = ["owner", "project_manager"];
 const workRoles = ["developer", "reviewer", "assignee"];
@@ -390,6 +391,7 @@ function currentRoute() {
   const params = new URLSearchParams();
   if (state.page) params.set("page", state.page);
   if (state.activeRequest?.id) params.set("request", state.activeRequest.id);
+  if (state.selectedClientId) params.set("client", state.selectedClientId);
   return `${window.location.pathname}?${params.toString()}`;
 }
 
@@ -637,8 +639,9 @@ async function setActiveRequest(requestId, { page, markRead = false } = {}) {
   }
 }
 
-async function goToPage(page, { requestId, replace = false, scroll = true } = {}) {
+async function goToPage(page, { requestId, clientId, replace = false, scroll = true } = {}) {
   state.page = page;
+  if (clientId) state.selectedClientId = clientId;
   rememberPage();
   if (requestId) {
     await setActiveRequest(requestId, { page, markRead: isConversationPage(page) });
@@ -744,8 +747,10 @@ async function boot() {
       const params = new URLSearchParams(window.location.search);
       const routePage = params.get("page");
       const routeRequestId = params.get("request");
+      const routeClientId = params.get("client");
       if (routePage && pageIsAllowed(routePage)) {
         state.page = routePage;
+        if (routeClientId) state.selectedClientId = routeClientId;
         if (routeRequestId) await setActiveRequest(routeRequestId, { page: routePage });
       } else {
         state.page = savedPage() || defaultPage();
@@ -1080,6 +1085,11 @@ function clientName(clientId) {
   return state.clients.find((client) => client.id === clientId)?.name || organizationName();
 }
 
+function clientPrimaryContactName(clientId) {
+  const client = state.clients.find((item) => item.id === clientId);
+  return client?.primary_contact_name || state.profile?.clients?.primary_contact_name || state.profile?.full_name || "Client";
+}
+
 function organizationContacts(clientId) {
   const client = state.clients.find((item) => item.id === clientId);
   const primaryEmail = normalizeEmail(client?.primary_contact_email);
@@ -1111,11 +1121,11 @@ function clientContactsForRequest(requestId) {
   return state.requestClientContacts.filter((contact) => contact.request_id === requestId);
 }
 
-function requestCcPanel(request = state.activeRequest, { compact = false } = {}) {
+function requestCcPanel(request = state.activeRequest) {
   if (isInternal() || !request) return "";
   const contacts = clientContactsForRequest(request.id);
   return `
-    <section class="${compact ? "request-cc-panel compact" : "card request-cc-panel"}" data-no-card-open>
+    <section class="card request-cc-panel">
       <p class="section-label">CC Contacts</p>
       <div class="cc-contact-list">
         ${contacts.map((contact) => `
@@ -1314,7 +1324,7 @@ function adminClientsPage() {
         <p class="section-label">Client List</p>
         ${clientStatusBar()}
         ${state.clients.map((client) => `
-          <div class="admin-row clickable-row" data-edit-client="${client.id}">
+          <div class="admin-row clickable-row" data-open-client="${client.id}">
             <div>
               <strong>${escapeHtml(client.name)}</strong>
               <span>Primary: ${escapeHtml(client.primary_contact_name || "-")} · ${escapeHtml(client.primary_contact_email || "-")}</span>
@@ -1328,6 +1338,59 @@ function adminClientsPage() {
           </div>
         `).join("")}
       </section>
+    </section>
+  `;
+}
+
+function adminClientDetailPage() {
+  const client = state.clients.find((item) => item.id === state.selectedClientId) || state.clients[0];
+  if (!client) return emptyCard("Client Not Found", "The selected client is no longer available.");
+
+  const contacts = organizationContacts(client.id);
+  const clientRequests = state.requests.filter((request) => request.client_id === client.id);
+  return `
+    <section class="admin-page">
+      <button class="secondary back-button" data-page="admin-clients">Back to Clients</button>
+      <div class="admin-heading">
+        <div>
+          <p class="section-label green">Client Details</p>
+          <h1>${escapeHtml(client.name)}</h1>
+          <p class="subtitle">${escapeHtml(client.primary_contact_name || "-")} · ${escapeHtml(client.primary_contact_email || "-")}</p>
+        </div>
+        <div class="row-actions">
+          <button class="secondary" data-edit-client="${client.id}">Edit Client</button>
+          ${canDelete() ? `<button class="danger-button" data-delete-client="${client.id}">Delete Client</button>` : ""}
+        </div>
+      </div>
+      <div class="detail-grid">
+        <section class="card">
+          <p class="section-label">Organization</p>
+          ${accountRow("Organization", client.name)}
+          ${accountRow("Primary Contact", client.primary_contact_name)}
+          ${accountRow("Primary Email", client.primary_contact_email)}
+          ${accountRow("Billing Email", client.billing_email)}
+          ${accountRow("Status", statusLabel(client.status || "signed"))}
+          ${accountRow("Created", formatDate(client.created_at))}
+        </section>
+        <section class="card">
+          <p class="section-label">CC Contacts</p>
+          ${contacts.map((contact) => `
+            <div class="list-row">
+              <strong>${escapeHtml(contact.full_name || contact.email)}</strong>
+              <span>${escapeHtml(contact.email)}</span>
+            </div>
+          `).join("") || `<p class="helper">No CC contacts added for this organization yet.</p>`}
+        </section>
+        <section class="card">
+          <p class="section-label">Requests</p>
+          ${clientRequests.map((request) => `
+            <div class="list-row clickable-row" data-open-request="${request.id}">
+              <strong>${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(request.title)}</strong>
+              <span>${escapeHtml(statusLabel(request.status))} · Due ${formatDate(request.due_date)}</span>
+            </div>
+          `).join("") || `<p class="helper">No requests for this client yet.</p>`}
+        </section>
+      </div>
     </section>
   `;
 }
@@ -1654,7 +1717,9 @@ function messagesPage() {
 function messageCard(message) {
   const isClient = message.profiles?.role === "client";
   const messageRequest = state.requests.find((request) => request.id === message.request_id) || state.activeRequest;
-  const sender = isClient ? clientName(messageRequest?.client_id) : (message.profiles?.full_name || "Team Member");
+  const sender = isClient
+    ? (message.profiles?.full_name || clientPrimaryContactName(messageRequest?.client_id))
+    : (message.profiles?.full_name || "Team Member");
   const attachment = message.attachment;
   const messageText = String(message.message || "");
   const isLongMessage = messageText.length > 420 || messageText.split(/\r?\n/).length > 8;
@@ -1796,7 +1861,6 @@ function clientRequestCards(requests) {
         <time>${formatDate(request.due_date || request.closed_at || request.created_at)}</time>
         <span class="status-pill">${statusLabel(request.status)}</span>
       </div>
-      ${requestCcPanel(request, { compact: true })}
     </section>
   `).join("") || emptyCard("No Requests Yet", "Requests linked to this client account will appear here.");
 }
@@ -1945,6 +2009,7 @@ function render() {
     account: accountPage,
     "admin-dashboard": adminDashboardPage,
     "admin-clients": adminClientsPage,
+    "admin-client-detail": adminClientDetailPage,
     "admin-requests": adminRequestsPage,
     "admin-request-detail": adminRequestDetailPage,
     "admin-messages": adminMessagesPage,
@@ -2122,6 +2187,13 @@ function attachEvents() {
     });
   });
 
+  document.querySelectorAll("[data-open-client]").forEach((row) => {
+    row.addEventListener("click", async (event) => {
+      if (event.target.closest("button, a")) return;
+      await goToPage("admin-client-detail", { clientId: row.dataset.openClient });
+    });
+  });
+
   document.querySelectorAll("[data-chat-request]").forEach((button) => {
     button.addEventListener("click", async () => {
       await setActiveRequest(button.dataset.chatRequest, { markRead: true });
@@ -2144,7 +2216,7 @@ function attachEvents() {
 
   document.querySelectorAll("[data-client-open-request]").forEach((card) => {
     card.addEventListener("click", async (event) => {
-      if (event.target.closest("[data-no-card-open], form, button, input, textarea, select, a")) return;
+      if (event.target.closest("form, button, input, textarea, select, a")) return;
       await goToPage("request", { requestId: card.dataset.clientOpenRequest });
     });
   });
@@ -2297,6 +2369,8 @@ function attachEvents() {
       event.stopPropagation();
       state.editingClientId = button.dataset.editClient;
       clearClientDraft();
+      state.page = "admin-clients";
+      rememberPage();
       render();
       window.scrollTo({ top: 0, behavior: "smooth" });
     });
@@ -2327,6 +2401,11 @@ function attachEvents() {
           state.clients = await loadClients();
           state.requests = await loadRequests();
           if (state.editingClientId === button.dataset.deleteClient) state.editingClientId = null;
+          if (state.selectedClientId === button.dataset.deleteClient) {
+            state.selectedClientId = null;
+            state.page = "admin-clients";
+            rememberPage();
+          }
           showToast("Client deleted.");
           render();
         } catch (error) {
