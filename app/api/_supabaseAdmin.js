@@ -265,7 +265,7 @@ export async function sendAccountSetupEmail({ email, name, reason }) {
   }
 
   const greeting = name ? `Hi ${name},` : "Hi,";
-  const text = `${greeting}\n\n${reason || "You have been added to Clients."}\n\nCreate your password and sign in here:\n${setupLink}\n\nIf you were not expecting this, you can ignore this email.`;
+  const text = `${greeting}\n\n${reason || "You have been added to Clients."}\n\nSet up your account by creating your password here:\n${setupLink}\n\nAfter setting your password, you can sign in to view request updates and messages.\n\nIf you were not expecting this, you can ignore this email.`;
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -275,7 +275,7 @@ export async function sendAccountSetupEmail({ email, name, reason }) {
     body: JSON.stringify({
       from: notificationFrom,
       to: [normalizedEmail],
-      subject: "You have been added to Clients",
+      subject: "Set up your Clients account",
       text
     })
   });
@@ -283,6 +283,47 @@ export async function sendAccountSetupEmail({ email, name, reason }) {
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
     console.warn("[Clients] Account setup email failed", detail);
+    return { sent: false, reason: detail || `Resend returned ${response.status}.` };
+  }
+
+  const payload = await response.json().catch(() => ({}));
+  return { sent: true, id: payload?.id || null };
+}
+
+export async function sendRequestAccessEmail({ email, name, requestLabel }) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return { sent: false, reason: "No email address was provided." };
+  if (!resendApiKey) {
+    const reasonText = "RESEND_API_KEY is not configured.";
+    console.warn(`[Clients] ${reasonText} Skipping request access email.`);
+    return { sent: false, reason: reasonText };
+  }
+  if (notificationFrom.includes("yourdomain.com") || notificationFrom.includes("example.com")) {
+    const reasonText = "NOTIFICATION_FROM still uses a placeholder domain. Add a verified Resend sender/domain.";
+    console.warn(`[Clients] ${reasonText}`);
+    return { sent: false, reason: reasonText };
+  }
+
+  const greeting = name ? `Hi ${name},` : "Hi,";
+  const link = appUrl ? `\n\nSign in here:\n${appUrl}` : "";
+  const text = `${greeting}\n\nYou have been added to ${requestLabel || "a request"} in Clients. You can sign in to view request updates and messages.${link}\n\nIf you were not expecting this, you can ignore this email.`;
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${resendApiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      from: notificationFrom,
+      to: [normalizedEmail],
+      subject: `You have been added to ${requestLabel || "a request"}`,
+      text
+    })
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    console.warn("[Clients] Request access email failed", detail);
     return { sent: false, reason: detail || `Resend returned ${response.status}.` };
   }
 

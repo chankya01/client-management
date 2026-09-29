@@ -1382,11 +1382,11 @@ function mergeMessagesAndAttachments(messages, attachments) {
   ));
 }
 
-export async function createMessage(requestId, senderId, message, { notify = true } = {}) {
+export async function createMessage(requestId, senderId, message, { notify = true, excludeEmails = [] } = {}) {
   if (useLocalAdminProxy()) {
     return localApi("/messages", {
       method: "POST",
-      body: JSON.stringify({ requestId, senderId, message, notify })
+      body: JSON.stringify({ requestId, senderId, message, notify, excludeEmails })
     });
   }
 
@@ -1406,7 +1406,7 @@ export async function createMessage(requestId, senderId, message, { notify = tru
 
   return appApi("/messages", {
     method: "POST",
-    body: JSON.stringify({ requestId, senderId, message, notify })
+    body: JSON.stringify({ requestId, senderId, message, notify, excludeEmails })
   });
 }
 

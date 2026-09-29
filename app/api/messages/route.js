@@ -91,12 +91,13 @@ async function safeFetchRows(path) {
   }
 }
 
-function uniqueRecipients(recipients, senderEmail) {
+function uniqueRecipients(recipients, senderEmail, excludedEmails = []) {
   const sender = normalizeEmail(senderEmail);
+  const excluded = new Set((excludedEmails || []).map(normalizeEmail).filter(Boolean));
   const map = new Map();
   (recipients || []).forEach((recipient) => {
     const email = normalizeEmail(recipient.email);
-    if (!email || email === sender) return;
+    if (!email || email === sender || excluded.has(email)) return;
     if (!map.has(email)) {
       map.set(email, {
         email,
@@ -125,7 +126,7 @@ async function requestIsVisibleToProfile(requestRow, profile) {
   return false;
 }
 
-async function notificationRecipients(requestRow, senderProfile) {
+async function notificationRecipients(requestRow, senderProfile, excludedEmails = []) {
   const configuredAdmins = (appConfig.adminEmails || []).map((email) => ({
     email: normalizeEmail(email),
     name: "Admin"
@@ -160,7 +161,7 @@ async function notificationRecipients(requestRow, senderProfile) {
     ...(assignedProfiles || []),
     ...(clientProfiles || []),
     ...(requestContacts || [])
-  ], senderProfile.email);
+  ], senderProfile.email, excludedEmails);
 }
 
 async function requestLabel(requestRow) {
@@ -197,7 +198,7 @@ async function senderDisplayName(requestRow, senderProfile) {
   return senderProfile.full_name || senderProfile.email || "someone";
 }
 
-async function sendMessageNotification({ requestRow, senderProfile }) {
+async function sendMessageNotification({ requestRow, senderProfile, excludedEmails = [] }) {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.NOTIFICATION_FROM || "Clients <notifications@example.com>";
   const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "";
@@ -208,7 +209,7 @@ async function sendMessageNotification({ requestRow, senderProfile }) {
     throw new Error("NOTIFICATION_FROM still uses a placeholder domain. Add a verified Resend sender/domain.");
   }
 
-  const recipients = await notificationRecipients(requestRow, senderProfile);
+  const recipients = await notificationRecipients(requestRow, senderProfile, excludedEmails);
   if (!recipients.length) throw new Error("No email recipients were found for this message.");
 
   const label = await requestLabel(requestRow);
@@ -302,7 +303,7 @@ export async function POST(request) {
     });
 
     const notification = body.notify !== false
-      ? await sendMessageNotification({ requestRow, senderProfile: profile })
+      ? await sendMessageNotification({ requestRow, senderProfile: profile, excludedEmails: body.excludeEmails || [] })
       : { sent: false, reason: "Notification disabled for this message." };
 
     return apiJson({ ok: true, notification });

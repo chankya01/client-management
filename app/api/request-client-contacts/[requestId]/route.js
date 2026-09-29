@@ -8,6 +8,7 @@ import {
   requireProfileRole,
   selectOne,
   sendAccountSetupEmail,
+  sendRequestAccessEmail,
   supabaseAdminFetch,
   tablePath
 } from "../../_supabaseAdmin.js";
@@ -43,7 +44,7 @@ async function ensureClientProfile(contact, clientId) {
         must_change_password: true
       })
     });
-    return rows?.[0] || null;
+    return { profile: rows?.[0] || null, created: true };
   }
 
   if (profile.role === "client" && !profile.client_id) {
@@ -55,10 +56,10 @@ async function ensureClientProfile(contact, clientId) {
         body: JSON.stringify({ client_id: clientId })
       }
     );
-    return rows?.[0] || profile;
+    return { profile: rows?.[0] || profile, created: false };
   }
 
-  return profile.role === "client" ? profile : null;
+  return { profile: profile.role === "client" ? profile : null, created: false };
 }
 
 export async function PUT(request, { params }) {
@@ -86,8 +87,10 @@ export async function PUT(request, { params }) {
     if (!contacts.length) return apiJson({ ok: true });
 
     const rows = [];
+    const profileStatusByEmail = new Map();
     for (const contact of contacts) {
-      const profile = await ensureClientProfile(contact, linkedRequest.client_id);
+      const { profile, created } = await ensureClientProfile(contact, linkedRequest.client_id);
+      profileStatusByEmail.set(contact.email, { profile, created });
       rows.push({
         request_id: requestId,
         profile_id: profile?.id || null,
@@ -101,25 +104,33 @@ export async function PUT(request, { params }) {
       body: JSON.stringify(rows)
     });
 
-    const setupEmails = [];
+    const followerEmails = [];
     const requestLabel = linkedRequest.request_number || linkedRequest.title || "this request";
     for (const contact of contacts) {
       if (existingEmails.has(contact.email)) continue;
-      const setupEmail = await sendAccountSetupEmail({
+      const { created } = profileStatusByEmail.get(contact.email) || {};
+      const emailResult = created
+        ? await sendAccountSetupEmail({
+          email: contact.email,
+          name: contact.name,
+          reason: `You have been added to ${requestLabel} in Clients. Please set up your account to view request updates and messages.`
+        })
+        : await sendRequestAccessEmail({
+          email: contact.email,
+          name: contact.name,
+          requestLabel
+        });
+      followerEmails.push({
         email: contact.email,
-        name: contact.name,
-        reason: `You have been added to ${requestLabel} in Clients. Please create your password to view request updates and messages.`
+        type: created ? "account_setup" : "request_access",
+        ...emailResult
       });
-      setupEmails.push({
-        email: contact.email,
-        ...setupEmail
-      });
-      if (!setupEmail.sent) {
-        throw new Error(`Client follower was added, but setup email was not sent to ${contact.email}: ${setupEmail.reason || "Unknown email error."}`);
+      if (!emailResult.sent) {
+        throw new Error(`Client follower was added, but ${created ? "setup" : "request access"} email was not sent to ${contact.email}: ${emailResult.reason || "Unknown email error."}`);
       }
     }
 
-    return apiJson({ ok: true, setup_emails: setupEmails });
+    return apiJson({ ok: true, follower_emails: followerEmails });
   } catch (error) {
     return handleApiError(error);
   }

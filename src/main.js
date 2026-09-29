@@ -475,6 +475,13 @@ function contactComparison(contacts = []) {
     .join("|");
 }
 
+function newContactEmails(previousContacts = [], nextContacts = []) {
+  const previousEmails = new Set(contactsForDisplay(previousContacts).map((contact) => contact.email));
+  return contactsForDisplay(nextContacts)
+    .map((contact) => contact.email)
+    .filter((email) => email && !previousEmails.has(email));
+}
+
 function requestUpdateMessage({
   previousRequest,
   nextRequest,
@@ -2134,6 +2141,7 @@ function attachEvents() {
         const previousRequest = state.requests.find((request) => request.id === state.editingRequestId);
         const previousAssignedIds = state.editingRequestId ? assignedProfileIdsForRequest(state.editingRequestId) : [];
         const previousContacts = state.editingRequestId ? clientContactsForRequest(state.editingRequestId) : [];
+        const addedFollowerEmails = newContactEmails(previousContacts, clientContacts);
         const requestPayload = {
           clientId: values.clientId,
           title: values.title,
@@ -2159,7 +2167,9 @@ function attachEvents() {
               actorName: state.profile.full_name
             });
             if (updateMessage) {
-              await createMessage(state.editingRequestId, state.profile.id, updateMessage);
+              await createMessage(state.editingRequestId, state.profile.id, updateMessage, {
+                excludeEmails: addedFollowerEmails
+              });
             }
           }
           state.editingRequestId = null;
