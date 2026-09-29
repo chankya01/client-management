@@ -161,10 +161,17 @@ export async function currentProfile(request) {
     throw error;
   }
 
-  const profile = await selectOne(
+  let profile = await selectOne(
     "profiles",
-    `?select=id,full_name,email,role,client_id,job_title,phone,must_change_password&or=(id.eq.${encodeValue(user.id)},email.eq.${encodeValue(normalizeEmail(user.email))})&limit=1`
+    `?select=id,full_name,email,role,client_id,job_title,phone,must_change_password&id=eq.${encodeValue(user.id)}&limit=1`
   );
+
+  if (!profile?.id) {
+    profile = await selectOne(
+      "profiles",
+      `?select=id,full_name,email,role,client_id,job_title,phone,must_change_password&email=eq.${encodeValue(normalizeEmail(user.email))}&limit=1`
+    );
+  }
 
   if (!profile?.id) {
     const error = new Error("No profile is linked to this signed-in account.");

@@ -1154,6 +1154,7 @@ button:disabled,
   width: 100%;
   border: 0;
   border-top: 2px solid var(--line);
+  border-radius: 0;
   background: transparent;
   text-align: left;
   padding: 12px 0;
@@ -1169,6 +1170,10 @@ button:disabled,
 
 .message-request-list button.active strong {
   color: var(--blue);
+}
+
+.message-request-list button.active {
+  background: transparent;
 }
 
 .message-request-list button span {

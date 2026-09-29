@@ -163,8 +163,19 @@ async function notificationRecipients(requestRow, senderProfile) {
   ], senderProfile.email);
 }
 
-function requestLabel(requestRow) {
-  return requestRow.request_number || requestRow.title || "the request";
+async function requestLabel(requestRow) {
+  const storedNumber = String(requestRow?.request_number || "").trim();
+  if (/^REQ-\d{1,3}$/i.test(storedNumber)) return storedNumber.toUpperCase();
+
+  if (requestRow?.client_id) {
+    const relatedRequests = await supabaseAdminFetch(
+      tablePath("requests", `?select=id,request_number,created_at&client_id=eq.${encodeValue(requestRow.client_id)}&order=created_at.asc`)
+    );
+    const requestIndex = (relatedRequests || []).findIndex((request) => request.id === requestRow.id);
+    if (requestIndex >= 0) return `REQ-${requestIndex + 1}`;
+  }
+
+  return storedNumber || requestRow?.title || "the request";
 }
 
 async function sendMessageNotification({ requestRow, senderProfile }) {
@@ -181,7 +192,7 @@ async function sendMessageNotification({ requestRow, senderProfile }) {
   const recipients = await notificationRecipients(requestRow, senderProfile);
   if (!recipients.length) throw new Error("No email recipients were found for this message.");
 
-  const label = requestLabel(requestRow);
+  const label = await requestLabel(requestRow);
   const senderName = senderProfile.full_name || senderProfile.email || "someone";
   const link = appUrl ? `\n\nOpen Clients: ${appUrl}` : "";
   const text = `Hi,\n\nThere is an update on ${label} from ${senderName}. Please sign in to view it.${link}`;

@@ -727,7 +727,7 @@ function renderSignIn() {
         <button class="primary" type="submit">Sign In</button>
         <div class="signin-actions">
           <button class="link-button" type="button" data-action="forgot-password">Forgot Password?</button>
-          <span class="helper signup-prompt">Don’t have an account? <button class="link-button inline-link" type="button" data-action="signup-link">Sign up</button></span>
+          <span class="helper signup-prompt">Don’t have an account? <button class="link-button inline-link" type="button" data-action="signup-link">Sign up for our website</button></span>
         </div>
       </form>
       ${toastHtml()}
@@ -758,7 +758,7 @@ function renderSignIn() {
   document.querySelector("[data-action='signup-link']").addEventListener("click", async () => {
     const email = document.querySelector("#signinForm [name='email']").value.trim();
     if (!email) {
-      showToast("Enter your email first, then click Sign up.");
+      showToast("Enter your email first, then click Sign up for our website.");
       return;
     }
     try {
@@ -2254,6 +2254,7 @@ function attachEvents() {
   if (form) {
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (event.currentTarget.dataset.submitting === "true") return;
       const message = document.getElementById("messageText").value.trim();
       const file = document.getElementById("attachmentInput").files[0];
 
@@ -2264,6 +2265,7 @@ function attachEvents() {
 
       await withActionLock(`message-${state.activeRequest.id}`, event.currentTarget, async () => {
         try {
+          event.currentTarget.dataset.submitting = "true";
           if (message) await createMessage(state.activeRequest.id, state.profile.id, message);
           if (file) await uploadRequestAttachment({ request: state.activeRequest, profile: state.profile, file });
           clearMessageDraft(state.activeRequest.id);
@@ -2272,6 +2274,8 @@ function attachEvents() {
           render();
         } catch (error) {
           showAppError(error, "Send client message");
+        } finally {
+          delete event.currentTarget.dataset.submitting;
         }
       });
     });
@@ -2281,6 +2285,7 @@ function attachEvents() {
   if (internalMessageForm) {
     internalMessageForm.addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (event.currentTarget.dataset.submitting === "true") return;
       const message = document.getElementById("internalMessageText").value.trim();
       const file = document.getElementById("internalAttachmentInput").files[0];
 
@@ -2291,6 +2296,7 @@ function attachEvents() {
 
       await withActionLock(`internal-message-${state.activeRequest.id}`, event.currentTarget, async () => {
         try {
+          event.currentTarget.dataset.submitting = "true";
           if (message) await createMessage(state.activeRequest.id, state.profile.id, message);
           if (file) await uploadRequestAttachment({ request: state.activeRequest, profile: state.profile, file });
           clearMessageDraft(state.activeRequest.id);
@@ -2299,6 +2305,8 @@ function attachEvents() {
           render();
         } catch (error) {
           showAppError(error, "Send internal message");
+        } finally {
+          delete event.currentTarget.dataset.submitting;
         }
       });
     });
