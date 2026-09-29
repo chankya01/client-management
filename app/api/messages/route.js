@@ -210,7 +210,9 @@ async function sendMessageNotification({ requestRow, senderProfile, excludedEmai
   }
 
   const recipients = await notificationRecipients(requestRow, senderProfile, excludedEmails);
-  if (!recipients.length) throw new Error("No email recipients were found for this message.");
+  if (!recipients.length) {
+    return { sent: false, reason: "No email recipients were found after applying exclusions.", recipients: [] };
+  }
 
   const label = await requestLabel(requestRow);
   const senderName = await senderDisplayName(requestRow, senderProfile);
