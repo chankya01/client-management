@@ -52,6 +52,8 @@ const state = {
   requestAssignments: [],
   requestClientContacts: [],
   messageDrafts: {},
+  clientDraft: {},
+  pendingActions: new Set(),
   selectedRequestId: null,
   editingClientId: null,
   editingRequestId: null,
@@ -71,6 +73,8 @@ const workRoles = ["developer", "reviewer", "assignee"];
 const internalRoles = [...managementRoles, ...workRoles];
 const workPortalPages = ["admin-dashboard", "admin-requests", "admin-request-detail", "admin-messages", "admin-team", "admin-settings"];
 const LOAD_TIMEOUT_MS = 20000;
+const MESSAGE_POLL_MS = 8000;
+const MESSAGE_PRELOAD_LIMIT = 6;
 const LAST_PAGE_KEY = "requestManagementLastPage";
 const LAST_REQUEST_KEY = "requestManagementLastRequest";
 const serviceCatalog = [
@@ -81,6 +85,7 @@ const serviceCatalog = [
   "Accessibility Tracker setup"
 ];
 let loadGeneration = 0;
+let messagePollInFlight = false;
 
 function withTimeout(promise, label, ms = LOAD_TIMEOUT_MS) {
   return Promise.race([
@@ -307,6 +312,38 @@ function showAppError(error, context = "Action failed") {
   showToast(friendlyErrorMessage(error));
 }
 
+function setActionElementBusy(element, busy) {
+  if (!element) return;
+  const buttons = element.matches?.("button")
+    ? [element]
+    : Array.from(element.querySelectorAll("button[type='submit'], button.primary, button.secondary, button.danger-link"));
+  buttons.forEach((button) => {
+    if (busy) {
+      button.dataset.originalText = button.dataset.originalText || button.textContent;
+      button.disabled = true;
+      if (button.type === "submit" || button.classList.contains("primary")) button.textContent = "Working...";
+    } else {
+      button.disabled = false;
+      if (button.dataset.originalText) {
+        button.textContent = button.dataset.originalText;
+        delete button.dataset.originalText;
+      }
+    }
+  });
+}
+
+async function withActionLock(key, element, action) {
+  if (state.pendingActions.has(key)) return null;
+  state.pendingActions.add(key);
+  setActionElementBusy(element, true);
+  try {
+    return await action();
+  } finally {
+    state.pendingActions.delete(key);
+    setActionElementBusy(element, false);
+  }
+}
+
 function defaultPage() {
   if (state.profile?.must_change_password) {
     if (!isInternal()) return "account";
@@ -439,6 +476,14 @@ function clearMessageDraft(requestId) {
   delete state.messageDrafts[requestId];
 }
 
+function clientDraftValue(field, fallback = "") {
+  return state.editingClientId ? fallback : (state.clientDraft[field] ?? fallback ?? "");
+}
+
+function clearClientDraft() {
+  state.clientDraft = {};
+}
+
 function isConversationPage(page) {
   return page === "messages" || page === "admin-messages";
 }
@@ -494,8 +539,44 @@ async function refreshActiveMessages({ markRead = false } = {}) {
   calculateUnreadCounts();
 }
 
+function messageListSignature(messages = []) {
+  return messages.map((message) => `${message.id}:${message.created_at || ""}`).join("|");
+}
+
+async function pollActiveMessages() {
+  if (
+    messagePollInFlight
+    || !state.session
+    || state.loading
+    || !state.activeRequest
+    || !isConversationPage(state.page)
+    || document.visibilityState === "hidden"
+  ) {
+    return;
+  }
+  messagePollInFlight = true;
+  try {
+    const previousSignature = messageListSignature(state.messagesByRequest[state.activeRequest.id] || []);
+    const messages = await loadMessages(state.activeRequest.id);
+    const nextSignature = messageListSignature(messages);
+    if (previousSignature !== nextSignature) {
+      state.messages = messages;
+      state.messagesByRequest[state.activeRequest.id] = messages;
+      markRequestRead(state.activeRequest.id);
+      calculateUnreadCounts();
+      render();
+    }
+  } catch (error) {
+    console.warn(`[${APP_NAME}] Message polling failed`, error);
+  } finally {
+    messagePollInFlight = false;
+  }
+}
+
 async function preloadUnreadCounts(generation = loadGeneration) {
-  const requestsToLoad = state.requests.filter((request) => !state.messagesByRequest[request.id]);
+  const requestsToLoad = state.requests
+    .filter((request) => !state.messagesByRequest[request.id])
+    .slice(0, MESSAGE_PRELOAD_LIMIT);
   if (!requestsToLoad.length) return;
   try {
     const messageEntries = await Promise.all(requestsToLoad.map(async (request) => [
@@ -572,35 +653,49 @@ async function boot() {
 
 async function loadPortalData() {
   state.profile = await loadProfile();
-  const loadedRequests = await loadRequests();
-  state.requestAssignments = isInternal()
-    ? await safeLoad("Request assignment loading", loadRequestAssignments, [])
-    : [];
-  state.requestClientContacts = canAccessManagementPages()
-    ? await safeLoad("Request contact loading", loadRequestClientContacts, [])
-    : [];
+  const [
+    loadedRequests,
+    requestAssignments,
+    requestClientContacts,
+    clients,
+    team,
+    history
+  ] = await Promise.all([
+    loadRequests(),
+    isInternal() ? safeLoad("Request assignment loading", loadRequestAssignments, []) : Promise.resolve([]),
+    canAccessManagementPages() ? safeLoad("Request contact loading", loadRequestClientContacts, []) : Promise.resolve([]),
+    isInternal() ? safeLoad("Client loading", loadClients, []) : Promise.resolve([]),
+    isInternal() ? safeLoad("Team loading", loadTeam, []) : Promise.resolve([]),
+    isInternal() ? safeLoad("History loading", loadClosedRequests, null) : Promise.resolve(null)
+  ]);
+  state.requestAssignments = requestAssignments;
+  state.requestClientContacts = requestClientContacts;
   state.requests = isInternal() && !canAccessManagementPages()
     ? loadedRequests.filter((request) => state.requestAssignments.some((assignment) => (
       assignment.request_id === request.id && assignment.profile_id === state.profile.id
     )))
     : loadedRequests;
-  state.clients = isInternal() ? await safeLoad("Client loading", loadClients, []) : [];
-  state.team = isInternal() ? await safeLoad("Team loading", loadTeam, []) : [];
+  state.clients = clients;
+  state.team = team;
   const lastRequestId = localStorage.getItem(LAST_REQUEST_KEY);
   state.activeRequest = state.requests.find((request) => request.id === lastRequestId)
     || state.requests.find((request) => !isTerminalRequestStatus(request.status))
     || state.requests[0]
     || null;
   state.selectedRequestId = state.activeRequest?.id || null;
-  state.history = isInternal() ? await safeLoad("History loading", loadClosedRequests, state.requests) : state.requests;
+  state.history = isInternal() ? (history || state.requests) : state.requests;
   state.messagesByRequest = {};
 
   if (state.activeRequest) {
-    state.messages = await safeLoad("Message loading", () => loadMessages(state.activeRequest.id), []);
+    const [messages, deliverables] = await Promise.all([
+      safeLoad("Message loading", () => loadMessages(state.activeRequest.id), []),
+      safeLoad("Deliverable loading", () => loadDeliverables(state.activeRequest.id), [])
+    ]);
+    state.messages = messages;
     state.messagesByRequest[state.activeRequest.id] = state.messages;
     calculateUnreadCounts();
     state.messages = state.messagesByRequest[state.activeRequest.id] || [];
-    state.deliverables = await safeLoad("Deliverable loading", () => loadDeliverables(state.activeRequest.id), []);
+    state.deliverables = deliverables;
   } else {
     state.messages = [];
     state.deliverables = [];
@@ -1037,7 +1132,7 @@ function clientStatusBar() {
 
 function adminClientsPage() {
   const editingClient = state.clients.find((client) => client.id === state.editingClientId);
-  const clientStatus = editingClient?.status || "signed";
+  const clientStatus = editingClient?.status || clientDraftValue("status", "signed");
   return `
     <section class="admin-page">
       <div class="admin-heading">
@@ -1049,10 +1144,10 @@ function adminClientsPage() {
       <section class="card">
         <p class="section-label">${editingClient ? "Edit Client" : "Add Client"}</p>
         <form class="admin-form" id="clientForm">
-          <label class="field"><span>Organization</span><input name="name" value="${escapeHtml(editingClient?.name || "")}" required /></label>
-          <label class="field"><span>Primary Contact</span><input name="contactName" value="${escapeHtml(editingClient?.primary_contact_name || "")}" required /></label>
-          <label class="field"><span>Client Email</span><input name="email" type="email" value="${escapeHtml(editingClient?.primary_contact_email || "")}" required /></label>
-          <label class="field"><span>Billing Email</span><input name="billingEmail" type="email" value="${escapeHtml(editingClient?.billing_email || "")}" /></label>
+          <label class="field"><span>Organization</span><input name="name" value="${escapeHtml(clientDraftValue("name", editingClient?.name || ""))}" required /></label>
+          <label class="field"><span>Primary Contact</span><input name="contactName" value="${escapeHtml(clientDraftValue("contactName", editingClient?.primary_contact_name || ""))}" required /></label>
+          <label class="field"><span>Client Email</span><input name="email" type="email" value="${escapeHtml(clientDraftValue("email", editingClient?.primary_contact_email || ""))}" required /></label>
+          <label class="field"><span>Billing Email</span><input name="billingEmail" type="email" value="${escapeHtml(clientDraftValue("billingEmail", editingClient?.billing_email || ""))}" /></label>
           <label class="field"><span>Status</span><select name="status">${clientStatusOptions(clientStatus)}</select></label>
           <button class="primary" type="submit">${editingClient ? "Update Client" : "Create Client"}</button>
           ${editingClient ? `<button class="secondary" type="button" data-cancel-client-edit>Cancel Edit</button>` : ""}
@@ -1863,16 +1958,26 @@ function attachEvents() {
 
   const clientForm = document.getElementById("clientForm");
   if (clientForm) {
+    clientForm.addEventListener("input", (event) => {
+      if (state.editingClientId || !event.target?.name) return;
+      state.clientDraft[event.target.name] = event.target.value;
+    });
+    clientForm.addEventListener("change", (event) => {
+      if (state.editingClientId || !event.target?.name) return;
+      state.clientDraft[event.target.name] = event.target.value;
+    });
     clientForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const values = Object.fromEntries(new FormData(event.currentTarget));
-      try {
+      await withActionLock("client-form", event.currentTarget, async () => {
+        try {
         if (state.editingClientId) {
           await updateClient(state.editingClientId, values);
           state.editingClientId = null;
           showToast("Client updated.");
         } else {
           const createdClient = await createClient(values);
+          clearClientDraft();
           if (createdClient?.account_setup_email?.sent) {
             showToast("Client created and invite email sent.");
           } else if (createdClient?.account_setup_email?.reason) {
@@ -1883,9 +1988,10 @@ function attachEvents() {
         }
         state.clients = await loadClients();
         render();
-      } catch (error) {
-        showAppError(error, "Save client");
-      }
+        } catch (error) {
+          showAppError(error, "Save client");
+        }
+      });
     });
   }
 
@@ -1893,6 +1999,7 @@ function attachEvents() {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
       state.editingClientId = button.dataset.editClient;
+      clearClientDraft();
       render();
       window.scrollTo({ top: 0, behavior: "smooth" });
     });
@@ -1902,6 +2009,7 @@ function attachEvents() {
   if (cancelClientEdit) {
     cancelClientEdit.addEventListener("click", () => {
       state.editingClientId = null;
+      clearClientDraft();
       render();
     });
   }
@@ -1916,16 +2024,18 @@ function attachEvents() {
       const client = state.clients.find((item) => item.id === button.dataset.deleteClient);
       if (!window.confirm(`Delete ${client?.name || "this client"} and its related requests?`)) return;
 
-      try {
-        await deleteClient(button.dataset.deleteClient);
-        state.clients = await loadClients();
-        state.requests = await loadRequests();
-        if (state.editingClientId === button.dataset.deleteClient) state.editingClientId = null;
-        showToast("Client deleted.");
-        render();
-      } catch (error) {
-        showAppError(error, "Delete client");
-      }
+      await withActionLock(`delete-client-${button.dataset.deleteClient}`, button, async () => {
+        try {
+          await deleteClient(button.dataset.deleteClient);
+          state.clients = await loadClients();
+          state.requests = await loadRequests();
+          if (state.editingClientId === button.dataset.deleteClient) state.editingClientId = null;
+          showToast("Client deleted.");
+          render();
+        } catch (error) {
+          showAppError(error, "Delete client");
+        }
+      });
     });
   });
 
@@ -1942,7 +2052,8 @@ function attachEvents() {
         showToast("Select at least one service.");
         return;
       }
-      try {
+      await withActionLock("request-form", event.currentTarget, async () => {
+        try {
         const previousRequest = state.requests.find((request) => request.id === state.editingRequestId);
         const requestPayload = {
           clientId: values.clientId,
@@ -1995,9 +2106,10 @@ function attachEvents() {
         }
         await loadPortalData();
         render();
-      } catch (error) {
-        showAppError(error, "Save request");
-      }
+        } catch (error) {
+          showAppError(error, "Save request");
+        }
+      });
     });
   }
 
@@ -2030,19 +2142,21 @@ function attachEvents() {
       const request = state.requests.find((item) => item.id === button.dataset.deleteRequest);
       if (!window.confirm(`Delete ${request ? displayRequestNumber(request) : "this request"}?`)) return;
 
-      try {
-        await deleteRequest(button.dataset.deleteRequest);
-        state.requests = await loadRequests();
-        state.activeRequest = state.requests[0] || null;
-        state.selectedRequestId = null;
-        state.editingRequestId = null;
-        state.page = "admin-requests";
-        rememberPage();
-        showToast("Request deleted.");
-        render();
-      } catch (error) {
-        showAppError(error, "Delete request");
-      }
+      await withActionLock(`delete-request-${button.dataset.deleteRequest}`, button, async () => {
+        try {
+          await deleteRequest(button.dataset.deleteRequest);
+          state.requests = await loadRequests();
+          state.activeRequest = state.requests[0] || null;
+          state.selectedRequestId = null;
+          state.editingRequestId = null;
+          state.page = "admin-requests";
+          rememberPage();
+          showToast("Request deleted.");
+          render();
+        } catch (error) {
+          showAppError(error, "Delete request");
+        }
+      });
     });
   });
 
@@ -2051,7 +2165,8 @@ function attachEvents() {
     teamForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const values = Object.fromEntries(new FormData(event.currentTarget));
-      try {
+      await withActionLock("team-form", event.currentTarget, async () => {
+        try {
         if (state.editingTeamId) {
           await updateTeamMember(state.editingTeamId, values);
           state.editingTeamId = null;
@@ -2062,9 +2177,10 @@ function attachEvents() {
         }
         state.team = await loadTeam();
         render();
-      } catch (error) {
-        showAppError(error, "Save team member");
-      }
+        } catch (error) {
+          showAppError(error, "Save team member");
+        }
+      });
     });
   }
 
@@ -2095,14 +2211,16 @@ function attachEvents() {
       const member = state.team.find((item) => item.id === button.dataset.deleteTeam);
       if (!window.confirm(`Delete ${member?.full_name || "this team member"}?`)) return;
 
-      try {
-        await deleteTeamMember(button.dataset.deleteTeam);
-        state.team = await loadTeam();
-        showToast("Team member deleted.");
-        render();
-      } catch (error) {
-        showAppError(error, "Delete team member");
-      }
+      await withActionLock(`delete-team-${button.dataset.deleteTeam}`, button, async () => {
+        try {
+          await deleteTeamMember(button.dataset.deleteTeam);
+          state.team = await loadTeam();
+          showToast("Team member deleted.");
+          render();
+        } catch (error) {
+          showAppError(error, "Delete team member");
+        }
+      });
     });
   });
 
@@ -2111,14 +2229,16 @@ function attachEvents() {
     profileForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const values = Object.fromEntries(new FormData(event.currentTarget));
-      try {
+      await withActionLock("profile-form", event.currentTarget, async () => {
+        try {
         const updatedProfile = await updateOwnProfile(values);
         if (updatedProfile) state.profile = updatedProfile;
         showToast("Profile updated.");
         render();
-      } catch (error) {
-        showAppError(error, "Update profile");
-      }
+        } catch (error) {
+          showAppError(error, "Update profile");
+        }
+      });
     });
   }
 
@@ -2142,16 +2262,18 @@ function attachEvents() {
         return;
       }
 
-      try {
-        if (message) await createMessage(state.activeRequest.id, state.profile.id, message);
-        if (file) await uploadRequestAttachment({ request: state.activeRequest, profile: state.profile, file });
-        clearMessageDraft(state.activeRequest.id);
-        await refreshActiveMessages({ markRead: true });
-        showToast(message ? "Message sent." : "Attachment uploaded.");
-        render();
-      } catch (error) {
-        showAppError(error, "Send client message");
-      }
+      await withActionLock(`message-${state.activeRequest.id}`, event.currentTarget, async () => {
+        try {
+          if (message) await createMessage(state.activeRequest.id, state.profile.id, message);
+          if (file) await uploadRequestAttachment({ request: state.activeRequest, profile: state.profile, file });
+          clearMessageDraft(state.activeRequest.id);
+          await refreshActiveMessages({ markRead: true });
+          showToast(message ? "Message sent." : "Attachment uploaded.");
+          render();
+        } catch (error) {
+          showAppError(error, "Send client message");
+        }
+      });
     });
   }
 
@@ -2167,16 +2289,18 @@ function attachEvents() {
         return;
       }
 
-      try {
-        if (message) await createMessage(state.activeRequest.id, state.profile.id, message);
-        if (file) await uploadRequestAttachment({ request: state.activeRequest, profile: state.profile, file });
-        clearMessageDraft(state.activeRequest.id);
-        await refreshActiveMessages({ markRead: true });
-        showToast(message ? "Message sent." : "Attachment uploaded.");
-        render();
-      } catch (error) {
-        showAppError(error, "Send internal message");
-      }
+      await withActionLock(`internal-message-${state.activeRequest.id}`, event.currentTarget, async () => {
+        try {
+          if (message) await createMessage(state.activeRequest.id, state.profile.id, message);
+          if (file) await uploadRequestAttachment({ request: state.activeRequest, profile: state.profile, file });
+          clearMessageDraft(state.activeRequest.id);
+          await refreshActiveMessages({ markRead: true });
+          showToast(message ? "Message sent." : "Attachment uploaded.");
+          render();
+        } catch (error) {
+          showAppError(error, "Send internal message");
+        }
+      });
     });
   }
 
@@ -2328,6 +2452,8 @@ function resetSessionState() {
   state.requestAssignments = [];
   state.requestClientContacts = [];
   state.messageDrafts = {};
+  state.clientDraft = {};
+  state.pendingActions = new Set();
   state.selectedRequestId = null;
   state.editingClientId = null;
   state.editingRequestId = null;
@@ -2401,6 +2527,11 @@ window.addEventListener("popstate", async () => {
     rememberPage();
   }
   render();
+});
+
+window.setInterval(pollActiveMessages, MESSAGE_POLL_MS);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") pollActiveMessages();
 });
 
 boot();

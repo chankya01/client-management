@@ -9,7 +9,16 @@ const supabaseAnonKey = savedConfig.supabaseAnonKey || appConfig.supabaseAnonKey
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey && !appConfig.demoMode);
 
-export const supabase = isSupabaseConfigured ? createClient(supabaseUrl, supabaseAnonKey) : null;
+export const supabase = isSupabaseConfigured
+  ? createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      storageKey: "clients-auth-session"
+    }
+  })
+  : null;
 
 export function saveSupabaseConfig({ url, anonKey }) {
   localStorage.setItem("requestManagementConfig", JSON.stringify({
