@@ -101,17 +101,25 @@ export async function PUT(request, { params }) {
       body: JSON.stringify(rows)
     });
 
+    const setupEmails = [];
     const requestLabel = linkedRequest.request_number || linkedRequest.title || "this request";
     for (const contact of contacts) {
       if (existingEmails.has(contact.email)) continue;
-      await sendAccountSetupEmail({
+      const setupEmail = await sendAccountSetupEmail({
         email: contact.email,
         name: contact.name,
         reason: `You have been added to ${requestLabel} in Clients. Please create your password to view request updates and messages.`
       });
+      setupEmails.push({
+        email: contact.email,
+        ...setupEmail
+      });
+      if (!setupEmail.sent) {
+        throw new Error(`Client follower was added, but setup email was not sent to ${contact.email}: ${setupEmail.reason || "Unknown email error."}`);
+      }
     }
 
-    return apiJson({ ok: true });
+    return apiJson({ ok: true, setup_emails: setupEmails });
   } catch (error) {
     return handleApiError(error);
   }
