@@ -727,7 +727,6 @@ function renderSignIn() {
         <button class="primary" type="submit">Sign In</button>
         <div class="signin-actions">
           <button class="link-button" type="button" data-action="forgot-password">Forgot Password?</button>
-          <span class="helper signup-prompt">Don’t have an account? <button class="link-button inline-link" type="button" data-action="signup-link">Sign up for our website</button></span>
         </div>
       </form>
       ${toastHtml()}
@@ -753,25 +752,6 @@ function renderSignIn() {
   document.querySelector("[data-action='forgot-password']").addEventListener("click", () => {
     state.authView = "forgot-password";
     render();
-  });
-
-  document.querySelector("[data-action='signup-link']").addEventListener("click", async () => {
-    const email = document.querySelector("#signinForm [name='email']").value.trim();
-    if (!email) {
-      showToast("Enter your email first, then click Sign up for our website.");
-      return;
-    }
-    try {
-      const session = await sendMagicLink(email);
-      if (session?.user) {
-        state.authView = "signin";
-        await completeSignIn(session);
-        return;
-      }
-      showToast("Sign-up link sent. Check your email to continue.");
-    } catch (error) {
-      showAppError(error);
-    }
   });
 
   attachPasswordToggles();
