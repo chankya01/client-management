@@ -78,11 +78,14 @@ const MESSAGE_PRELOAD_LIMIT = 6;
 const LAST_PAGE_KEY = "requestManagementLastPage";
 const LAST_REQUEST_KEY = "requestManagementLastRequest";
 const serviceCatalog = [
-  "WCAG 2.1 AA Audit",
-  "VPAT / ACR creation",
-  "Accessibility remediation support",
-  "Validation and regression testing",
-  "Accessibility Tracker setup"
+  "WCAG Accessibility Audit",
+  "VPAT / ACR",
+  "Technical Support",
+  "Certification",
+  "User Testing",
+  "Document Remediation",
+  "Custom Accessibility Statement",
+  "Expedited Accessibility"
 ];
 let loadGeneration = 0;
 let messagePollInFlight = false;
