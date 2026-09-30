@@ -392,7 +392,7 @@ function rememberPage() {
 function currentRoute() {
   const params = new URLSearchParams();
   if (state.page) params.set("page", state.page);
-  if (state.activeRequest?.id) params.set("request", state.activeRequest.id);
+  if (pageUsesRequestParam(state.page) && state.activeRequest?.id) params.set("request", state.activeRequest.id);
   if (state.selectedClientId) params.set("client", state.selectedClientId);
   return `${window.location.pathname}?${params.toString()}`;
 }
@@ -674,6 +674,10 @@ function isConversationPage(page) {
   return page === "messages" || page === "admin-messages";
 }
 
+function pageUsesRequestParam(page) {
+  return ["messages", "request", "admin-messages", "admin-request-detail"].includes(page);
+}
+
 function pageNeedsMessages(page) {
   return isConversationPage(page) || page === "admin-request-detail";
 }
@@ -831,7 +835,7 @@ async function boot() {
       if (routePage && pageIsAllowed(routePage)) {
         state.page = routePage;
         if (routeClientId) state.selectedClientId = routeClientId;
-        if (routeRequestId) await setActiveRequest(routeRequestId, { page: routePage });
+        if (routeRequestId && pageUsesRequestParam(routePage)) await setActiveRequest(routeRequestId, { page: routePage });
       } else {
         state.page = defaultPage();
       }
@@ -1824,10 +1828,11 @@ function messageCard(message) {
         <span class="sender ${isClient ? "client-name" : ""}">${escapeHtml(sender)}</span>
         <time class="time">${formatTime(message.created_at)}</time>
       </div>
-      ${attachment ? attachmentCard(attachment) : `
+      ${messageText && messageText !== "Attachment" ? `
         <div class="message-text ${isLongMessage ? "is-collapsed" : ""}" data-message-text>${formatMessageText(messageText)}</div>
         ${isLongMessage ? `<button class="message-toggle" type="button" data-action="toggle-message">Show More</button>` : ""}
-      `}
+      ` : ""}
+      ${attachment ? attachmentCard(attachment) : ""}
     </article>
   `;
 }
@@ -3087,7 +3092,7 @@ window.addEventListener("popstate", async () => {
     await goToPage(defaultPage(), { replace: true, scroll: false });
     return;
   }
-  if (requestId) {
+  if (requestId && pageUsesRequestParam(page)) {
     await setActiveRequest(requestId, { page, markRead: isConversationPage(page) });
   } else {
     state.page = page;

@@ -64,8 +64,24 @@ function mergeMessagesAndAttachments(messages, attachments) {
     const match = String(message.message || "").match(/^Attachment uploaded:\s*(.+)$/i);
     return !match || !attachmentNames.has(match[1].trim().toLowerCase());
   });
+  const pairedAttachmentIds = new Set();
 
-  const attachmentMessages = (attachments || []).map((file) => ({
+  (attachments || []).forEach((file) => {
+    const fileTime = new Date(file.created_at || 0).getTime();
+    if (!fileTime) return;
+    const matchingMessage = [...visibleMessages].reverse().find((message) => (
+      message.sender_id === file.uploaded_by
+      && !message.attachment
+      && String(message.message || "").trim()
+      && Math.abs(fileTime - new Date(message.created_at || 0).getTime()) <= 30000
+    ));
+    if (matchingMessage) {
+      matchingMessage.attachment = file;
+      pairedAttachmentIds.add(file.id);
+    }
+  });
+
+  const attachmentMessages = (attachments || []).filter((file) => !pairedAttachmentIds.has(file.id)).map((file) => ({
     id: `attachment-${file.id}`,
     request_id: file.request_id,
     sender_id: file.uploaded_by,
