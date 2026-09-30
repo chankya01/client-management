@@ -779,13 +779,11 @@ export async function addRequestClientContact(requestId, contact = {}) {
     };
   }
 
-  try {
+  if (useLocalAdminProxy()) {
     return await localApi(`/request-client-contacts/${requestId}`, {
       method: "POST",
       body: JSON.stringify({ contact: normalizedContact })
     });
-  } catch (error) {
-    if (useLocalAdminProxy()) throw error;
   }
 
   return appApi(`/request-client-contacts/${requestId}`, {

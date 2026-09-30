@@ -1288,6 +1288,13 @@ button:disabled,
   grid-column: 1 / -1;
 }
 
+.admin-form + .form-divider,
+.form-divider {
+  border-top: 2px solid var(--line);
+  grid-column: 1 / -1;
+  margin: 10px 0 4px;
+}
+
 .admin-form .primary {
   align-self: end;
   justify-self: start;

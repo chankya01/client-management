@@ -57,6 +57,7 @@ const state = {
   requestClientContacts: [],
   messageDrafts: {},
   clientDraft: {},
+  ccContactDrafts: {},
   pendingActions: new Set(),
   selectedRequestId: null,
   selectedClientId: null,
@@ -605,6 +606,15 @@ function clearClientDraft() {
   state.clientDraft = {};
 }
 
+function ccContactDraft(requestId) {
+  return state.ccContactDrafts[requestId] || { name: "", email: "" };
+}
+
+function clearCcContactDraft(requestId) {
+  if (!requestId) return;
+  delete state.ccContactDrafts[requestId];
+}
+
 function isConversationPage(page) {
   return page === "messages" || page === "admin-messages";
 }
@@ -1124,6 +1134,7 @@ function clientContactsForRequest(requestId) {
 function requestCcPanel(request = state.activeRequest) {
   if (isInternal() || !request) return "";
   const contacts = clientContactsForRequest(request.id);
+  const draft = ccContactDraft(request.id);
   return `
     <section class="card request-cc-panel">
       <p class="section-label">CC Contacts</p>
@@ -1138,13 +1149,16 @@ function requestCcPanel(request = state.activeRequest) {
       <form class="mini-form" data-client-cc-contact-form data-request-id="${escapeHtml(request.id)}">
         <label>
           Name
-          <input name="name" type="text" placeholder="Contact name" />
+          <input name="name" type="text" placeholder="Contact name" value="${escapeHtml(draft.name)}" />
         </label>
         <label>
           Email
-          <input name="email" type="email" placeholder="contact@example.com" required />
+          <input name="email" type="email" placeholder="contact@example.com" value="${escapeHtml(draft.email)}" required />
         </label>
-        <button class="primary small-action" type="submit">Add CC</button>
+        <div class="form-actions">
+          <button class="primary small-action" type="submit">Add CC</button>
+          <button class="secondary small-action" type="button" data-cancel-request-cc-contact>Cancel</button>
+        </div>
       </form>
     </section>
   `;
@@ -1307,17 +1321,19 @@ function adminClientsPage() {
           <button class="primary" type="submit">${editingClient ? "Update Client" : "Create Client"}</button>
           ${editingClient ? `<button class="secondary" type="button" data-cancel-client-edit>Cancel Edit</button>` : ""}
         </form>
-      </section>
-      <section class="card">
+        <div class="form-divider wide"></div>
         <p class="section-label">Add CC Contact</p>
         <form class="admin-form" id="clientContactForm">
-          <label class="field"><span>Organization</span><select name="clientId" required><option value="" selected disabled>Select Organization</option>${state.clients.map((client) => `<option value="${client.id}">${escapeHtml(client.name)}</option>`).join("")}</select></label>
+          ${editingClient
+            ? `<input name="clientId" type="hidden" value="${escapeHtml(editingClient.id)}" />`
+            : `<label class="field"><span>Organization</span><select name="clientId" required><option value="" selected disabled>Select Organization</option>${state.clients.map((client) => `<option value="${client.id}">${escapeHtml(client.name)}</option>`).join("")}</select></label>`}
           <label class="field"><span>Contact Name</span><input name="fullName" required /></label>
           <label class="field"><span>Email</span><input name="email" type="email" required /></label>
           <div class="form-actions wide">
             <button class="primary" type="submit">Add Contact</button>
+            <button class="secondary" type="button" data-cancel-cc-contact-edit>Cancel Edit</button>
           </div>
-          <small class="helper wide">New contacts receive an account setup email. Existing contacts can be CC’d on requests.</small>
+          <small class="helper wide">${editingClient ? `Adding CC contact for ${escapeHtml(editingClient.name)}.` : "Select an existing organization. For a new organization, create the client first, then add CC contacts."} New contacts receive an account setup email.</small>
         </form>
       </section>
       <section class="card">
@@ -2303,9 +2319,34 @@ function attachEvents() {
     });
   }
 
+  const cancelCcContactEdit = document.querySelector("[data-cancel-cc-contact-edit]");
+  if (cancelCcContactEdit) {
+    cancelCcContactEdit.addEventListener("click", () => {
+      document.getElementById("clientContactForm")?.reset();
+    });
+  }
+
   document.querySelectorAll("[data-client-cc-contact-form]").forEach((clientCcContactForm) => {
     clientCcContactForm.addEventListener("click", (event) => {
       event.stopPropagation();
+    });
+    clientCcContactForm.addEventListener("input", (event) => {
+      const form = event.currentTarget;
+      const requestId = form.dataset.requestId || state.activeRequest?.id;
+      if (!requestId || !event.target?.name) return;
+      state.ccContactDrafts[requestId] = {
+        ...ccContactDraft(requestId),
+        [event.target.name]: event.target.value
+      };
+    });
+    clientCcContactForm.querySelector("[data-cancel-request-cc-contact]")?.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const form = event.currentTarget.closest("[data-client-cc-contact-form]");
+      const requestId = form?.dataset.requestId || state.activeRequest?.id;
+      clearCcContactDraft(requestId);
+      form?.reset();
+      render();
     });
     clientCcContactForm.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -2328,6 +2369,7 @@ function attachEvents() {
             email: contactEmail
           });
           state.requestClientContacts = await loadRequestClientContacts();
+          clearCcContactDraft(requestId);
           form.reset();
 
           if (!result?.already_exists) {
@@ -2870,6 +2912,7 @@ function resetSessionState() {
   state.requestClientContacts = [];
   state.messageDrafts = {};
   state.clientDraft = {};
+  state.ccContactDrafts = {};
   state.pendingActions = new Set();
   state.selectedRequestId = null;
   state.requestClientSelection = null;
