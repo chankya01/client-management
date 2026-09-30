@@ -82,7 +82,8 @@ const internalRoles = [...managementRoles, ...workRoles];
 const workPortalPages = ["admin-dashboard", "admin-requests", "admin-request-detail", "admin-messages", "admin-team", "admin-settings"];
 const LOAD_TIMEOUT_MS = 20000;
 const MESSAGE_POLL_MS = 8000;
-const MESSAGE_PRELOAD_LIMIT = 6;
+const UNREAD_POLL_MS = 30000;
+const UNREAD_BATCH_SIZE = 4;
 const LAST_PAGE_KEY = "requestManagementLastPage";
 const LAST_REQUEST_KEY = "requestManagementLastRequest";
 const serviceCatalog = [
@@ -97,6 +98,7 @@ const serviceCatalog = [
 ];
 let loadGeneration = 0;
 let messagePollInFlight = false;
+let unreadPollInFlight = false;
 
 function withTimeout(promise, label, ms = LOAD_TIMEOUT_MS) {
   return Promise.race([
@@ -779,24 +781,33 @@ async function pollActiveMessages() {
   }
 }
 
-async function preloadUnreadCounts(generation = loadGeneration) {
-  const requestsToLoad = state.requests
-    .filter((request) => !state.messagesByRequest[request.id])
-    .slice(0, MESSAGE_PRELOAD_LIMIT);
+async function refreshUnreadCounts({ onlyMissing = false, generation = loadGeneration, allowWhileLoading = false } = {}) {
+  if (unreadPollInFlight || !state.session || (!allowWhileLoading && state.loading) || document.visibilityState === "hidden") return;
+  const activeConversationRequestId = isConversationPage(state.page) ? state.activeRequest?.id : null;
+  const requestsToLoad = state.requests.filter((request) => (
+    request.id !== activeConversationRequestId
+    && (!onlyMissing || !state.messagesByRequest[request.id])
+  ));
   if (!requestsToLoad.length) return;
+  unreadPollInFlight = true;
   try {
-    const messageEntries = await Promise.all(requestsToLoad.map(async (request) => [
-      request.id,
-      await loadMessages(request.id)
-    ]));
-    if (generation !== loadGeneration) return;
-    messageEntries.forEach(([requestId, messages]) => {
-      state.messagesByRequest[requestId] = messages;
-    });
+    for (let index = 0; index < requestsToLoad.length; index += UNREAD_BATCH_SIZE) {
+      const batch = requestsToLoad.slice(index, index + UNREAD_BATCH_SIZE);
+      const messageEntries = await Promise.all(batch.map(async (request) => [
+        request.id,
+        await loadMessages(request.id)
+      ]));
+      if (generation !== loadGeneration) return;
+      messageEntries.forEach(([requestId, messages]) => {
+        state.messagesByRequest[requestId] = messages;
+      });
+    }
     calculateUnreadCounts();
     render();
   } catch (error) {
-    console.warn(`[${APP_NAME}] Unable to preload unread counts`, error);
+    console.warn(`[${APP_NAME}] Unable to refresh unread counts`, error);
+  } finally {
+    unreadPollInFlight = false;
   }
 }
 
@@ -905,7 +916,7 @@ async function loadPortalData() {
     calculateUnreadCounts();
   }
 
-  preloadUnreadCounts(loadGeneration);
+  refreshUnreadCounts({ onlyMissing: true, generation: loadGeneration, allowWhileLoading: true });
 }
 
 function renderSignIn() {
@@ -3102,8 +3113,12 @@ window.addEventListener("popstate", async () => {
 });
 
 window.setInterval(pollActiveMessages, MESSAGE_POLL_MS);
+window.setInterval(() => refreshUnreadCounts(), UNREAD_POLL_MS);
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") pollActiveMessages();
+  if (document.visibilityState === "visible") {
+    pollActiveMessages();
+    refreshUnreadCounts();
+  }
 });
 
 boot();
