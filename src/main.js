@@ -365,7 +365,7 @@ function defaultPage() {
     return "admin-settings";
   }
   if (canAccessManagementPages()) return "admin-dashboard";
-  return isInternal() ? "admin-requests" : "dashboard";
+  return isInternal() ? "admin-dashboard" : "dashboard";
 }
 
 function pageIsAllowed(page) {
@@ -3039,8 +3039,18 @@ onAuthStateChange((session, event) => {
       state.loadError = "";
       if (!hasExistingPortal) render();
       try {
+        const pageBeforeRefresh = state.page;
+        const requestBeforeRefresh = state.activeRequest?.id;
         await withTimeout(loadPortalData(), "Account data loading");
-        state.page = defaultPage();
+        if (hasExistingPortal && pageIsAllowed(pageBeforeRefresh)) {
+          state.page = pageBeforeRefresh;
+          if (requestBeforeRefresh) {
+            state.activeRequest = state.requests.find((request) => request.id === requestBeforeRefresh) || state.activeRequest;
+            state.selectedRequestId = state.activeRequest?.id || null;
+          }
+        } else {
+          state.page = defaultPage();
+        }
       } catch (error) {
         await returnToSignInAfterLoadFailure(error, `${event || "Auth"} account loading`, {
           keepCurrentPortal: hasExistingPortal
