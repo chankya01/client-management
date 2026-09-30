@@ -68,7 +68,7 @@ const state = {
   editingTeamId: null,
   showPasswordForm: false,
   authView: isPasswordRecoveryFlow() ? "reset-password" : "signin",
-  page: "messages",
+  page: "dashboard",
   loading: true,
   loadError: "",
   toast: ""
@@ -1612,7 +1612,7 @@ function adminMessagesPage() {
         <aside class="card message-request-list">
           <p class="section-label">Requests</p>
           ${state.requests.map((item) => `
-            <button class="${item.id === request.id ? "active" : ""}" data-chat-request="${item.id}">
+            <button type="button" class="${item.id === request.id ? "active" : ""}" data-admin-message-request="${item.id}">
               <span>
                 <strong>${escapeHtml(displayRequestNumber(item))}</strong>
                 <span>${escapeHtml(item.title)}</span>
@@ -1856,7 +1856,7 @@ function clientRequestSwitcher() {
     <aside class="card request-switcher message-request-list">
       <p class="section-label">Requests</p>
       ${state.requests.map((request) => `
-        <button class="${request.id === state.activeRequest?.id ? "active" : ""}" data-client-request="${request.id}">
+        <button type="button" class="${request.id === state.activeRequest?.id ? "active" : ""}" data-client-message-request="${request.id}">
           <span>
             <strong>${escapeHtml(displayRequestNumber(request))}</strong>
             ${escapeHtml(request.title)}
@@ -2287,10 +2287,9 @@ function attachEvents() {
     });
   });
 
-  document.querySelectorAll("[data-chat-request]").forEach((button) => {
+  document.querySelectorAll("[data-admin-message-request]").forEach((button) => {
     button.addEventListener("click", async () => {
-      await setActiveRequest(button.dataset.chatRequest, { markRead: true });
-      render();
+      await goToPage("admin-messages", { requestId: button.dataset.adminMessageRequest });
     });
   });
 
@@ -2300,10 +2299,9 @@ function attachEvents() {
     });
   });
 
-  document.querySelectorAll("[data-client-request]").forEach((button) => {
+  document.querySelectorAll("[data-client-message-request]").forEach((button) => {
     button.addEventListener("click", async () => {
-      const targetPage = state.page === "dashboard" ? "request" : state.page;
-      await goToPage(targetPage, { requestId: button.dataset.clientRequest });
+      await goToPage("messages", { requestId: button.dataset.clientMessageRequest });
     });
   });
 
@@ -3017,6 +3015,18 @@ function resetSessionState() {
 
 onAuthStateChange((session, event) => {
   window.setTimeout(async () => {
+    const currentUserId = state.session?.user?.id || null;
+    const nextUserId = session?.user?.id || null;
+
+    if (event === "INITIAL_SESSION") {
+      return;
+    }
+
+    if (event === "TOKEN_REFRESHED" || (event === "SIGNED_IN" && state.profile && currentUserId === nextUserId)) {
+      state.session = session;
+      return;
+    }
+
     const generation = ++loadGeneration;
     state.session = session;
     const recoveryFlow = isPasswordRecoveryFlow(event);
