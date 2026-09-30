@@ -736,7 +736,15 @@ async function goToPage(page, { requestId, clientId, replace = false, scroll = t
   }
   syncBrowserHistory({ replace });
   render();
-  if (scroll) window.scrollTo({ top: 0, behavior: "smooth" });
+  if (scroll) {
+    if (isConversationPage(page)) {
+      window.requestAnimationFrame(() => {
+        document.querySelector("[data-message-end]")?.scrollIntoView({ behavior: "smooth", block: "end" });
+      });
+    } else {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }
 }
 
 async function refreshActiveMessages({ markRead = false } = {}) {
@@ -1635,6 +1643,7 @@ function adminMessagesPage() {
         </aside>
         <section>
           ${state.messages.map(messageCard).join("") || emptyMessage()}
+          <div data-message-end></div>
           <form class="card composer" id="internalMessageForm">
             <label class="section-label" for="internalMessageText">New Message</label>
             <textarea id="internalMessageText" name="message" data-message-draft="${request.id}" placeholder="Write a message to the client or project team">${messageDraftValue(request.id)}</textarea>
@@ -1791,6 +1800,7 @@ function messagesPage() {
         <section>
           <div class="date-row conversation-row"><span>Conversation</span></div>
           ${state.messages.map(messageCard).join("") || emptyMessage()}
+          <div data-message-end></div>
           <form class="card composer" id="messageForm">
             <label class="section-label" for="messageText">New Message</label>
             <textarea id="messageText" name="message" data-message-draft="${state.activeRequest.id}" placeholder="Write a message about ${escapeHtml(requestTitle())}">${messageDraftValue(state.activeRequest.id)}</textarea>
