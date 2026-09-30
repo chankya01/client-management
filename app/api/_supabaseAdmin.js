@@ -57,6 +57,10 @@ export function encodeValue(value) {
   return encodeURIComponent(value);
 }
 
+export function inFilter(values = []) {
+  return `in.(${values.map((value) => encodeValue(value)).join(",")})`;
+}
+
 function isMissingPasswordFlagError(message) {
   return String(message || "").includes("profiles.must_change_password")
     || String(message || "").includes("must_change_password");
@@ -190,6 +194,38 @@ export async function requireProfileRole(request, allowedRoles) {
     throw error;
   }
   return profile;
+}
+
+export async function visibleRequestIdsForClientProfile(profile) {
+  if (profile.role !== "client") return [];
+
+  const profileEmail = normalizeEmail(profile.email);
+  const primaryRequestIds = [];
+
+  if (profile.client_id) {
+    const client = await selectOne(
+      "clients",
+      `?select=primary_contact_email&id=eq.${encodeValue(profile.client_id)}&limit=1`
+    );
+    if (normalizeEmail(client?.primary_contact_email) === profileEmail) {
+      const requests = await supabaseAdminFetch(
+        tablePath("requests", `?select=id&client_id=eq.${encodeValue(profile.client_id)}`)
+      );
+      primaryRequestIds.push(...(requests || []).map((request) => request.id).filter(Boolean));
+    }
+  }
+
+  let taggedRequestIds = [];
+  try {
+    const taggedContacts = await supabaseAdminFetch(
+      tablePath("request_client_contacts", `?select=request_id&or=(profile_id.eq.${encodeValue(profile.id)},email.eq.${encodeValue(profileEmail)})`)
+    );
+    taggedRequestIds = (taggedContacts || []).map((contact) => contact.request_id).filter(Boolean);
+  } catch (error) {
+    if (!String(error.message || "").includes("request_client_contacts")) throw error;
+  }
+
+  return [...new Set([...primaryRequestIds, ...taggedRequestIds])];
 }
 
 export async function createAuthUser(email, fullName, password = process.env.DEFAULT_TEMP_PASSWORD || "RequestManagement@123") {

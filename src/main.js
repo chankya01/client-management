@@ -600,11 +600,24 @@ function clearMessageDraft(requestId) {
 }
 
 function clientDraftValue(field, fallback = "") {
-  return state.editingClientId ? fallback : (state.clientDraft[field] ?? fallback ?? "");
+  return state.clientDraft[field] ?? fallback ?? "";
 }
 
 function clearClientDraft() {
   state.clientDraft = {};
+}
+
+function hasClientDraft() {
+  const draft = state.clientDraft || {};
+  return Boolean(
+    String(draft.name || "").trim()
+    || String(draft.contactName || "").trim()
+    || String(draft.email || "").trim()
+    || String(draft.billingEmail || "").trim()
+    || (draft.status && draft.status !== "signed")
+    || String(draft.ccFullName || "").trim()
+    || String(draft.ccEmail || "").trim()
+  );
 }
 
 function requestDraftValue(field, fallback = "") {
@@ -805,7 +818,7 @@ async function boot() {
         if (routeClientId) state.selectedClientId = routeClientId;
         if (routeRequestId) await setActiveRequest(routeRequestId, { page: routePage });
       } else {
-        state.page = savedPage() || defaultPage();
+        state.page = defaultPage();
       }
       syncBrowserHistory({ replace: true });
     } else if (recoveryFlow) {
@@ -839,11 +852,11 @@ async function loadPortalData() {
     history
   ] = await Promise.all([
     loadRequests(),
-    isInternal() ? safeLoad("Request assignment loading", loadRequestAssignments, []) : Promise.resolve([]),
+    (isInternal() || state.profile?.role === "client") ? safeLoad("Request assignment loading", loadRequestAssignments, []) : Promise.resolve([]),
     (canAccessManagementPages() || state.profile?.role === "client") ? safeLoad("Request contact loading", loadRequestClientContacts, []) : Promise.resolve([]),
     canAccessManagementPages() ? safeLoad("Client contact loading", loadClientContacts, []) : Promise.resolve([]),
     isInternal() ? safeLoad("Client loading", loadClients, []) : Promise.resolve([]),
-    isInternal() ? safeLoad("Team loading", loadTeam, []) : Promise.resolve([]),
+    (isInternal() || state.profile?.role === "client") ? safeLoad("Team loading", loadTeam, []) : Promise.resolve([]),
     isInternal() ? safeLoad("History loading", loadClosedRequests, null) : Promise.resolve(null)
   ]);
   state.requestAssignments = requestAssignments;
@@ -1035,7 +1048,7 @@ async function completeSignIn(session) {
   render();
   await loadPortalData();
   state.loading = false;
-  state.page = savedPage() || defaultPage();
+  state.page = defaultPage();
   showToast(`Signed in to ${APP_NAME}.`);
   render();
 }
@@ -1344,6 +1357,8 @@ function clientStatusBar() {
 function adminClientsPage() {
   const editingClient = state.clients.find((client) => client.id === state.editingClientId);
   const clientStatus = editingClient?.status || clientDraftValue("status", "signed");
+  const showClientCancel = editingClient || hasClientDraft();
+  const editingClientContacts = editingClient ? organizationContacts(editingClient.id) : [];
   return `
     <section class="admin-page">
       <div class="admin-heading">
@@ -1361,15 +1376,29 @@ function adminClientsPage() {
           <label class="field"><span>Billing Email</span><input name="billingEmail" type="email" value="${escapeHtml(clientDraftValue("billingEmail", editingClient?.billing_email || ""))}" /></label>
           <label class="field"><span>Status</span><select name="status">${clientStatusOptions(clientStatus)}</select></label>
           <p class="section-label cc-contact-heading wide">Add CC Contact</p>
-          <label class="field"><span>Contact Name</span><input name="ccFullName" /></label>
-          <label class="field"><span>Email</span><input name="ccEmail" type="email" /></label>
+          <label class="field"><span>Contact Name</span><input name="ccFullName" value="${escapeHtml(clientDraftValue("ccFullName", ""))}" /></label>
+          <label class="field"><span>Email</span><input name="ccEmail" type="email" value="${escapeHtml(clientDraftValue("ccEmail", ""))}" /></label>
           <small class="helper wide">${editingClient ? `Optional: add one CC contact for ${escapeHtml(editingClient.name)} while updating this client.` : "Optional: add one CC contact while creating this client."} New contacts receive an account setup email.</small>
           <div class="form-actions wide client-form-actions">
             <button class="primary" type="submit">${editingClient ? "Update Client" : "Create Client"}</button>
-            ${editingClient ? `<button class="secondary" type="button" data-cancel-client-edit>Cancel Edit</button>` : ""}
+            <button class="secondary" type="button" data-cancel-client-edit ${showClientCancel ? "" : "hidden"}>${editingClient ? "Cancel Edit" : "Cancel"}</button>
           </div>
         </form>
       </section>
+      ${editingClient ? `
+        <section class="card">
+          <p class="section-label">CC Contacts</p>
+          <p class="helper">Saved CC contacts for ${escapeHtml(editingClient.name)}. You can add more than one CC contact.</p>
+          <div class="cc-contact-list existing-cc-contacts">
+            ${editingClientContacts.map((contact) => `
+              <div class="cc-contact-row">
+                <strong>${escapeHtml(contact.full_name || contact.email)}</strong>
+                <span>${escapeHtml(contact.email)}</span>
+              </div>
+            `).join("") || `<p class="helper">No CC contacts added for this organization yet.</p>`}
+          </div>
+        </section>
+      ` : ""}
       <section class="card">
         <p class="section-label">Client List</p>
         ${clientStatusBar()}
@@ -1741,6 +1770,7 @@ function messagesPage() {
       <div class="heading-accent">
         <h1>Messages</h1>
         <p class="subtitle message-subtitle">${escapeHtml(requestFromName)} · ${escapeHtml(requestTitle())}</p>
+        <p class="assigned-line">Team: ${escapeHtml(assignedPeopleText(state.activeRequest.id))}</p>
       </div>
       <div class="message-layout client-message-layout">
         ${clientMessageSidebar()}
@@ -1868,6 +1898,7 @@ function clientRequestPage() {
       <section class="card status-card">
         <p class="section-label green">Request Details</p>
         ${accountRow("Status", statusLabel(state.activeRequest.status))}
+        ${accountRow("Tagged Team", assignedPeopleText(state.activeRequest.id))}
         ${accountRow("Due Date", formatDate(state.activeRequest.due_date))}
         ${accountRow("Created", formatDate(state.activeRequest.created_at))}
         <p class="card-note">${escapeHtml(state.activeRequest.description || "No description added.")}</p>
@@ -1917,6 +1948,7 @@ function clientRequestCards(requests) {
         <time>${formatDate(request.due_date || request.closed_at || request.created_at)}</time>
         <span class="status-pill">${statusLabel(request.status)}</span>
       </div>
+      <p class="assigned-line">Team: ${escapeHtml(assignedPeopleText(request.id))}</p>
     </section>
   `).join("") || emptyCard("No Requests Yet", "Requests linked to this client account will appear here.");
 }
@@ -2219,7 +2251,7 @@ function attachEvents() {
       render();
       try {
         await withTimeout(loadPortalData(), "Account data loading");
-        state.page = savedPage() || defaultPage();
+        state.page = defaultPage();
       } catch (error) {
         await returnToSignInAfterLoadFailure(error, "Retry account loading");
         return;
@@ -2298,13 +2330,17 @@ function attachEvents() {
 
   const clientForm = document.getElementById("clientForm");
   if (clientForm) {
-    clientForm.addEventListener("input", (event) => {
-      if (state.editingClientId || !event.target?.name) return;
+    const saveClientDraft = (event) => {
+      if (!event.target?.name) return;
       state.clientDraft[event.target.name] = event.target.value;
+      const cancelButton = clientForm.querySelector("[data-cancel-client-edit]");
+      if (cancelButton && hasClientDraft()) cancelButton.hidden = false;
+    };
+    clientForm.addEventListener("input", (event) => {
+      saveClientDraft(event);
     });
     clientForm.addEventListener("change", (event) => {
-      if (state.editingClientId || !event.target?.name) return;
-      state.clientDraft[event.target.name] = event.target.value;
+      saveClientDraft(event);
     });
     clientForm.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -2332,6 +2368,7 @@ function attachEvents() {
             state.clientContacts = await loadClientContacts();
           }
           state.editingClientId = null;
+          clearClientDraft();
           showToast(ccEmail ? "Client updated and CC contact added." : "Client updated.");
         } else {
           const createdClient = await createClient(values);
@@ -2992,7 +3029,7 @@ onAuthStateChange((session, event) => {
       if (!hasExistingPortal) render();
       try {
         await withTimeout(loadPortalData(), "Account data loading");
-        state.page = savedPage() || defaultPage();
+        state.page = defaultPage();
       } catch (error) {
         await returnToSignInAfterLoadFailure(error, `${event || "Auth"} account loading`, {
           keepCurrentPortal: hasExistingPortal

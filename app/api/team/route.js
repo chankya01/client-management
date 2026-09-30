@@ -1,8 +1,10 @@
 import {
   apiJson,
+  currentProfile,
   createAuthUser,
   encodeValue,
   handleApiError,
+  inFilter,
   internalRoles,
   managementRoles,
   normalizeEmail,
@@ -11,7 +13,8 @@ import {
   sendAccountSetupEmail,
   supabaseAdminFetch,
   tablePath,
-  teamRoles
+  teamRoles,
+  visibleRequestIdsForClientProfile
 } from "../_supabaseAdmin.js";
 
 function teamSelect() {
@@ -40,9 +43,59 @@ function profilePayload(body, id) {
   };
 }
 
+async function assignmentProfileIdsForRequests(requestIds) {
+  if (!requestIds.length) return [];
+
+  try {
+    const assignments = await supabaseAdminFetch(
+      tablePath("request_assignments", `?select=profile_id,user_id&request_id=${inFilter(requestIds)}`)
+    );
+    return [...new Set((assignments || [])
+      .map((assignment) => assignment.profile_id || assignment.user_id)
+      .filter(Boolean))];
+  } catch (error) {
+    const message = String(error.message || "");
+    if (message.includes("profile_id")) {
+      const assignments = await supabaseAdminFetch(
+        tablePath("request_assignments", `?select=user_id&request_id=${inFilter(requestIds)}`)
+      );
+      return [...new Set((assignments || []).map((assignment) => assignment.user_id).filter(Boolean))];
+    }
+    if (message.includes("user_id")) {
+      const assignments = await supabaseAdminFetch(
+        tablePath("request_assignments", `?select=profile_id&request_id=${inFilter(requestIds)}`)
+      );
+      return [...new Set((assignments || []).map((assignment) => assignment.profile_id).filter(Boolean))];
+    }
+    throw error;
+  }
+}
+
 export async function GET(request) {
   try {
-    await requireProfileRole(request, internalRoles);
+    const profile = await currentProfile(request);
+    if (profile.role === "client") {
+      const requestIds = await visibleRequestIdsForClientProfile(profile);
+      if (!requestIds.length) return apiJson([]);
+
+      const profileIds = await assignmentProfileIdsForRequests(requestIds);
+      if (!profileIds.length) return apiJson([]);
+
+      const rows = await supabaseAdminFetch(
+        tablePath("profiles", `?select=id,full_name,role,job_title&role=neq.client&id=${inFilter(profileIds)}&order=full_name.asc`)
+      );
+      return apiJson((rows || []).map((member) => ({
+        ...member,
+        email: ""
+      })));
+    }
+
+    if (!internalRoles.has(profile.role)) {
+      const error = new Error("You do not have permission to view team members.");
+      error.status = 403;
+      throw error;
+    }
+
     const rows = await supabaseAdminFetch(
       tablePath("profiles", `?select=${teamSelect()}&role=neq.client&order=full_name.asc`)
     );
