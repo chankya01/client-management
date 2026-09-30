@@ -1321,7 +1321,6 @@ function adminClientsPage() {
           <button class="primary" type="submit">${editingClient ? "Update Client" : "Create Client"}</button>
           ${editingClient ? `<button class="secondary" type="button" data-cancel-client-edit>Cancel Edit</button>` : ""}
         </form>
-        <div class="form-divider wide"></div>
         <p class="section-label">Add CC Contact</p>
         <form class="admin-form" id="clientContactForm">
           ${editingClient

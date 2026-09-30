@@ -1288,13 +1288,6 @@ button:disabled,
   grid-column: 1 / -1;
 }
 
-.admin-form + .form-divider,
-.form-divider {
-  border-top: 2px solid var(--line);
-  grid-column: 1 / -1;
-  margin: 10px 0 4px;
-}
-
 .admin-form .primary {
   align-self: end;
   justify-self: start;
@@ -1496,6 +1489,10 @@ a {
 .timeline-step.done .timeline-dot,
 .timeline-step.current .timeline-dot {
   border-color: var(--green);
+}
+
+.message-request-list button.active {
+  border-color: var(--line);
 }
 
 .primary:hover {

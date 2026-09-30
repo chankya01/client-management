@@ -786,9 +786,9 @@ export async function addRequestClientContact(requestId, contact = {}) {
     });
   }
 
-  return appApi(`/request-client-contacts/${requestId}`, {
+  return appApi("/request-client-contact", {
     method: "POST",
-    body: JSON.stringify({ contact: normalizedContact })
+    body: JSON.stringify({ requestId, contact: normalizedContact })
   });
 }
 
