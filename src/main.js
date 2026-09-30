@@ -75,7 +75,7 @@ const state = {
 };
 
 const adminPages = ["admin-dashboard", "admin-clients", "admin-client-detail", "admin-requests", "admin-request-detail", "admin-messages", "admin-team", "admin-settings"];
-const clientPages = ["messages", "dashboard", "request", "account"];
+const clientPages = ["dashboard", "messages", "request", "account"];
 const managementRoles = ["owner", "project_manager"];
 const workRoles = ["developer", "reviewer", "assignee"];
 const internalRoles = [...managementRoles, ...workRoles];
@@ -828,17 +828,7 @@ async function boot() {
         return;
       }
       await withTimeout(loadPortalData(), "Account data loading");
-      const params = new URLSearchParams(window.location.search);
-      const routePage = params.get("page");
-      const routeRequestId = params.get("request");
-      const routeClientId = params.get("client");
-      if (routePage && pageIsAllowed(routePage)) {
-        state.page = routePage;
-        if (routeClientId) state.selectedClientId = routeClientId;
-        if (routeRequestId && pageUsesRequestParam(routePage)) await setActiveRequest(routeRequestId, { page: routePage });
-      } else {
-        state.page = defaultPage();
-      }
+      state.page = defaultPage();
       syncBrowserHistory({ replace: true });
     } else if (recoveryFlow) {
       state.authView = "reset-password";
@@ -2103,7 +2093,6 @@ function render() {
 
   if (state.profile?.must_change_password && state.page !== defaultPage()) state.page = defaultPage();
   if (!pageIsAllowed(state.page)) state.page = defaultPage();
-  rememberPage();
 
   const pageHtml = {
     messages: messagesPage,
@@ -3023,7 +3012,7 @@ function resetSessionState() {
   state.showPasswordForm = false;
   state.authView = "signin";
   state.loadError = "";
-  state.page = "messages";
+  state.page = "dashboard";
 }
 
 onAuthStateChange((session, event) => {
@@ -3056,6 +3045,7 @@ onAuthStateChange((session, event) => {
         } else {
           state.page = defaultPage();
         }
+        syncBrowserHistory({ replace: true });
       } catch (error) {
         await returnToSignInAfterLoadFailure(error, `${event || "Auth"} account loading`, {
           keepCurrentPortal: hasExistingPortal
@@ -3088,7 +3078,7 @@ window.addEventListener("popstate", async () => {
   const params = new URLSearchParams(window.location.search);
   const page = params.get("page") || defaultPage();
   const requestId = params.get("request");
-  if (!pageIsAllowed(page)) {
+  if (!pageIsAllowed(page) || (pageUsesRequestParam(page) && !requestId)) {
     await goToPage(defaultPage(), { replace: true, scroll: false });
     return;
   }
