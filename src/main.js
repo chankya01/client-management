@@ -674,6 +674,14 @@ function isConversationPage(page) {
   return page === "messages" || page === "admin-messages";
 }
 
+function pageNeedsMessages(page) {
+  return isConversationPage(page) || page === "admin-request-detail";
+}
+
+function pageNeedsDeliverables(page) {
+  return page === "request";
+}
+
 function rememberActiveRequest() {
   if (state.activeRequest?.id) {
     localStorage.setItem(LAST_REQUEST_KEY, state.activeRequest.id);
@@ -691,12 +699,19 @@ function markRequestRead(requestId) {
 }
 
 async function setActiveRequest(requestId, { page, markRead = false } = {}) {
+  const targetPage = page || state.page;
   state.activeRequest = state.requests.find((request) => request.id === requestId) || state.activeRequest || state.requests[0] || null;
   state.selectedRequestId = state.activeRequest?.id || null;
   rememberActiveRequest();
-  state.messages = state.activeRequest ? (state.messagesByRequest[state.activeRequest.id] || await loadMessages(state.activeRequest.id)) : [];
-  if (state.activeRequest) state.messagesByRequest[state.activeRequest.id] = state.messages;
-  state.deliverables = state.activeRequest ? await loadDeliverables(state.activeRequest.id) : [];
+  if (state.activeRequest && pageNeedsMessages(targetPage)) {
+    state.messages = state.messagesByRequest[state.activeRequest.id] || await loadMessages(state.activeRequest.id);
+    state.messagesByRequest[state.activeRequest.id] = state.messages;
+  } else {
+    state.messages = state.activeRequest ? (state.messagesByRequest[state.activeRequest.id] || []) : [];
+  }
+  state.deliverables = state.activeRequest && pageNeedsDeliverables(targetPage)
+    ? await loadDeliverables(state.activeRequest.id)
+    : [];
   if (markRead && state.activeRequest) markRequestRead(state.activeRequest.id);
   if (page) {
     state.page = page;
@@ -887,15 +902,9 @@ async function loadPortalData() {
   state.messagesByRequest = {};
 
   if (state.activeRequest) {
-    const [messages, deliverables] = await Promise.all([
-      safeLoad("Message loading", () => loadMessages(state.activeRequest.id), []),
-      safeLoad("Deliverable loading", () => loadDeliverables(state.activeRequest.id), [])
-    ]);
-    state.messages = messages;
-    state.messagesByRequest[state.activeRequest.id] = state.messages;
     calculateUnreadCounts();
-    state.messages = state.messagesByRequest[state.activeRequest.id] || [];
-    state.deliverables = deliverables;
+    state.messages = [];
+    state.deliverables = [];
   } else {
     state.messages = [];
     state.deliverables = [];
@@ -1943,10 +1952,12 @@ function clientRequestCards(requests) {
     <section class="card history-card clickable-row" data-client-open-request="${request.id}">
       <h2>${escapeHtml(request.title)} ${requestUnreadBadge(request.id)}</h2>
       <p>${escapeHtml(request.description || "Request linked to this client account.")}</p>
-      <div class="deliverable-row">
+      <div class="deliverable-row request-card-meta">
         <span>${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(request.service_type || "Accessibility Service")}</span>
-        <time>${formatDate(request.due_date || request.closed_at || request.created_at)}</time>
-        <span class="status-pill">${statusLabel(request.status)}</span>
+        <span class="request-card-status">
+          <time>${formatDate(request.due_date || request.closed_at || request.created_at)}</time>
+          <span class="status-pill">${statusLabel(request.status)}</span>
+        </span>
       </div>
       <p class="assigned-line">Team: ${escapeHtml(assignedPeopleText(request.id))}</p>
     </section>

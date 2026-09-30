@@ -917,6 +917,18 @@ h2 {
   font-weight: 800;
 }
 
+.history-card .request-card-meta {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.request-card-status {
+  align-items: center;
+  display: inline-flex;
+  gap: 14px;
+  justify-self: end;
+  white-space: nowrap;
+}
+
 .history-card .open-request-link {
   color: var(--green);
   font-weight: 700;
@@ -1412,6 +1424,18 @@ button:disabled,
   .deliverable-row time {
     grid-column: 1 / -1;
     color: var(--muted);
+  }
+
+  .history-card .request-card-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .history-card .request-card-meta time {
+    grid-column: auto;
+  }
+
+  .request-card-status {
+    justify-self: start;
   }
 
   .account-row {
