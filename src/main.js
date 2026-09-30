@@ -592,6 +592,17 @@ function requestUnreadBadge(requestId) {
   return count ? `<span class="count">${count}</span>` : "";
 }
 
+function downloadFromUrl(url, fileName = "download") {
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.rel = "noopener noreferrer";
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
 function messageDraftValue(requestId) {
   return escapeHtml(state.messageDrafts[requestId] || "");
 }
@@ -2873,7 +2884,7 @@ function attachEvents() {
       if (!deliverable?.files) return;
       try {
         const url = await createSignedDownload(deliverable.files);
-        window.open(url, "_blank", "noopener,noreferrer");
+        downloadFromUrl(url, deliverable.files.file_name || deliverable.title || "deliverable");
       } catch (error) {
         showAppError(error, "Download deliverable");
       }
@@ -2886,7 +2897,7 @@ function attachEvents() {
       if (!message?.attachment) return;
       try {
         const url = await createSignedDownload(message.attachment);
-        window.open(url, "_blank", "noopener,noreferrer");
+        downloadFromUrl(url, message.attachment.file_name || "attachment");
       } catch (error) {
         showAppError(error, "Download attachment");
       }
