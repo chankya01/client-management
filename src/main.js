@@ -1126,7 +1126,6 @@ function navHtml() {
           ${navButton("dashboard", "Dashboard")}
           ${navButton("messages", `Messages ${unreadCount ? `<span class="count">${unreadCount}</span>` : ""}`)}
           ${navButton("account", "Account")}
-          <button class="nav-logout" data-action="logout">Logout</button>
         </nav>
       </div>
     </header>
@@ -1629,6 +1628,7 @@ function adminRequestDetailPage() {
 function adminMessagesPage() {
   const request = state.activeRequest || state.requests[0];
   if (!request) return emptyCard("Messages", "Create a request first, then messages will appear here.");
+  const requestMessages = state.messages.filter((message) => message.request_id === request.id);
 
   return `
     <section class="admin-page">
@@ -1653,8 +1653,7 @@ function adminMessagesPage() {
           `).join("")}
         </aside>
         <section>
-          ${state.messages.map(messageCard).join("") || emptyMessage()}
-          <div data-message-end></div>
+          ${requestMessages.map(messageCard).join("") || emptyMessage()}
           <form class="card composer" id="internalMessageForm">
             <label class="section-label" for="internalMessageText">New Message</label>
             <textarea id="internalMessageText" name="message" data-message-draft="${request.id}" placeholder="Write a message to the client or project team">${messageDraftValue(request.id)}</textarea>
@@ -1673,6 +1672,7 @@ function adminMessagesPage() {
               <button class="primary" type="submit">Send Message</button>
             </div>
           </form>
+          <div data-message-end></div>
         </section>
       </div>
     </section>
@@ -1798,6 +1798,7 @@ function messagesPage() {
     return emptyCard("No Active Request", "Your portal is ready, but there are no active requests linked to this account yet.");
   }
   const requestFromName = organizationName();
+  const requestMessages = state.messages.filter((message) => message.request_id === state.activeRequest.id);
 
   return `
     <section class="page">
@@ -1806,12 +1807,11 @@ function messagesPage() {
         <p class="subtitle message-subtitle">${escapeHtml(requestFromName)} · ${escapeHtml(requestTitle())}</p>
         <p class="assigned-line">Team: ${escapeHtml(assignedPeopleText(state.activeRequest.id))}</p>
       </div>
-      <div class="message-layout client-message-layout">
-        ${clientMessageSidebar()}
+      ${clientRequestSwitcher()}
+      <div class="client-message-layout">
         <section>
           <div class="date-row conversation-row"><span>Conversation</span></div>
-          ${state.messages.map(messageCard).join("") || emptyMessage()}
-          <div data-message-end></div>
+          ${requestMessages.map(messageCard).join("") || emptyMessage()}
           <form class="card composer" id="messageForm">
             <label class="section-label" for="messageText">New Message</label>
             <textarea id="messageText" name="message" data-message-draft="${state.activeRequest.id}" placeholder="Write a message about ${escapeHtml(requestTitle())}">${messageDraftValue(state.activeRequest.id)}</textarea>
@@ -1829,6 +1829,7 @@ function messagesPage() {
               <button class="primary" type="submit">Send Message</button>
             </div>
           </form>
+          <div data-message-end></div>
         </section>
       </div>
     </section>
@@ -1885,27 +1886,19 @@ function attachmentCard(file) {
 function clientRequestSwitcher() {
   if (isInternal() || !state.requests.length) return "";
   return `
-    <aside class="card request-switcher message-request-list">
-      <p class="section-label">Requests</p>
-      ${state.requests.map((request) => `
-        <button type="button" class="${request.id === state.activeRequest?.id ? "active" : ""}" data-client-message-request="${request.id}">
-          <span>
-            <strong>${escapeHtml(displayRequestNumber(request))}</strong>
-            ${escapeHtml(request.title)}
-          </span>
-          ${requestUnreadBadge(request.id)}
-        </button>
-      `).join("")}
-    </aside>
-  `;
-}
-
-function clientMessageSidebar() {
-  if (isInternal()) return "";
-  return `
-    <aside class="client-message-sidebar">
-      ${clientRequestSwitcher()}
-    </aside>
+    <section class="card request-switcher client-request-select-card">
+      <label class="field" for="clientMessageRequestSelect">
+        <span>Request</span>
+        <select id="clientMessageRequestSelect" data-client-message-request-select>
+          ${state.requests.map((request) => `
+            <option value="${escapeHtml(request.id)}" ${request.id === state.activeRequest?.id ? "selected" : ""}>
+              ${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(request.title)}
+            </option>
+          `).join("")}
+        </select>
+      </label>
+      <p class="helper">Change request here to view another conversation.</p>
+    </section>
   `;
 }
 
@@ -2334,6 +2327,12 @@ function attachEvents() {
   document.querySelectorAll("[data-client-message-request]").forEach((button) => {
     button.addEventListener("click", async () => {
       await goToPage("messages", { requestId: button.dataset.clientMessageRequest });
+    });
+  });
+
+  document.querySelectorAll("[data-client-message-request-select]").forEach((select) => {
+    select.addEventListener("change", async () => {
+      await goToPage("messages", { requestId: select.value });
     });
   });
 

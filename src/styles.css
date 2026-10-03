@@ -311,6 +311,7 @@ h2 {
   width: min(100%, 610px);
   padding: 24px 28px;
   margin-bottom: 28px;
+  overflow: hidden;
 }
 
 .message-card.team { background: var(--panel); }
@@ -340,6 +341,12 @@ h2 {
 }
 
 .message-card p { margin: 0 0 8px; }
+
+.message-card,
+.message-card * {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 
 .message-text {
   margin-bottom: 8px;
@@ -530,6 +537,24 @@ h2 {
 .client-message-layout .request-switcher {
   margin: 0;
   padding: 18px;
+}
+
+.client-message-layout {
+  display: grid;
+  gap: 28px;
+  align-items: start;
+}
+
+.client-request-select-card {
+  margin: 0 0 24px;
+}
+
+.client-request-select-card .field {
+  margin: 0;
+}
+
+.client-request-select-card .helper {
+  margin: 10px 0 0;
 }
 
 .client-message-sidebar {
