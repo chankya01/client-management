@@ -37,3 +37,23 @@ The feature branch adds:
 - token-based public signing page
 - typed-name signature capture
 - signature recipient/event status tracking
+
+## 2026-10-04 — Signature preview routing and request-scoped documents
+
+- Branch: `feature-internal-signatures`
+- No SQL migration required.
+
+### What changed
+
+- Vercel/Next API routes now stay enabled in preview deployments. The local `/api/*` rewrite only runs when `LOCAL_API_PORT` is set for local proxy testing.
+- Signing links now use `/sign/<token>` instead of only `/?sign=<token>`. The old query-string link is still supported.
+- Documents are shown inside the related request details instead of listing every client/request document on the global Documents page.
+- Client navigation no longer shows a global Documents tab; clients open documents from the specific request.
+
+### Preview environment checklist
+
+For email delivery, configure these Vercel Preview environment variables and redeploy the preview:
+
+- `RESEND_API_KEY`
+- `NOTIFICATION_FROM` using a verified Resend sender/domain
+- `APP_URL` or `NEXT_PUBLIC_APP_URL` pointing to the preview or target app URL

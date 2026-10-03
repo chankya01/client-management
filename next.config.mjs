@@ -1,8 +1,9 @@
-const localApiPort = process.env.LOCAL_API_PORT || "8000";
+const localApiPort = process.env.LOCAL_API_PORT;
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   async rewrites() {
+    if (!localApiPort) return [];
     return [
       {
         source: "/api/:path*",

@@ -44,6 +44,14 @@ import {
 const root = document.getElementById("root");
 const APP_NAME = "Clients";
 
+function signatureTokenFromUrl() {
+  if (typeof window === "undefined") return "";
+  const queryToken = new URLSearchParams(window.location.search).get("sign");
+  if (queryToken) return queryToken;
+  const match = window.location.pathname.match(/^\/sign\/([^/]+)/);
+  return match ? decodeURIComponent(match[1]) : "";
+}
+
 const state = {
   session: null,
   profile: null,
@@ -61,7 +69,7 @@ const state = {
   requestClientContacts: [],
   signatureDocuments: [],
   publicSignature: null,
-  publicSignatureToken: new URLSearchParams(window.location.search).get("sign") || "",
+  publicSignatureToken: signatureTokenFromUrl(),
   messageDrafts: {},
   clientDraft: {},
   requestDraft: {},
@@ -84,7 +92,7 @@ const state = {
 };
 
 const adminPages = ["admin-dashboard", "admin-clients", "admin-client-detail", "admin-requests", "admin-request-detail", "admin-messages", "admin-documents", "admin-team", "admin-settings"];
-const clientPages = ["dashboard", "messages", "documents", "request", "account"];
+const clientPages = ["dashboard", "messages", "request", "account"];
 const managementRoles = ["owner", "project_manager"];
 const workRoles = ["developer", "reviewer", "assignee"];
 const internalRoles = [...managementRoles, ...workRoles];
@@ -1143,7 +1151,6 @@ function navHtml() {
         <nav class="nav" aria-label="Client portal">
           ${navButton("dashboard", "Dashboard")}
           ${navButton("messages", `Messages ${unreadCount ? `<span class="count">${unreadCount}</span>` : ""}`)}
-          ${navButton("documents", "Documents")}
           ${navButton("account", "Account")}
           <button class="nav-logout" data-action="logout">Logout</button>
         </nav>
@@ -1641,6 +1648,7 @@ function adminRequestDetailPage() {
           `).join("") || `<p class="helper">No Messages for This Request Yet.</p>`}
           <button class="primary conversation-button" type="button" data-open-request-messages="${request.id}">Open Conversation</button>
         </section>
+        ${requestSignatureDocumentsCard(request)}
       </div>
     </section>
   `;
@@ -1969,6 +1977,7 @@ function clientRequestPage() {
         <p class="section-label">Deliverables</p>
         ${state.deliverables.map(deliverableRow).join("") || `<p class="helper">No Deliverables Have Been Released Yet.</p>`}
       </section>
+      ${requestSignatureDocumentsCard(state.activeRequest)}
       <button class="primary" type="button" data-open-active-messages>Open Messages for This Request</button>
     </section>
   `;
@@ -2042,6 +2051,18 @@ function signatureDocumentCard(document) {
       <p class="section-label">Activity</p>
       <div class="signature-event-list">${signatureEventRows(document)}</div>
     </section>
+  `;
+}
+
+function requestSignatureDocumentsCard(request) {
+  const documents = documentsForRequest(request?.id);
+  return `
+    ${documents.map(signatureDocumentCard).join("") || `
+      <section class="card">
+        <p class="section-label">Documents</p>
+        <p class="helper">No documents have been sent for this request yet.</p>
+      </section>
+    `}
   `;
 }
 
@@ -2120,7 +2141,6 @@ function signatureDocumentsPage() {
   const initialClientId = draft.clientId || state.signatureClientSelection || "";
   const clientRequests = requestsForClient(initialClientId);
   const selectedRequest = clientRequests.find((request) => request.id === draft.requestId) || null;
-  const documents = state.signatureDocuments;
 
   return `
     <section class="${isInternal() ? "admin-page" : "page"}">
@@ -2164,7 +2184,10 @@ function signatureDocumentsPage() {
           <p class="helper">Use Needs Signature for agreements/SOWs. Use View Only for invoices or documents that only need to be shared.</p>
         </form>
       ` : ""}
-      ${documents.map(signatureDocumentCard).join("") || emptyCard("No Signature Documents Yet", "Documents sent for signature will appear here.")}
+      <section class="card">
+        <p class="section-label">Request Documents</p>
+        <p class="helper">Documents are shown inside their related request. Open a request to view its sent documents, recipients, signing links, and activity trail.</p>
+      </section>
     </section>
   `;
 }

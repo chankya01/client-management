@@ -40,6 +40,7 @@ async function requestIsVisible(profile, requestId) {
 function publicRecipient(recipient, profile, documentTitle, requestOrigin) {
   const isInternal = internalRoles.has(profile.role);
   const isOwnRecipient = normalizeEmail(recipient.email) === normalizeEmail(profile.email);
+  const signingUrl = `${requestOrigin}/sign/${recipient.signing_token}`;
   return {
     id: recipient.id,
     document_id: recipient.document_id,
@@ -50,9 +51,7 @@ function publicRecipient(recipient, profile, documentTitle, requestOrigin) {
     viewed_at: recipient.viewed_at,
     signed_at: recipient.signed_at,
     declined_at: recipient.declined_at,
-    signing_url: (isInternal || isOwnRecipient)
-      ? `${requestOrigin}/?sign=${recipient.signing_token}`
-      : null,
+    signing_url: (isInternal || isOwnRecipient) ? signingUrl : null,
     document_title: documentTitle
   };
 }
@@ -189,7 +188,7 @@ export async function POST(request) {
         email: recipient.email,
         name: recipient.name,
         documentTitle: document.title,
-        signingUrl: `${origin}/?sign=${recipient.signing_token}`,
+        signingUrl: `${origin}/sign/${recipient.signing_token}`,
         requiresSignature: requiresSignature && recipient.role === "signer"
       })
     )));
