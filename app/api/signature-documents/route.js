@@ -193,14 +193,28 @@ export async function POST(request) {
       })
     )));
 
+    let documentUrl = null;
+    try {
+      documentUrl = await createStorageSignedUrl(document.bucket_name, document.storage_path);
+    } catch {
+      documentUrl = null;
+    }
+
     let messageResult = { created: false };
     try {
+      const signingLinks = (recipientRows || [])
+        .map((recipient) => `${recipient.name || recipient.email}: ${origin}/sign/${recipient.signing_token}`)
+        .join("\n");
       await supabaseAdminFetch(tablePath("request_messages"), {
         method: "POST",
         body: JSON.stringify({
           request_id: requestId,
           sender_id: profile.id,
-          message: `${requiresSignature ? "Document sent for signature" : "Document shared"}: ${document.title || document.file_name || "Document"}`,
+          message: [
+            `${requiresSignature ? "Document sent for signature" : "Document shared"}: ${document.title || document.file_name || "Document"}`,
+            documentUrl ? `Open document: ${documentUrl}` : "",
+            signingLinks ? `Open signing link:\n${signingLinks}` : ""
+          ].filter(Boolean).join("\n\n"),
           is_internal: false
         })
       });
@@ -208,13 +222,6 @@ export async function POST(request) {
     } catch (messageError) {
       console.warn("[Clients] Signature document message entry failed", messageError);
       messageResult = { created: false, reason: messageError?.message || "Message entry could not be created." };
-    }
-
-    let documentUrl = null;
-    try {
-      documentUrl = await createStorageSignedUrl(document.bucket_name, document.storage_path);
-    } catch {
-      documentUrl = null;
     }
 
     return apiJson({

@@ -1566,16 +1566,46 @@ a {
 
 .request-documents-scroll {
   display: grid;
-  gap: 16px;
-  max-height: 620px;
+  gap: 10px;
+  max-height: 280px;
   overflow-y: auto;
   padding-right: 4px;
+}
+
+.signature-document-row {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 14px;
+  text-align: left;
+  width: 100%;
+}
+
+.signature-document-row:hover,
+.signature-document-row.active {
+  background: var(--panel);
+}
+
+.signature-document-row > span:first-child {
+  display: grid;
+  gap: 4px;
 }
 
 .signature-document-item {
   border: 1px solid var(--line);
   border-radius: 16px;
   padding: 16px;
+}
+
+.signature-document-detail-card {
+  margin-top: 18px;
 }
 
 .signature-document-header {

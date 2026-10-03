@@ -80,6 +80,7 @@ const state = {
   selectedClientId: null,
   requestClientSelection: null,
   signatureClientSelection: null,
+  selectedSignatureDocumentId: null,
   editingClientId: null,
   editingRequestId: null,
   editingTeamId: null,
@@ -92,7 +93,7 @@ const state = {
 };
 
 const adminPages = ["admin-dashboard", "admin-clients", "admin-client-detail", "admin-requests", "admin-request-detail", "admin-messages", "admin-documents", "admin-team", "admin-settings"];
-const clientPages = ["dashboard", "messages", "documents", "request", "account"];
+const clientPages = ["dashboard", "messages", "request", "account"];
 const managementRoles = ["owner", "project_manager"];
 const workRoles = ["developer", "reviewer", "assignee"];
 const internalRoles = [...managementRoles, ...workRoles];
@@ -1177,7 +1178,6 @@ function navHtml() {
         <nav class="nav" aria-label="Client portal">
           ${navButton("dashboard", "Dashboard")}
           ${navButton("messages", `Messages ${unreadCount ? `<span class="count">${unreadCount}</span>` : ""}`)}
-          ${navButton("documents", "Documents")}
           ${navButton("account", "Account")}
           <button class="nav-logout" data-action="logout">Logout</button>
         </nav>
@@ -1916,6 +1916,7 @@ function messageCard(message) {
 
 function formatMessageText(text) {
   return escapeHtml(text)
+    .replace(/(https?:\/\/[^\s<]+)/g, `<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>`)
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n")
     .replace(/\n/g, "<br />");
@@ -2061,7 +2062,7 @@ function signatureEventRows(document) {
 function signatureDocumentCard(document) {
   const request = state.requests.find((item) => item.id === document.request_id);
   return `
-    <article class="signature-document-item">
+    <article class="signature-document-item signature-document-detail-card">
       <div class="signature-document-header">
         <span>
           <strong>${escapeHtml(document.title || document.file_name || "Signature Document")}</strong>
@@ -2089,12 +2090,22 @@ function signatureDocumentCard(document) {
 
 function requestSignatureDocumentsCard(request) {
   const documents = documentsForRequest(request?.id);
+  const selectedDocument = documents.find((document) => document.id === state.selectedSignatureDocumentId);
   return `
     <section class="card request-documents-card">
-      <p class="section-label">Documents</p>
+      <p class="section-label">Attached Documents</p>
       <div class="request-documents-scroll">
-        ${documents.map(signatureDocumentCard).join("") || `<p class="helper">No documents have been sent for this request yet.</p>`}
+        ${documents.map((document) => `
+          <button class="signature-document-row ${selectedDocument?.id === document.id ? "active" : ""}" type="button" data-select-signature-document="${document.id}">
+            <span>
+              <strong>${escapeHtml(document.title || document.file_name || "Document")}</strong>
+              <small>${escapeHtml(document.file_name || "")}</small>
+            </span>
+            <span class="status-pill">${escapeHtml(signatureStatusLabel(document.status))}</span>
+          </button>
+        `).join("") || `<p class="helper">No documents have been sent for this request yet.</p>`}
       </div>
+      ${selectedDocument ? signatureDocumentCard(selectedDocument) : documents.length ? `<p class="helper">Select a document to view recipients, links, and activity.</p>` : ""}
     </section>
   `;
 }
@@ -2686,6 +2697,13 @@ function attachEvents() {
     card.addEventListener("click", async (event) => {
       if (event.target.closest("form, button, input, textarea, select, a")) return;
       await goToPage("request", { requestId: card.dataset.clientOpenRequest });
+    });
+  });
+
+  document.querySelectorAll("[data-select-signature-document]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.selectedSignatureDocumentId = button.dataset.selectSignatureDocument;
+      render();
     });
   });
 
@@ -3503,6 +3521,7 @@ function resetSessionState() {
   state.signatureDraft = {};
   state.pendingActions = new Set();
   state.selectedRequestId = null;
+  state.selectedSignatureDocumentId = null;
   state.requestClientSelection = null;
   state.signatureClientSelection = null;
   state.editingClientId = null;

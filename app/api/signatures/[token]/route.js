@@ -155,14 +155,15 @@ export async function POST(request, { params }) {
 
     if (payload.document.uploaded_by) {
       try {
+        const origin = new URL(request.url).origin;
         await supabaseAdminFetch(tablePath("request_messages"), {
           method: "POST",
           body: JSON.stringify({
             request_id: payload.document.request_id,
             sender_id: payload.document.uploaded_by,
             message: allSigned
-              ? `Document completed: ${payload.document.title || payload.document.file_name || "Document"}`
-              : `Document signed by ${payload.recipient.name || payload.recipient.email}: ${payload.document.title || payload.document.file_name || "Document"}`,
+              ? `Document completed: ${payload.document.title || payload.document.file_name || "Document"}\n\nOpen document: ${origin}/sign/${params.token}`
+              : `Document signed by ${payload.recipient.name || payload.recipient.email}: ${payload.document.title || payload.document.file_name || "Document"}\n\nOpen document: ${origin}/sign/${params.token}`,
             is_internal: false
           })
         });
