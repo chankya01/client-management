@@ -391,7 +391,7 @@ export async function sendRequestAccessEmail({ email, name, requestLabel }) {
   return { sent: true, id: payload?.id || null };
 }
 
-export async function sendSignatureRequestEmail({ email, name, documentTitle, signingUrl }) {
+export async function sendSignatureRequestEmail({ email, name, documentTitle, signingUrl, requiresSignature = true }) {
   const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail) return { sent: false, reason: "No email address was provided." };
   if (!resendApiKey) {
@@ -406,7 +406,11 @@ export async function sendSignatureRequestEmail({ email, name, documentTitle, si
   }
 
   const greeting = name ? `Hi ${name},` : "Hi,";
-  const text = `${greeting}\n\nYou have a document to review and sign in Clients: ${documentTitle || "Document"}.\n\nOpen your secure signing link:\n${signingUrl}\n\nIf you were not expecting this, you can ignore this email.`;
+  const actionText = requiresSignature
+    ? "You have a document to review and sign in Clients"
+    : "A document has been shared with you in Clients";
+  const linkText = requiresSignature ? "Open your secure signing link" : "Open your secure document link";
+  const text = `${greeting}\n\n${actionText}: ${documentTitle || "Document"}.\n\n${linkText}:\n${signingUrl}\n\nIf you were not expecting this, you can ignore this email.`;
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -416,7 +420,7 @@ export async function sendSignatureRequestEmail({ email, name, documentTitle, si
     body: JSON.stringify({
       from: notificationFrom,
       to: [normalizedEmail],
-      subject: `Signature requested: ${documentTitle || "Document"}`,
+      subject: requiresSignature ? `Signature requested: ${documentTitle || "Document"}` : `Document shared: ${documentTitle || "Document"}`,
       text
     })
   });

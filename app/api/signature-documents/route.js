@@ -104,6 +104,7 @@ export async function POST(request) {
 
     const body = await request.json();
     const requestId = body.requestId;
+    const requiresSignature = body.requiresSignature !== false;
     if (!requestId || !(await requestIsVisible(profile, requestId))) {
       return apiJson({ error: "This request is not available to your account." }, 403);
     }
@@ -112,7 +113,7 @@ export async function POST(request) {
       .map((recipient) => ({
         name: String(recipient.name || "").trim(),
         email: normalizeEmail(recipient.email),
-        role: recipient.role === "viewer" ? "viewer" : "signer"
+        role: requiresSignature ? (recipient.role === "viewer" ? "viewer" : "signer") : "viewer"
       }))
       .filter((recipient) => recipient.name && recipient.email);
 
@@ -157,7 +158,7 @@ export async function POST(request) {
       body: JSON.stringify({
         document_id: document.id,
         event_type: "sent",
-        event_note: `Sent by ${profile.full_name || profile.email || "Team Member"}`
+        event_note: `${requiresSignature ? "Sent for signature" : "Shared for viewing"} by ${profile.full_name || profile.email || "Team Member"}`
       })
     });
 
@@ -167,7 +168,8 @@ export async function POST(request) {
         email: recipient.email,
         name: recipient.name,
         documentTitle: document.title,
-        signingUrl: `${origin}/?sign=${recipient.signing_token}`
+        signingUrl: `${origin}/?sign=${recipient.signing_token}`,
+        requiresSignature: requiresSignature && recipient.role === "signer"
       })
     )));
 

@@ -1543,10 +1543,26 @@ a {
 
 .signature-recipient-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(160px, 220px) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(160px, 220px);
   gap: 16px;
   align-items: end;
   margin-bottom: 16px;
+}
+
+.signature-secondary-actions,
+.signature-primary-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.signature-secondary-actions {
+  justify-content: flex-start;
+}
+
+.signature-primary-actions {
+  justify-content: flex-end;
+  margin-top: 24px;
 }
 
 .signature-signing-shell {

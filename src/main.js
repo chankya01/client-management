@@ -70,6 +70,7 @@ const state = {
   selectedRequestId: null,
   selectedClientId: null,
   requestClientSelection: null,
+  signatureClientSelection: null,
   editingClientId: null,
   editingRequestId: null,
   editingTeamId: null,
@@ -2038,7 +2039,7 @@ function signatureRecipientDefaults(request) {
 function signatureRecipientInputs(request) {
   const defaults = signatureRecipientDefaults(request);
   const rows = defaults.length ? defaults : [{ name: "", email: "", role: "signer" }];
-  return rows.map((recipient, index) => `
+  return rows.map((recipient) => `
     <div class="signature-recipient-row">
       <label class="field"><span>Recipient Name</span><input name="recipientName" value="${escapeHtml(recipient.name || "")}" /></label>
       <label class="field"><span>Email</span><input name="recipientEmail" type="email" value="${escapeHtml(recipient.email || "")}" /></label>
@@ -2048,29 +2049,62 @@ function signatureRecipientInputs(request) {
           <option value="viewer" ${recipient.role === "viewer" ? "selected" : ""}>Viewer</option>
         </select>
       </label>
-      ${index === rows.length - 1 ? `<button class="secondary" type="button" data-action="add-signature-recipient">Add Recipient</button>` : ""}
     </div>
   `).join("");
 }
 
+function clientOptionsForDocuments() {
+  const clientIds = [...new Set(state.requests.map((request) => request.client_id).filter(Boolean))];
+  const clients = state.clients.filter((client) => clientIds.includes(client.id));
+  return clients.length
+    ? clients
+    : clientIds.map((clientId) => ({ id: clientId, name: clientName(clientId) }));
+}
+
+function requestsForClient(clientId) {
+  return state.requests.filter((request) => request.client_id === clientId);
+}
+
 function signatureDocumentsPage() {
-  const selectedRequest = state.activeRequest || state.requests[0] || null;
+  const clients = clientOptionsForDocuments();
+  const initialClientId = state.signatureClientSelection
+    || state.activeRequest?.client_id
+    || clients[0]?.id
+    || state.requests[0]?.client_id
+    || null;
+  const clientRequests = requestsForClient(initialClientId);
+  const selectedRequest = clientRequests.find((request) => request.id === state.activeRequest?.id)
+    || clientRequests[0]
+    || state.activeRequest
+    || state.requests[0]
+    || null;
   const documents = state.signatureDocuments;
 
   return `
     <section class="${isInternal() ? "admin-page" : "page"}">
       <h1>Documents</h1>
-      <p class="subtitle">Send documents for secure in-app signature and track recipient status.</p>
+      <p class="subtitle">Send documents for signature, or share view-only documents like invoices.</p>
       ${isInternal() ? `
         <form class="card" id="signatureDocumentForm">
-          <p class="section-label">Send for Signature</p>
+          <p class="section-label">Send Document</p>
           <div class="form-grid">
+            <label class="field"><span>Client</span>
+              <select name="clientId" data-signature-client-select required>
+                ${clients.map((client) => `<option value="${client.id}" ${client.id === initialClientId ? "selected" : ""}>${escapeHtml(client.name)}</option>`).join("")}
+              </select>
+            </label>
             <label class="field"><span>Request</span>
-              <select name="requestId" required>
-                ${state.requests.map((request) => `<option value="${request.id}" ${request.id === selectedRequest?.id ? "selected" : ""}>${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(request.title)}</option>`).join("")}
+              <select name="requestId" data-signature-request-select required>
+                ${clientRequests.map((request) => `<option value="${request.id}" ${request.id === selectedRequest?.id ? "selected" : ""}>${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(request.title)}</option>`).join("")}
               </select>
             </label>
             <label class="field"><span>Document Title</span><input name="title" placeholder="Service Agreement" /></label>
+            <label class="field"><span>Purpose</span>
+              <select name="documentPurpose">
+                <option value="signature">Needs Signature</option>
+                <option value="view">View Only / No Signature</option>
+              </select>
+            </label>
           </div>
           <label class="field"><span>PDF/DOCX Document</span><input id="signatureDocumentInput" name="document" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required /></label>
           <div class="selected-file-row" data-selected-file-for="signatureDocumentInput" hidden>
@@ -2079,8 +2113,13 @@ function signatureDocumentsPage() {
           </div>
           <p class="section-label">Recipients</p>
           <div data-signature-recipient-list>${signatureRecipientInputs(selectedRequest)}</div>
-          <button class="primary" type="submit">Send for Signature</button>
-          <p class="helper">Recipients receive a secure signing link by email when email is configured. Internal users can also copy/open signing links from the list below.</p>
+          <div class="signature-secondary-actions">
+            <button class="secondary" type="button" data-action="add-signature-recipient">Add Recipient</button>
+          </div>
+          <div class="signature-primary-actions">
+            <button class="primary" type="submit">Send Document</button>
+          </div>
+          <p class="helper">Use Needs Signature for agreements/SOWs. Use View Only for invoices or documents that only need to be shared.</p>
         </form>
       ` : ""}
       ${documents.map(signatureDocumentCard).join("") || emptyCard("No Signature Documents Yet", "Documents sent for signature will appear here.")}
@@ -2202,6 +2241,7 @@ function renderPublicSignature() {
     return;
   }
   const alreadySigned = payload.recipient?.status === "signed";
+  const canSign = payload.recipient?.role === "signer";
   root.innerHTML = `
     <main class="signin-shell signature-signing-shell">
       <section class="signin-card signature-signing-card">
@@ -2218,7 +2258,12 @@ function renderPublicSignature() {
             </div>
           `).join("")}
         </section>
-        ${alreadySigned ? `
+        ${!canSign ? `
+          <section class="card">
+            <h2>Document Shared</h2>
+            <p class="helper">This document is view-only. No signature is required from you.</p>
+          </section>
+        ` : alreadySigned ? `
           <section class="card">
             <h2>Already Signed</h2>
             <p class="helper">This document has already been signed by you.</p>
@@ -2555,6 +2600,24 @@ function attachEvents() {
     });
   });
 
+  const signatureClientSelect = document.querySelector("[data-signature-client-select]");
+  if (signatureClientSelect) {
+    signatureClientSelect.addEventListener("change", (event) => {
+      state.signatureClientSelection = event.currentTarget.value;
+      state.activeRequest = requestsForClient(state.signatureClientSelection)[0] || state.activeRequest;
+      render();
+    });
+  }
+
+  const signatureRequestSelect = document.querySelector("[data-signature-request-select]");
+  if (signatureRequestSelect) {
+    signatureRequestSelect.addEventListener("change", (event) => {
+      state.activeRequest = state.requests.find((request) => request.id === event.currentTarget.value) || state.activeRequest;
+      state.signatureClientSelection = state.activeRequest?.client_id || state.signatureClientSelection;
+      render();
+    });
+  }
+
   document.querySelectorAll("[data-action='add-signature-recipient']").forEach((button) => {
     button.addEventListener("click", () => {
       const list = button.closest("form")?.querySelector("[data-signature-recipient-list]");
@@ -2586,10 +2649,11 @@ function attachEvents() {
       const names = formData.getAll("recipientName").map(String);
       const emails = formData.getAll("recipientEmail").map(String);
       const roles = formData.getAll("recipientRole").map(String);
+      const requiresSignature = formData.get("documentPurpose") !== "view";
       const recipients = emails.map((email, index) => ({
         name: names[index],
         email,
-        role: roles[index] || "signer"
+        role: requiresSignature ? (roles[index] || "signer") : "viewer"
       })).filter((recipient) => recipient.name && recipient.email);
 
       if (!request) {
@@ -2612,11 +2676,12 @@ function attachEvents() {
             profile: state.profile,
             file,
             title: formData.get("title") || file.name,
-            recipients
+            recipients,
+            requiresSignature
           });
           state.signatureDocuments = await loadSignatureDocuments();
           form.reset();
-          showToast("Document sent for signature.");
+          showToast(requiresSignature ? "Document sent for signature." : "Document sent for viewing.");
           render();
         } catch (error) {
           showAppError(error, "Send for signature");
@@ -3301,6 +3366,7 @@ function resetSessionState() {
   state.pendingActions = new Set();
   state.selectedRequestId = null;
   state.requestClientSelection = null;
+  state.signatureClientSelection = null;
   state.editingClientId = null;
   state.editingRequestId = null;
   state.editingTeamId = null;

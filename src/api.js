@@ -1565,7 +1565,7 @@ export async function loadSignatureDocuments() {
   return appApi("/signature-documents");
 }
 
-export async function createSignatureDocument({ request, profile, file, recipients = [], title }) {
+export async function createSignatureDocument({ request, profile, file, recipients = [], title, requiresSignature = true }) {
   if (useDemo()) {
     const document = {
       id: crypto.randomUUID(),
@@ -1582,7 +1582,7 @@ export async function createSignatureDocument({ request, profile, file, recipien
         id: crypto.randomUUID(),
         name: recipient.name,
         email: recipient.email,
-        role: recipient.role || "signer",
+        role: requiresSignature ? (recipient.role || "signer") : "viewer",
         status: "sent",
         signing_url: `${window.location.origin}/?sign=demo-${crypto.randomUUID()}`
       }))
@@ -1611,7 +1611,8 @@ export async function createSignatureDocument({ request, profile, file, recipien
       fileName: file.name,
       mimeType: file.type || null,
       fileSize: file.size,
-      recipients
+      recipients,
+      requiresSignature
     })
   });
 }
