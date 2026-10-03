@@ -1219,6 +1219,15 @@ button:disabled,
   margin-top: 16px;
 }
 
+.conversation-summary-row span {
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
 .section-heading-row {
   align-items: center;
   display: flex;
@@ -1234,6 +1243,9 @@ button:disabled,
 
 .request-detail-stack {
   grid-template-columns: 1fr;
+  margin-inline: auto;
+  max-width: 980px;
+  width: 100%;
 }
 
 .message-layout {
@@ -1577,8 +1589,8 @@ a {
 
 .request-documents-scroll {
   display: grid;
-  gap: 10px;
-  max-height: 280px;
+  gap: 8px;
+  max-height: 240px;
   overflow-y: auto;
   padding-right: 4px;
 }
@@ -1587,14 +1599,14 @@ a {
   align-items: center;
   background: transparent;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 12px;
   color: inherit;
   cursor: pointer;
   display: flex;
   font: inherit;
   gap: 16px;
   justify-content: space-between;
-  padding: 14px;
+  padding: 10px 12px;
   text-align: left;
   width: 100%;
 }
@@ -1617,6 +1629,10 @@ a {
 
 .signature-document-detail-card {
   margin-top: 18px;
+}
+
+.collapse-document-detail {
+  min-width: 44px;
 }
 
 .signature-document-header {

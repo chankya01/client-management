@@ -81,7 +81,6 @@ const state = {
   requestClientSelection: null,
   signatureClientSelection: null,
   selectedSignatureDocumentId: null,
-  collapsedDocumentRequestIds: new Set(),
   editingClientId: null,
   editingRequestId: null,
   editingTeamId: null,
@@ -1669,9 +1668,9 @@ function adminRequestDetailPage() {
           <p class="section-label">Conversation Summary</p>
           <p class="helper">Showing the latest 4 messages. Open the full conversation to see everything.</p>
           ${requestMessages.slice(-4).map((message) => `
-            <div class="list-row">
+            <div class="list-row conversation-summary-row">
               <strong>${escapeHtml(message.profiles?.full_name || "User")}</strong>
-              <span>${escapeHtml(message.message)}</span>
+              <span>${escapeHtml(messageSummaryText(message))}</span>
             </div>
           `).join("") || `<p class="helper">No Messages for This Request Yet.</p>`}
           <button class="primary conversation-button" type="button" data-open-request-messages="${request.id}">Open Conversation</button>
@@ -1915,6 +1914,14 @@ function messageCard(message) {
   `;
 }
 
+function messageSummaryText(message) {
+  const text = String(message?.message || "")
+    .replace(/https?:\/\/\S+/g, "[link]")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text.length > 180 ? `${text.slice(0, 177)}...` : text;
+}
+
 function formatMessageText(text) {
   return escapeHtml(text)
     .replace(/(https?:\/\/[^\s<]+)/g, `<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>`)
@@ -2073,6 +2080,7 @@ function signatureDocumentCard(document) {
         <span class="signature-document-actions">
           ${document.document_url ? `<a class="secondary small-action" href="${escapeHtml(document.document_url)}" target="_blank" rel="noopener noreferrer">Open Document</a>` : ""}
           <span class="status-pill">${escapeHtml(signatureStatusLabel(document.status))}</span>
+          <button class="secondary small-action collapse-document-detail" type="button" data-close-signature-document aria-label="Close document details">⌃</button>
         </span>
       </div>
       <div class="signature-document-detail-grid">
@@ -2092,27 +2100,23 @@ function signatureDocumentCard(document) {
 function requestSignatureDocumentsCard(request) {
   const documents = documentsForRequest(request?.id);
   const selectedDocument = documents.find((document) => document.id === state.selectedSignatureDocumentId);
-  const isCollapsed = request?.id && state.collapsedDocumentRequestIds.has(request.id);
   return `
     <section class="card request-documents-card">
       <div class="section-heading-row">
         <p class="section-label">Attached Documents</p>
-        <button class="secondary small-action" type="button" data-toggle-request-documents="${escapeHtml(request?.id || "")}">${isCollapsed ? "Show" : "Close"}</button>
       </div>
-      ${isCollapsed ? `<p class="helper">Document list is collapsed.</p>` : `
-        <div class="request-documents-scroll">
-          ${documents.map((document) => `
-            <button class="signature-document-row ${selectedDocument?.id === document.id ? "active" : ""}" type="button" data-select-signature-document="${document.id}">
-              <span>
-                <strong>${escapeHtml(document.title || document.file_name || "Document")}</strong>
-                <small>${escapeHtml(document.file_name || "")}</small>
-              </span>
-              <span class="status-pill">${escapeHtml(signatureStatusLabel(document.status))}</span>
-            </button>
-          `).join("") || `<p class="helper">No documents have been sent for this request yet.</p>`}
-        </div>
-        ${selectedDocument ? signatureDocumentCard(selectedDocument) : documents.length ? `<p class="helper">Select a document to view recipients, links, and activity.</p>` : ""}
-      `}
+      <div class="request-documents-scroll">
+        ${documents.map((document) => `
+          <button class="signature-document-row ${selectedDocument?.id === document.id ? "active" : ""}" type="button" data-select-signature-document="${document.id}">
+            <span>
+              <strong>${escapeHtml(document.title || document.file_name || "Document")}</strong>
+              <small>${escapeHtml(document.file_name || "")}</small>
+            </span>
+            <span class="status-pill">${escapeHtml(signatureStatusLabel(document.status))}</span>
+          </button>
+        `).join("") || `<p class="helper">No documents have been sent for this request yet.</p>`}
+      </div>
+      ${selectedDocument ? signatureDocumentCard(selectedDocument) : documents.length ? `<p class="helper">Select a document to view recipients, links, and activity.</p>` : ""}
     </section>
   `;
 }
@@ -2714,17 +2718,9 @@ function attachEvents() {
     });
   });
 
-  document.querySelectorAll("[data-toggle-request-documents]").forEach((button) => {
+  document.querySelectorAll("[data-close-signature-document]").forEach((button) => {
     button.addEventListener("click", () => {
-      const requestId = button.dataset.toggleRequestDocuments;
-      if (!requestId) return;
-      if (state.collapsedDocumentRequestIds.has(requestId)) {
-        state.collapsedDocumentRequestIds.delete(requestId);
-      } else {
-        state.collapsedDocumentRequestIds.add(requestId);
-        const selectedDocument = state.signatureDocuments.find((document) => document.id === state.selectedSignatureDocumentId);
-        if (selectedDocument?.request_id === requestId) state.selectedSignatureDocumentId = null;
-      }
+      state.selectedSignatureDocumentId = null;
       render();
     });
   });
@@ -3544,7 +3540,6 @@ function resetSessionState() {
   state.pendingActions = new Set();
   state.selectedRequestId = null;
   state.selectedSignatureDocumentId = null;
-  state.collapsedDocumentRequestIds = new Set();
   state.requestClientSelection = null;
   state.signatureClientSelection = null;
   state.editingClientId = null;
