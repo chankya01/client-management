@@ -2080,7 +2080,6 @@ function signatureDocumentCard(document) {
         <span class="signature-document-actions">
           ${document.document_url ? `<a class="secondary small-action" href="${escapeHtml(document.document_url)}" target="_blank" rel="noopener noreferrer">Open Document</a>` : ""}
           <span class="status-pill">${escapeHtml(signatureStatusLabel(document.status))}</span>
-          <button class="secondary small-action collapse-document-detail" type="button" data-close-signature-document aria-label="Close document details">⌃</button>
         </span>
       </div>
       <div class="signature-document-detail-grid">
@@ -2112,7 +2111,10 @@ function requestSignatureDocumentsCard(request) {
               <strong>${escapeHtml(document.title || document.file_name || "Document")}</strong>
               <small>${escapeHtml(document.file_name || "")}</small>
             </span>
-            <span class="status-pill">${escapeHtml(signatureStatusLabel(document.status))}</span>
+            <span class="signature-document-row-actions">
+              <span class="status-pill">${escapeHtml(signatureStatusLabel(document.status))}</span>
+              ${selectedDocument?.id === document.id ? `<span class="collapse-document-detail" aria-hidden="true">⌃</span>` : ""}
+            </span>
           </button>
         `).join("") || `<p class="helper">No documents have been sent for this request yet.</p>`}
       </div>
@@ -2713,14 +2715,9 @@ function attachEvents() {
 
   document.querySelectorAll("[data-select-signature-document]").forEach((button) => {
     button.addEventListener("click", () => {
-      state.selectedSignatureDocumentId = button.dataset.selectSignatureDocument;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-close-signature-document]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.selectedSignatureDocumentId = null;
+      state.selectedSignatureDocumentId = state.selectedSignatureDocumentId === button.dataset.selectSignatureDocument
+        ? null
+        : button.dataset.selectSignatureDocument;
       render();
     });
   });

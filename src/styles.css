@@ -1621,6 +1621,12 @@ a {
   gap: 4px;
 }
 
+.signature-document-row-actions {
+  align-items: center;
+  display: inline-flex;
+  gap: 10px;
+}
+
 .signature-document-item {
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -1632,7 +1638,10 @@ a {
 }
 
 .collapse-document-detail {
-  min-width: 44px;
+  color: var(--green);
+  font-size: 1.2rem;
+  font-weight: 900;
+  line-height: 1;
 }
 
 .signature-document-header {

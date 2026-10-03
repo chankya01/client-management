@@ -2,6 +2,17 @@
 
 These are known issues to fix later. Do not treat this list as implementation instructions for the current task.
 
+## Backlog / Future Enhancements
+
+1. Email bridge for clients who do not want to use the portal
+   - Some clients may prefer to communicate only through email instead of logging into the platform.
+   - Future feature idea:
+     - inbound email from the client is captured and added as a request message in the platform;
+     - replies/messages sent from the platform are also emailed back to that client;
+     - attachments from email should be saved against the related request;
+     - each email thread should map safely to the correct request and client.
+   - Security/privacy note: inbound routing must verify sender identity and request mapping so one client can never access or write into another client’s request.
+
 ## Addressed in code, needs stage verification
 
 1. Admin login/session persistence
