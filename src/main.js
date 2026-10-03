@@ -66,6 +66,7 @@ const state = {
   clientDraft: {},
   requestDraft: {},
   ccContactDrafts: {},
+  signatureDraft: {},
   pendingActions: new Set(),
   selectedRequestId: null,
   selectedClientId: null,
@@ -2036,8 +2037,38 @@ function signatureRecipientDefaults(request) {
   return [...primary, ...ccContacts].filter((recipient) => recipient.email);
 }
 
-function signatureRecipientInputs(request) {
+function signatureDraftFromForm(form) {
+  const formData = new FormData(form);
+  const names = formData.getAll("recipientName").map(String);
+  const emails = formData.getAll("recipientEmail").map(String);
+  const roles = formData.getAll("recipientRole").map(String);
+
+  state.signatureDraft = {
+    clientId: String(formData.get("clientId") || ""),
+    requestId: String(formData.get("requestId") || ""),
+    title: String(formData.get("title") || ""),
+    documentPurpose: String(formData.get("documentPurpose") || "signature"),
+    recipients: names.map((name, index) => ({
+      name,
+      email: emails[index] || "",
+      role: roles[index] || "signer"
+    }))
+  };
+}
+
+function setSignatureDraftRecipientsForRequest(request) {
   const defaults = signatureRecipientDefaults(request);
+  state.signatureDraft = {
+    ...state.signatureDraft,
+    clientId: request?.client_id || state.signatureDraft.clientId || "",
+    requestId: request?.id || state.signatureDraft.requestId || "",
+    recipients: defaults.length ? defaults : [{ name: "", email: "", role: "signer" }]
+  };
+}
+
+function signatureRecipientInputs(request) {
+  const draftRecipients = Array.isArray(state.signatureDraft.recipients) ? state.signatureDraft.recipients : [];
+  const defaults = draftRecipients.length ? draftRecipients : signatureRecipientDefaults(request);
   const rows = defaults.length ? defaults : [{ name: "", email: "", role: "signer" }];
   return rows.map((recipient) => `
     <div class="signature-recipient-row">
@@ -2067,13 +2098,16 @@ function requestsForClient(clientId) {
 
 function signatureDocumentsPage() {
   const clients = clientOptionsForDocuments();
-  const initialClientId = state.signatureClientSelection
+  const draft = state.signatureDraft || {};
+  const initialClientId = draft.clientId
+    || state.signatureClientSelection
     || state.activeRequest?.client_id
     || clients[0]?.id
     || state.requests[0]?.client_id
     || null;
   const clientRequests = requestsForClient(initialClientId);
-  const selectedRequest = clientRequests.find((request) => request.id === state.activeRequest?.id)
+  const selectedRequest = clientRequests.find((request) => request.id === draft.requestId)
+    || clientRequests.find((request) => request.id === state.activeRequest?.id)
     || clientRequests[0]
     || state.activeRequest
     || state.requests[0]
@@ -2098,11 +2132,11 @@ function signatureDocumentsPage() {
                 ${clientRequests.map((request) => `<option value="${request.id}" ${request.id === selectedRequest?.id ? "selected" : ""}>${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(request.title)}</option>`).join("")}
               </select>
             </label>
-            <label class="field"><span>Document Title</span><input name="title" placeholder="Service Agreement" /></label>
+            <label class="field"><span>Document Title</span><input name="title" placeholder="Service Agreement" value="${escapeHtml(draft.title || "")}" /></label>
             <label class="field"><span>Purpose</span>
               <select name="documentPurpose">
-                <option value="signature">Needs Signature</option>
-                <option value="view">View Only / No Signature</option>
+                <option value="signature" ${(draft.documentPurpose || "signature") !== "view" ? "selected" : ""}>Needs Signature</option>
+                <option value="view" ${draft.documentPurpose === "view" ? "selected" : ""}>View Only / No Signature</option>
               </select>
             </label>
           </div>
@@ -2113,10 +2147,8 @@ function signatureDocumentsPage() {
           </div>
           <p class="section-label">Recipients</p>
           <div data-signature-recipient-list>${signatureRecipientInputs(selectedRequest)}</div>
-          <div class="signature-secondary-actions">
+          <div class="signature-form-actions">
             <button class="secondary" type="button" data-action="add-signature-recipient">Add Recipient</button>
-          </div>
-          <div class="signature-primary-actions">
             <button class="primary" type="submit">Send Document</button>
           </div>
           <p class="helper">Use Needs Signature for agreements/SOWs. Use View Only for invoices or documents that only need to be shared.</p>
@@ -2603,8 +2635,11 @@ function attachEvents() {
   const signatureClientSelect = document.querySelector("[data-signature-client-select]");
   if (signatureClientSelect) {
     signatureClientSelect.addEventListener("change", (event) => {
+      const form = event.currentTarget.closest("form");
+      if (form) signatureDraftFromForm(form);
       state.signatureClientSelection = event.currentTarget.value;
       state.activeRequest = requestsForClient(state.signatureClientSelection)[0] || state.activeRequest;
+      setSignatureDraftRecipientsForRequest(state.activeRequest);
       render();
     });
   }
@@ -2612,15 +2647,20 @@ function attachEvents() {
   const signatureRequestSelect = document.querySelector("[data-signature-request-select]");
   if (signatureRequestSelect) {
     signatureRequestSelect.addEventListener("change", (event) => {
+      const form = event.currentTarget.closest("form");
+      if (form) signatureDraftFromForm(form);
       state.activeRequest = state.requests.find((request) => request.id === event.currentTarget.value) || state.activeRequest;
       state.signatureClientSelection = state.activeRequest?.client_id || state.signatureClientSelection;
+      setSignatureDraftRecipientsForRequest(state.activeRequest);
       render();
     });
   }
 
   document.querySelectorAll("[data-action='add-signature-recipient']").forEach((button) => {
     button.addEventListener("click", () => {
-      const list = button.closest("form")?.querySelector("[data-signature-recipient-list]");
+      const form = button.closest("form");
+      if (form) signatureDraftFromForm(form);
+      const list = form?.querySelector("[data-signature-recipient-list]");
       if (!list) return;
       const row = document.createElement("div");
       row.className = "signature-recipient-row";
@@ -2635,14 +2675,23 @@ function attachEvents() {
         </label>
       `;
       list.appendChild(row);
+      signatureDraftFromForm(form);
     });
   });
 
   const signatureDocumentForm = document.getElementById("signatureDocumentForm");
   if (signatureDocumentForm) {
+    signatureDocumentForm.addEventListener("input", () => {
+      signatureDraftFromForm(signatureDocumentForm);
+    });
+    signatureDocumentForm.addEventListener("change", (event) => {
+      if (event.target?.type === "file") return;
+      signatureDraftFromForm(signatureDocumentForm);
+    });
     signatureDocumentForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const form = event.currentTarget;
+      signatureDraftFromForm(form);
       const formData = new FormData(form);
       const request = state.requests.find((item) => item.id === formData.get("requestId"));
       const file = formData.get("document");
@@ -2680,6 +2729,7 @@ function attachEvents() {
             requiresSignature
           });
           state.signatureDocuments = await loadSignatureDocuments();
+          state.signatureDraft = {};
           form.reset();
           showToast(requiresSignature ? "Document sent for signature." : "Document sent for viewing.");
           render();
@@ -3363,6 +3413,7 @@ function resetSessionState() {
   state.clientDraft = {};
   state.requestDraft = {};
   state.ccContactDrafts = {};
+  state.signatureDraft = {};
   state.pendingActions = new Set();
   state.selectedRequestId = null;
   state.requestClientSelection = null;

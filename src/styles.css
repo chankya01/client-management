@@ -1549,19 +1549,11 @@ a {
   margin-bottom: 16px;
 }
 
-.signature-secondary-actions,
-.signature-primary-actions {
+.signature-form-actions {
   display: flex;
+  justify-content: space-between;
+  align-items: center;
   gap: 12px;
-  margin-top: 12px;
-}
-
-.signature-secondary-actions {
-  justify-content: flex-start;
-}
-
-.signature-primary-actions {
-  justify-content: flex-end;
   margin-top: 24px;
 }
 
@@ -1582,5 +1574,10 @@ a {
 @media (max-width: 900px) {
   .signature-recipient-row {
     grid-template-columns: 1fr;
+  }
+
+  .signature-form-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
