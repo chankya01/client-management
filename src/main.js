@@ -2009,6 +2009,19 @@ function signatureRecipientRows(document) {
   `).join("") || `<p class="helper">No recipients added.</p>`;
 }
 
+function signatureEventRows(document) {
+  const events = document.events || [];
+  return events.map((event) => `
+    <div class="signature-event-row">
+      <span>
+        <strong>${escapeHtml(signatureStatusLabel(event.event_type))}</strong>
+        <small>${escapeHtml(event.event_note || "")}</small>
+      </span>
+      <time>${formatTime(event.created_at)}</time>
+    </div>
+  `).join("") || `<p class="helper">No activity yet.</p>`;
+}
+
 function signatureDocumentCard(document) {
   const request = state.requests.find((item) => item.id === document.request_id);
   return `
@@ -2019,10 +2032,15 @@ function signatureDocumentCard(document) {
           <small>${escapeHtml(request ? `${displayRequestNumber(request)} · ${request.title}` : "Request document")}</small>
           <small>${escapeHtml(document.file_name || "")}</small>
         </span>
-        <span class="status-pill">${escapeHtml(signatureStatusLabel(document.status))}</span>
+        <span class="signature-document-actions">
+          ${document.document_url ? `<a class="secondary small-action" href="${escapeHtml(document.document_url)}" target="_blank" rel="noopener noreferrer">Open Document</a>` : ""}
+          <span class="status-pill">${escapeHtml(signatureStatusLabel(document.status))}</span>
+        </span>
       </div>
       <p class="section-label">Recipients</p>
       ${signatureRecipientRows(document)}
+      <p class="section-label">Activity</p>
+      <div class="signature-event-list">${signatureEventRows(document)}</div>
     </section>
   `;
 }
@@ -2061,7 +2079,7 @@ function setSignatureDraftRecipientsForRequest(request) {
   state.signatureDraft = {
     ...state.signatureDraft,
     clientId: request?.client_id || state.signatureDraft.clientId || "",
-    requestId: request?.id || state.signatureDraft.requestId || "",
+    requestId: request?.id || "",
     recipients: defaults.length ? defaults : [{ name: "", email: "", role: "signer" }]
   };
 }
@@ -2099,19 +2117,9 @@ function requestsForClient(clientId) {
 function signatureDocumentsPage() {
   const clients = clientOptionsForDocuments();
   const draft = state.signatureDraft || {};
-  const initialClientId = draft.clientId
-    || state.signatureClientSelection
-    || state.activeRequest?.client_id
-    || clients[0]?.id
-    || state.requests[0]?.client_id
-    || null;
+  const initialClientId = draft.clientId || state.signatureClientSelection || "";
   const clientRequests = requestsForClient(initialClientId);
-  const selectedRequest = clientRequests.find((request) => request.id === draft.requestId)
-    || clientRequests.find((request) => request.id === state.activeRequest?.id)
-    || clientRequests[0]
-    || state.activeRequest
-    || state.requests[0]
-    || null;
+  const selectedRequest = clientRequests.find((request) => request.id === draft.requestId) || null;
   const documents = state.signatureDocuments;
 
   return `
@@ -2124,11 +2132,13 @@ function signatureDocumentsPage() {
           <div class="form-grid">
             <label class="field"><span>Client</span>
               <select name="clientId" data-signature-client-select required>
+                <option value="">Select Client</option>
                 ${clients.map((client) => `<option value="${client.id}" ${client.id === initialClientId ? "selected" : ""}>${escapeHtml(client.name)}</option>`).join("")}
               </select>
             </label>
             <label class="field"><span>Request</span>
-              <select name="requestId" data-signature-request-select required>
+              <select name="requestId" data-signature-request-select required ${initialClientId ? "" : "disabled"}>
+                <option value="">Select Request</option>
                 ${clientRequests.map((request) => `<option value="${request.id}" ${request.id === selectedRequest?.id ? "selected" : ""}>${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(request.title)}</option>`).join("")}
               </select>
             </label>
@@ -2638,8 +2648,12 @@ function attachEvents() {
       const form = event.currentTarget.closest("form");
       if (form) signatureDraftFromForm(form);
       state.signatureClientSelection = event.currentTarget.value;
-      state.activeRequest = requestsForClient(state.signatureClientSelection)[0] || state.activeRequest;
-      setSignatureDraftRecipientsForRequest(state.activeRequest);
+      state.signatureDraft = {
+        ...state.signatureDraft,
+        clientId: state.signatureClientSelection,
+        requestId: "",
+        recipients: [{ name: "", email: "", role: "signer" }]
+      };
       render();
     });
   }
@@ -2651,7 +2665,7 @@ function attachEvents() {
       if (form) signatureDraftFromForm(form);
       state.activeRequest = state.requests.find((request) => request.id === event.currentTarget.value) || state.activeRequest;
       state.signatureClientSelection = state.activeRequest?.client_id || state.signatureClientSelection;
-      setSignatureDraftRecipientsForRequest(state.activeRequest);
+      if (event.currentTarget.value) setSignatureDraftRecipientsForRequest(state.activeRequest);
       render();
     });
   }
@@ -2720,7 +2734,7 @@ function attachEvents() {
 
       await withActionLock("signature-document-form", form, async () => {
         try {
-          await createSignatureDocument({
+          const createdDocument = await createSignatureDocument({
             request,
             profile: state.profile,
             file,
@@ -2729,9 +2743,16 @@ function attachEvents() {
             requiresSignature
           });
           state.signatureDocuments = await loadSignatureDocuments();
+          state.messagesByRequest[request.id] = await loadMessages(request.id);
+          if (state.activeRequest?.id === request.id) state.messages = state.messagesByRequest[request.id];
           state.signatureDraft = {};
           form.reset();
-          showToast(requiresSignature ? "Document sent for signature." : "Document sent for viewing.");
+          const failedEmail = (createdDocument.email_results || []).find((result) => result && result.sent === false);
+          const messageWarning = createdDocument.message_result?.created === false ? " Message entry was not created." : "";
+          showToast(failedEmail
+            ? `Document saved, but email was not sent: ${failedEmail.reason || "email service failed."}${messageWarning}`
+            : `${requiresSignature ? "Document sent for signature." : "Document sent for viewing."}${messageWarning}`
+          );
           render();
         } catch (error) {
           showAppError(error, "Send for signature");

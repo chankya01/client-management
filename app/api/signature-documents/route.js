@@ -77,11 +77,32 @@ async function documentsForProfile(profile, origin) {
     recipientsByDocument.set(recipient.document_id, list);
   });
 
-  return documents.map((document) => ({
-    ...document,
-    recipients: (recipientsByDocument.get(document.id) || []).map((recipient) => (
-      publicRecipient(recipient, profile, document.title, origin)
-    ))
+  const events = await supabaseAdminFetch(
+    tablePath("signature_events", `?select=*&document_id=${inFilter(documentIds)}&order=created_at.asc`)
+  );
+  const eventsByDocument = new Map();
+  (events || []).forEach((event) => {
+    const list = eventsByDocument.get(event.document_id) || [];
+    list.push(event);
+    eventsByDocument.set(event.document_id, list);
+  });
+
+  return Promise.all(documents.map(async (document) => {
+    let documentUrl = null;
+    try {
+      documentUrl = await createStorageSignedUrl(document.bucket_name, document.storage_path);
+    } catch {
+      documentUrl = null;
+    }
+
+    return {
+      ...document,
+      document_url: documentUrl,
+      recipients: (recipientsByDocument.get(document.id) || []).map((recipient) => (
+        publicRecipient(recipient, profile, document.title, origin)
+      )),
+      events: eventsByDocument.get(document.id) || []
+    };
   }));
 }
 
@@ -173,6 +194,23 @@ export async function POST(request) {
       })
     )));
 
+    let messageResult = { created: false };
+    try {
+      await supabaseAdminFetch(tablePath("request_messages"), {
+        method: "POST",
+        body: JSON.stringify({
+          request_id: requestId,
+          sender_id: profile.id,
+          message: `${requiresSignature ? "Document sent for signature" : "Document shared"}: ${document.title || document.file_name || "Document"}`,
+          is_internal: false
+        })
+      });
+      messageResult = { created: true };
+    } catch (messageError) {
+      console.warn("[Clients] Signature document message entry failed", messageError);
+      messageResult = { created: false, reason: messageError?.message || "Message entry could not be created." };
+    }
+
     let documentUrl = null;
     try {
       documentUrl = await createStorageSignedUrl(document.bucket_name, document.storage_path);
@@ -184,7 +222,8 @@ export async function POST(request) {
       ...document,
       document_url: documentUrl,
       recipients: (recipientRows || []).map((recipient) => publicRecipient(recipient, profile, document.title, origin)),
-      email_results: emailResults
+      email_results: emailResults,
+      message_result: messageResult
     }, 201);
   } catch (error) {
     return handleApiError(error);

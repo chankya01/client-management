@@ -51,6 +51,14 @@ export async function GET(_request, { params }) {
         method: "PATCH",
         body: JSON.stringify({ status: "viewed", viewed_at: now })
       });
+      if (payload.document.status === "sent") {
+        await supabaseAdminFetch(tablePath("signature_documents", `?id=eq.${encodeValue(payload.document.id)}`), {
+          method: "PATCH",
+          body: JSON.stringify({ status: "viewed", updated_at: now })
+        });
+        payload.document.status = "viewed";
+        payload.document.updated_at = now;
+      }
       await supabaseAdminFetch(tablePath("signature_events"), {
         method: "POST",
         body: JSON.stringify({
@@ -143,6 +151,24 @@ export async function POST(request, { params }) {
           event_note: "All recipients signed the document."
         })
       });
+    }
+
+    if (payload.document.uploaded_by) {
+      try {
+        await supabaseAdminFetch(tablePath("request_messages"), {
+          method: "POST",
+          body: JSON.stringify({
+            request_id: payload.document.request_id,
+            sender_id: payload.document.uploaded_by,
+            message: allSigned
+              ? `Document completed: ${payload.document.title || payload.document.file_name || "Document"}`
+              : `Document signed by ${payload.recipient.name || payload.recipient.email}: ${payload.document.title || payload.document.file_name || "Document"}`,
+            is_internal: false
+          })
+        });
+      } catch (messageError) {
+        console.warn("[Clients] Signature completion message entry failed", messageError);
+      }
     }
 
     return apiJson({ signed: true, completed: allSigned });

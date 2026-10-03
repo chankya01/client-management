@@ -1557,6 +1557,38 @@ a {
   margin-top: 24px;
 }
 
+.signature-document-actions {
+  align-items: center;
+  display: inline-flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.signature-event-list {
+  display: grid;
+  gap: 10px;
+}
+
+.signature-event-row {
+  align-items: flex-start;
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding-top: 10px;
+}
+
+.signature-event-row span {
+  display: grid;
+  gap: 4px;
+}
+
+.signature-event-row time {
+  color: var(--muted);
+  flex: 0 0 auto;
+  font-size: 0.9rem;
+}
+
 .signature-signing-shell {
   align-items: flex-start;
   padding-top: 40px;
@@ -1578,6 +1610,12 @@ a {
 
   .signature-form-actions {
     align-items: stretch;
+    flex-direction: column;
+  }
+
+  .signature-document-actions,
+  .signature-event-row {
+    align-items: flex-start;
     flex-direction: column;
   }
 }
