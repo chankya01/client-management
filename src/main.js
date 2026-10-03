@@ -1653,7 +1653,7 @@ function adminRequestDetailPage() {
           ${canDelete() ? `<button class="danger-button" data-delete-request="${request.id}">Delete Request</button>` : ""}
         </div>
       </div>
-      <div class="detail-grid">
+      <div class="detail-grid request-detail-stack">
         <section class="card">
           <p class="section-label">Request Details</p>
           ${accountRow("Client", clientName(request.client_id))}

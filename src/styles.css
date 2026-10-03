@@ -1225,6 +1225,10 @@ button:disabled,
   gap: 20px;
 }
 
+.request-detail-stack {
+  grid-template-columns: 1fr;
+}
+
 .message-layout {
   display: grid;
   grid-template-columns: 280px 1fr;
@@ -1623,7 +1627,7 @@ a {
 .signature-document-detail-grid {
   display: grid;
   gap: 18px;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: 1fr;
   margin-top: 16px;
 }
 
