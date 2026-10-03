@@ -1219,6 +1219,13 @@ button:disabled,
   margin-top: 16px;
 }
 
+.section-heading-row {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .detail-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

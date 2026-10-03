@@ -202,19 +202,12 @@ export async function POST(request) {
 
     let messageResult = { created: false };
     try {
-      const signingLinks = (recipientRows || [])
-        .map((recipient) => `${recipient.name || recipient.email}: ${origin}/sign/${recipient.signing_token}`)
-        .join("\n");
       await supabaseAdminFetch(tablePath("request_messages"), {
         method: "POST",
         body: JSON.stringify({
           request_id: requestId,
           sender_id: profile.id,
-          message: [
-            `${requiresSignature ? "Document sent for signature" : "Document shared"}: ${document.title || document.file_name || "Document"}`,
-            documentUrl ? `Open document: ${documentUrl}` : "",
-            signingLinks ? `Open signing link:\n${signingLinks}` : ""
-          ].filter(Boolean).join("\n\n"),
+          message: `${requiresSignature ? "Document sent for signature" : "Document shared"}: ${document.title || document.file_name || "Document"}. Recipients received their private link by email.`,
           is_internal: false
         })
       });

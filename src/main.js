@@ -81,6 +81,7 @@ const state = {
   requestClientSelection: null,
   signatureClientSelection: null,
   selectedSignatureDocumentId: null,
+  collapsedDocumentRequestIds: new Set(),
   editingClientId: null,
   editingRequestId: null,
   editingTeamId: null,
@@ -2039,7 +2040,7 @@ function signatureRecipientRows(document) {
       <span>
         ${escapeHtml(recipient.name || recipient.email)}
         <small>${escapeHtml(recipient.email)} · ${escapeHtml(signatureStatusLabel(recipient.status))}</small>
-        ${recipient.signing_url ? `<small><a href="${escapeHtml(recipient.signing_url)}" target="_blank" rel="noopener noreferrer">Open signing link</a></small>` : ""}
+        ${isInternal() && recipient.signing_url ? `<small><a href="${escapeHtml(recipient.signing_url)}" target="_blank" rel="noopener noreferrer">Open signing link</a></small>` : ""}
       </span>
       <span class="status-pill">${escapeHtml(signatureStatusLabel(recipient.status))}</span>
     </div>
@@ -2091,21 +2092,27 @@ function signatureDocumentCard(document) {
 function requestSignatureDocumentsCard(request) {
   const documents = documentsForRequest(request?.id);
   const selectedDocument = documents.find((document) => document.id === state.selectedSignatureDocumentId);
+  const isCollapsed = request?.id && state.collapsedDocumentRequestIds.has(request.id);
   return `
     <section class="card request-documents-card">
-      <p class="section-label">Attached Documents</p>
-      <div class="request-documents-scroll">
-        ${documents.map((document) => `
-          <button class="signature-document-row ${selectedDocument?.id === document.id ? "active" : ""}" type="button" data-select-signature-document="${document.id}">
-            <span>
-              <strong>${escapeHtml(document.title || document.file_name || "Document")}</strong>
-              <small>${escapeHtml(document.file_name || "")}</small>
-            </span>
-            <span class="status-pill">${escapeHtml(signatureStatusLabel(document.status))}</span>
-          </button>
-        `).join("") || `<p class="helper">No documents have been sent for this request yet.</p>`}
+      <div class="section-heading-row">
+        <p class="section-label">Attached Documents</p>
+        <button class="secondary small-action" type="button" data-toggle-request-documents="${escapeHtml(request?.id || "")}">${isCollapsed ? "Show" : "Close"}</button>
       </div>
-      ${selectedDocument ? signatureDocumentCard(selectedDocument) : documents.length ? `<p class="helper">Select a document to view recipients, links, and activity.</p>` : ""}
+      ${isCollapsed ? `<p class="helper">Document list is collapsed.</p>` : `
+        <div class="request-documents-scroll">
+          ${documents.map((document) => `
+            <button class="signature-document-row ${selectedDocument?.id === document.id ? "active" : ""}" type="button" data-select-signature-document="${document.id}">
+              <span>
+                <strong>${escapeHtml(document.title || document.file_name || "Document")}</strong>
+                <small>${escapeHtml(document.file_name || "")}</small>
+              </span>
+              <span class="status-pill">${escapeHtml(signatureStatusLabel(document.status))}</span>
+            </button>
+          `).join("") || `<p class="helper">No documents have been sent for this request yet.</p>`}
+        </div>
+        ${selectedDocument ? signatureDocumentCard(selectedDocument) : documents.length ? `<p class="helper">Select a document to view recipients, links, and activity.</p>` : ""}
+      `}
     </section>
   `;
 }
@@ -2703,6 +2710,21 @@ function attachEvents() {
   document.querySelectorAll("[data-select-signature-document]").forEach((button) => {
     button.addEventListener("click", () => {
       state.selectedSignatureDocumentId = button.dataset.selectSignatureDocument;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-toggle-request-documents]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const requestId = button.dataset.toggleRequestDocuments;
+      if (!requestId) return;
+      if (state.collapsedDocumentRequestIds.has(requestId)) {
+        state.collapsedDocumentRequestIds.delete(requestId);
+      } else {
+        state.collapsedDocumentRequestIds.add(requestId);
+        const selectedDocument = state.signatureDocuments.find((document) => document.id === state.selectedSignatureDocumentId);
+        if (selectedDocument?.request_id === requestId) state.selectedSignatureDocumentId = null;
+      }
       render();
     });
   });
@@ -3522,6 +3544,7 @@ function resetSessionState() {
   state.pendingActions = new Set();
   state.selectedRequestId = null;
   state.selectedSignatureDocumentId = null;
+  state.collapsedDocumentRequestIds = new Set();
   state.requestClientSelection = null;
   state.signatureClientSelection = null;
   state.editingClientId = null;
