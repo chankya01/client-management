@@ -92,7 +92,7 @@ const state = {
 };
 
 const adminPages = ["admin-dashboard", "admin-clients", "admin-client-detail", "admin-requests", "admin-request-detail", "admin-messages", "admin-documents", "admin-team", "admin-settings"];
-const clientPages = ["dashboard", "messages", "request", "account"];
+const clientPages = ["dashboard", "messages", "documents", "request", "account"];
 const managementRoles = ["owner", "project_manager"];
 const workRoles = ["developer", "reviewer", "assignee"];
 const internalRoles = [...managementRoles, ...workRoles];
@@ -400,6 +400,32 @@ function savedPage() {
   if (state.profile?.must_change_password) return null;
   const page = localStorage.getItem(LAST_PAGE_KEY);
   return page && pageIsAllowed(page) ? page : null;
+}
+
+function routePage() {
+  if (typeof window === "undefined" || state.profile?.must_change_password) return null;
+  const page = new URLSearchParams(window.location.search).get("page");
+  return page && pageIsAllowed(page) ? page : null;
+}
+
+function routeRequestId() {
+  if (typeof window === "undefined") return "";
+  return new URLSearchParams(window.location.search).get("request") || "";
+}
+
+async function restorePageAfterPortalLoad({ fallbackToCurrent = false } = {}) {
+  const page = routePage()
+    || (fallbackToCurrent && pageIsAllowed(state.page) ? state.page : null)
+    || savedPage()
+    || defaultPage();
+  const requestId = routeRequestId() || state.activeRequest?.id;
+
+  if (requestId && pageUsesRequestParam(page)) {
+    await setActiveRequest(requestId, { page, markRead: false });
+  } else {
+    state.page = page;
+    rememberPage();
+  }
 }
 
 function rememberPage() {
@@ -881,7 +907,7 @@ async function boot() {
         return;
       }
       await withTimeout(loadPortalData(), "Account data loading");
-      state.page = defaultPage();
+      await restorePageAfterPortalLoad();
       syncBrowserHistory({ replace: true });
     } else if (recoveryFlow) {
       state.authView = "reset-password";
@@ -1151,6 +1177,7 @@ function navHtml() {
         <nav class="nav" aria-label="Client portal">
           ${navButton("dashboard", "Dashboard")}
           ${navButton("messages", `Messages ${unreadCount ? `<span class="count">${unreadCount}</span>` : ""}`)}
+          ${navButton("documents", "Documents")}
           ${navButton("account", "Account")}
           <button class="nav-logout" data-action="logout">Logout</button>
         </nav>
@@ -2034,8 +2061,8 @@ function signatureEventRows(document) {
 function signatureDocumentCard(document) {
   const request = state.requests.find((item) => item.id === document.request_id);
   return `
-    <section class="card">
-      <div class="deliverable-row">
+    <article class="signature-document-item">
+      <div class="signature-document-header">
         <span>
           <strong>${escapeHtml(document.title || document.file_name || "Signature Document")}</strong>
           <small>${escapeHtml(request ? `${displayRequestNumber(request)} · ${request.title}` : "Request document")}</small>
@@ -2046,23 +2073,29 @@ function signatureDocumentCard(document) {
           <span class="status-pill">${escapeHtml(signatureStatusLabel(document.status))}</span>
         </span>
       </div>
-      <p class="section-label">Recipients</p>
-      ${signatureRecipientRows(document)}
-      <p class="section-label">Activity</p>
-      <div class="signature-event-list">${signatureEventRows(document)}</div>
-    </section>
+      <div class="signature-document-detail-grid">
+        <div>
+          <p class="section-label">Recipients</p>
+          ${signatureRecipientRows(document)}
+        </div>
+        <div>
+          <p class="section-label">Activity</p>
+          <div class="signature-event-list">${signatureEventRows(document)}</div>
+        </div>
+      </div>
+    </article>
   `;
 }
 
 function requestSignatureDocumentsCard(request) {
   const documents = documentsForRequest(request?.id);
   return `
-    ${documents.map(signatureDocumentCard).join("") || `
-      <section class="card">
-        <p class="section-label">Documents</p>
-        <p class="helper">No documents have been sent for this request yet.</p>
-      </section>
-    `}
+    <section class="card request-documents-card">
+      <p class="section-label">Documents</p>
+      <div class="request-documents-scroll">
+        ${documents.map(signatureDocumentCard).join("") || `<p class="helper">No documents have been sent for this request yet.</p>`}
+      </div>
+    </section>
   `;
 }
 
@@ -2136,6 +2169,16 @@ function requestsForClient(clientId) {
 }
 
 function signatureDocumentsPage() {
+  if (!isInternal()) {
+    return `
+      <section class="page">
+        <h1>Documents</h1>
+        <p class="subtitle">Documents are attached to each request. Open a request to view its documents and signing status.</p>
+        ${clientRequestCards(state.requests)}
+      </section>
+    `;
+  }
+
   const clients = clientOptionsForDocuments();
   const draft = state.signatureDraft || {};
   const initialClientId = draft.clientId || state.signatureClientSelection || "";
@@ -2590,7 +2633,7 @@ function attachEvents() {
       render();
       try {
         await withTimeout(loadPortalData(), "Account data loading");
-        state.page = defaultPage();
+        await restorePageAfterPortalLoad({ fallbackToCurrent: true });
       } catch (error) {
         await returnToSignInAfterLoadFailure(error, "Retry account loading");
         return;
@@ -3511,7 +3554,7 @@ onAuthStateChange((session, event) => {
             state.selectedRequestId = state.activeRequest?.id || null;
           }
         } else {
-          state.page = defaultPage();
+          await restorePageAfterPortalLoad();
         }
         syncBrowserHistory({ replace: true });
       } catch (error) {

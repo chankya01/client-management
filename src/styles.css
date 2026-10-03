@@ -1564,6 +1564,39 @@ a {
   justify-content: flex-end;
 }
 
+.request-documents-scroll {
+  display: grid;
+  gap: 16px;
+  max-height: 620px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.signature-document-item {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.signature-document-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.signature-document-header > span:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.signature-document-detail-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  margin-top: 16px;
+}
+
 .signature-event-list {
   display: grid;
   gap: 10px;
@@ -1614,8 +1647,13 @@ a {
   }
 
   .signature-document-actions,
+  .signature-document-header,
   .signature-event-row {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .signature-document-detail-grid {
+    grid-template-columns: 1fr;
   }
 }
