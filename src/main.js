@@ -6,6 +6,7 @@ import {
   createMessage,
   createRequest,
   createSignedDownload,
+  createSignatureDocument,
   createTeamMember,
   deleteClient,
   deleteRequest,
@@ -21,12 +22,15 @@ import {
   loadRequestAssignments,
   loadRequestClientContacts,
   loadRequests,
+  loadSignatureByToken,
+  loadSignatureDocuments,
   loadTeam,
   onAuthStateChange,
   sendMagicLink,
   sendPasswordReset,
   setRequestClientContacts,
   setRequestAssignments,
+  signSignatureRecipient,
   signInWithPassword,
   signOut,
   updateClient,
@@ -55,6 +59,9 @@ const state = {
   team: [],
   requestAssignments: [],
   requestClientContacts: [],
+  signatureDocuments: [],
+  publicSignature: null,
+  publicSignatureToken: new URLSearchParams(window.location.search).get("sign") || "",
   messageDrafts: {},
   clientDraft: {},
   requestDraft: {},
@@ -74,12 +81,12 @@ const state = {
   toast: ""
 };
 
-const adminPages = ["admin-dashboard", "admin-clients", "admin-client-detail", "admin-requests", "admin-request-detail", "admin-messages", "admin-team", "admin-settings"];
-const clientPages = ["dashboard", "messages", "request", "account"];
+const adminPages = ["admin-dashboard", "admin-clients", "admin-client-detail", "admin-requests", "admin-request-detail", "admin-messages", "admin-documents", "admin-team", "admin-settings"];
+const clientPages = ["dashboard", "messages", "documents", "request", "account"];
 const managementRoles = ["owner", "project_manager"];
 const workRoles = ["developer", "reviewer", "assignee"];
 const internalRoles = [...managementRoles, ...workRoles];
-const workPortalPages = ["admin-dashboard", "admin-requests", "admin-request-detail", "admin-messages", "admin-team", "admin-settings"];
+const workPortalPages = ["admin-dashboard", "admin-requests", "admin-request-detail", "admin-messages", "admin-documents", "admin-team", "admin-settings"];
 const LOAD_TIMEOUT_MS = 20000;
 const MESSAGE_POLL_MS = 8000;
 const UNREAD_POLL_MS = 30000;
@@ -847,6 +854,12 @@ async function boot() {
   const generation = ++loadGeneration;
   const recoveryFlow = isPasswordRecoveryFlow();
   try {
+    if (state.publicSignatureToken) {
+      state.publicSignature = await withTimeout(loadSignatureByToken(state.publicSignatureToken), "Signature document loading");
+      state.loading = false;
+      render();
+      return;
+    }
     state.session = recoveryFlow
       ? await withTimeout(completePasswordRecoverySession(), "Password reset session")
       : await withTimeout(getSession(), "Session check");
@@ -888,7 +901,8 @@ async function loadPortalData() {
     clientContacts,
     clients,
     team,
-    history
+    history,
+    signatureDocuments
   ] = await Promise.all([
     loadRequests(),
     (isInternal() || state.profile?.role === "client") ? safeLoad("Request assignment loading", loadRequestAssignments, []) : Promise.resolve([]),
@@ -896,11 +910,13 @@ async function loadPortalData() {
     canAccessManagementPages() ? safeLoad("Client contact loading", loadClientContacts, []) : Promise.resolve([]),
     isInternal() ? safeLoad("Client loading", loadClients, []) : Promise.resolve([]),
     (isInternal() || state.profile?.role === "client") ? safeLoad("Team loading", loadTeam, []) : Promise.resolve([]),
-    isInternal() ? safeLoad("History loading", loadClosedRequests, null) : Promise.resolve(null)
+    isInternal() ? safeLoad("History loading", loadClosedRequests, null) : Promise.resolve(null),
+    safeLoad("Signature document loading", loadSignatureDocuments, [])
   ]);
   state.requestAssignments = requestAssignments;
   state.requestClientContacts = requestClientContacts;
   state.clientContacts = clientContacts;
+  state.signatureDocuments = signatureDocuments;
   if (isInternal() && !canAccessManagementPages()) {
     state.requests = loadedRequests.filter((request) => state.requestAssignments.some((assignment) => (
       assignment.request_id === request.id && assignment.profile_id === state.profile.id
@@ -1125,6 +1141,7 @@ function navHtml() {
         <nav class="nav" aria-label="Client portal">
           ${navButton("dashboard", "Dashboard")}
           ${navButton("messages", `Messages ${unreadCount ? `<span class="count">${unreadCount}</span>` : ""}`)}
+          ${navButton("documents", "Documents")}
           ${navButton("account", "Account")}
           <button class="nav-logout" data-action="logout">Logout</button>
         </nav>
@@ -1144,6 +1161,7 @@ function adminNavHtml() {
           ${canManage ? navButton("admin-clients", "Clients") : ""}
           ${navButton("admin-requests", "Requests")}
           ${navButton("admin-messages", `Messages ${totalUnreadCount() ? `<span class="count">${totalUnreadCount()}</span>` : ""}`)}
+          ${navButton("admin-documents", "Documents")}
           ${navButton("admin-team", "Team")}
           ${navButton("admin-settings", "Settings")}
           <button class="nav-logout" data-action="logout">Logout</button>
@@ -1965,6 +1983,111 @@ function deliverableRow(deliverable) {
   `;
 }
 
+function signatureStatusLabel(status) {
+  return String(status || "sent")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function documentsForRequest(requestId) {
+  return state.signatureDocuments.filter((document) => document.request_id === requestId);
+}
+
+function signatureRecipientRows(document) {
+  const recipients = document.recipients || [];
+  return recipients.map((recipient) => `
+    <div class="deliverable-row">
+      <span>
+        ${escapeHtml(recipient.name || recipient.email)}
+        <small>${escapeHtml(recipient.email)} · ${escapeHtml(signatureStatusLabel(recipient.status))}</small>
+        ${recipient.signing_url ? `<small><a href="${escapeHtml(recipient.signing_url)}" target="_blank" rel="noopener noreferrer">Open signing link</a></small>` : ""}
+      </span>
+      <span class="status-pill">${escapeHtml(signatureStatusLabel(recipient.status))}</span>
+    </div>
+  `).join("") || `<p class="helper">No recipients added.</p>`;
+}
+
+function signatureDocumentCard(document) {
+  const request = state.requests.find((item) => item.id === document.request_id);
+  return `
+    <section class="card">
+      <div class="deliverable-row">
+        <span>
+          <strong>${escapeHtml(document.title || document.file_name || "Signature Document")}</strong>
+          <small>${escapeHtml(request ? `${displayRequestNumber(request)} · ${request.title}` : "Request document")}</small>
+          <small>${escapeHtml(document.file_name || "")}</small>
+        </span>
+        <span class="status-pill">${escapeHtml(signatureStatusLabel(document.status))}</span>
+      </div>
+      <p class="section-label">Recipients</p>
+      ${signatureRecipientRows(document)}
+    </section>
+  `;
+}
+
+function signatureRecipientDefaults(request) {
+  const client = state.clients.find((item) => item.id === request?.client_id);
+  const primary = client?.primary_contact_email
+    ? [{ name: client.primary_contact_name || "Primary Contact", email: client.primary_contact_email, role: "signer" }]
+    : [];
+  const ccContacts = clientContactsForRequest(request?.id)
+    .map((contact) => ({ name: contact.name || contact.email, email: contact.email, role: "signer" }));
+  return [...primary, ...ccContacts].filter((recipient) => recipient.email);
+}
+
+function signatureRecipientInputs(request) {
+  const defaults = signatureRecipientDefaults(request);
+  const rows = defaults.length ? defaults : [{ name: "", email: "", role: "signer" }];
+  return rows.map((recipient, index) => `
+    <div class="signature-recipient-row">
+      <label class="field"><span>Recipient Name</span><input name="recipientName" value="${escapeHtml(recipient.name || "")}" /></label>
+      <label class="field"><span>Email</span><input name="recipientEmail" type="email" value="${escapeHtml(recipient.email || "")}" /></label>
+      <label class="field"><span>Role</span>
+        <select name="recipientRole">
+          <option value="signer" ${recipient.role !== "viewer" ? "selected" : ""}>Signer</option>
+          <option value="viewer" ${recipient.role === "viewer" ? "selected" : ""}>Viewer</option>
+        </select>
+      </label>
+      ${index === rows.length - 1 ? `<button class="secondary" type="button" data-action="add-signature-recipient">Add Recipient</button>` : ""}
+    </div>
+  `).join("");
+}
+
+function signatureDocumentsPage() {
+  const selectedRequest = state.activeRequest || state.requests[0] || null;
+  const documents = state.signatureDocuments;
+
+  return `
+    <section class="${isInternal() ? "admin-page" : "page"}">
+      <h1>Documents</h1>
+      <p class="subtitle">Send documents for secure in-app signature and track recipient status.</p>
+      ${isInternal() ? `
+        <form class="card" id="signatureDocumentForm">
+          <p class="section-label">Send for Signature</p>
+          <div class="form-grid">
+            <label class="field"><span>Request</span>
+              <select name="requestId" required>
+                ${state.requests.map((request) => `<option value="${request.id}" ${request.id === selectedRequest?.id ? "selected" : ""}>${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(request.title)}</option>`).join("")}
+              </select>
+            </label>
+            <label class="field"><span>Document Title</span><input name="title" placeholder="Service Agreement" /></label>
+          </div>
+          <label class="field"><span>PDF/DOCX Document</span><input id="signatureDocumentInput" name="document" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required /></label>
+          <div class="selected-file-row" data-selected-file-for="signatureDocumentInput" hidden>
+            <span data-selected-file-name></span>
+            <button class="remove-file-button" type="button" data-clear-file="signatureDocumentInput" aria-label="Remove selected file">×</button>
+          </div>
+          <p class="section-label">Recipients</p>
+          <div data-signature-recipient-list>${signatureRecipientInputs(selectedRequest)}</div>
+          <button class="primary" type="submit">Send for Signature</button>
+          <p class="helper">Recipients receive a secure signing link by email when email is configured. Internal users can also copy/open signing links from the list below.</p>
+        </form>
+      ` : ""}
+      ${documents.map(signatureDocumentCard).join("") || emptyCard("No Signature Documents Yet", "Documents sent for signature will appear here.")}
+    </section>
+  `;
+}
+
 function historyPage() {
   return `
     <section class="page">
@@ -2072,6 +2195,49 @@ function downloadIcon() {
   return `<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 20h14v-2H5v2Zm7-16v9.17l3.59-3.58L17 11l-6 6-6-6 1.41-1.41L10 13.17V4h2Z"/></svg>`;
 }
 
+function renderPublicSignature() {
+  const payload = state.publicSignature;
+  if (!payload) {
+    root.innerHTML = `<main class="signin-shell"><section class="signin-card">${brandLogo("signin")}<h1>Signing link unavailable</h1><p class="helper">This signing link could not be loaded. Please request a fresh link.</p>${toastHtml()}</section></main>`;
+    return;
+  }
+  const alreadySigned = payload.recipient?.status === "signed";
+  root.innerHTML = `
+    <main class="signin-shell signature-signing-shell">
+      <section class="signin-card signature-signing-card">
+        ${brandLogo("signin")}
+        <h1>${escapeHtml(payload.document?.title || "Review and Sign")}</h1>
+        <p class="helper">Signing as ${escapeHtml(payload.recipient?.name || payload.recipient?.email || "recipient")}.</p>
+        ${payload.document_url ? `<p><a class="primary signature-document-link" href="${escapeHtml(payload.document_url)}" target="_blank" rel="noopener noreferrer">Open Document</a></p>` : `<p class="helper">Document preview is not available.</p>`}
+        <section class="card">
+          <p class="section-label">Recipients</p>
+          ${(payload.recipients || []).map((recipient) => `
+            <div class="deliverable-row">
+              <span>${escapeHtml(recipient.name || recipient.email)}<small>${escapeHtml(recipient.email || "")}</small></span>
+              <span class="status-pill">${escapeHtml(signatureStatusLabel(recipient.status))}</span>
+            </div>
+          `).join("")}
+        </section>
+        ${alreadySigned ? `
+          <section class="card">
+            <h2>Already Signed</h2>
+            <p class="helper">This document has already been signed by you.</p>
+          </section>
+        ` : `
+          <form class="card" id="publicSignatureForm">
+            <p class="section-label">Sign Document</p>
+            <label class="field"><span>Type your full name</span><input name="typedSignature" required /></label>
+            <p class="helper">By clicking Sign Document, you agree that your typed name is your electronic signature for this document.</p>
+            <button class="primary" type="submit">Sign Document</button>
+          </form>
+        `}
+        ${toastHtml()}
+      </section>
+    </main>
+  `;
+  attachPublicSignatureEvents();
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -2084,6 +2250,11 @@ function escapeHtml(value) {
 function render() {
   if (state.loading) {
     root.innerHTML = `<main class="signin-shell"><section class="signin-card">${brandLogo("signin")}<p class="helper center-text">Loading ${APP_NAME}...</p></section>${toastHtml()}</main>`;
+    return;
+  }
+
+  if (state.publicSignatureToken) {
+    renderPublicSignature();
     return;
   }
 
@@ -2129,6 +2300,7 @@ function render() {
   const pageHtml = {
     messages: messagesPage,
     dashboard: dashboardPage,
+    documents: signatureDocumentsPage,
     history: historyPage,
     request: clientRequestPage,
     account: accountPage,
@@ -2138,12 +2310,32 @@ function render() {
     "admin-requests": adminRequestsPage,
     "admin-request-detail": adminRequestDetailPage,
     "admin-messages": adminMessagesPage,
+    "admin-documents": signatureDocumentsPage,
     "admin-team": adminTeamPage,
     "admin-settings": adminSettingsPage
   }[state.page]();
 
   root.innerHTML = `${navHtml()}<main>${pageHtml}</main>${toastHtml()}`;
   attachEvents();
+}
+
+function attachPublicSignatureEvents() {
+  const form = document.getElementById("publicSignatureForm");
+  if (!form) return;
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const values = Object.fromEntries(new FormData(event.currentTarget));
+    await withActionLock("public-signature", event.currentTarget, async () => {
+      try {
+        await signSignatureRecipient(state.publicSignatureToken, values.typedSignature);
+        state.publicSignature = await loadSignatureByToken(state.publicSignatureToken);
+        showToast("Document signed.");
+        renderPublicSignature();
+      } catch (error) {
+        showAppError(error, "Sign document");
+      }
+    });
+  });
 }
 
 function attachEvents() {
@@ -2362,6 +2554,76 @@ function attachEvents() {
       goToPage(link.dataset.jump);
     });
   });
+
+  document.querySelectorAll("[data-action='add-signature-recipient']").forEach((button) => {
+    button.addEventListener("click", () => {
+      const list = button.closest("form")?.querySelector("[data-signature-recipient-list]");
+      if (!list) return;
+      const row = document.createElement("div");
+      row.className = "signature-recipient-row";
+      row.innerHTML = `
+        <label class="field"><span>Recipient Name</span><input name="recipientName" /></label>
+        <label class="field"><span>Email</span><input name="recipientEmail" type="email" /></label>
+        <label class="field"><span>Role</span>
+          <select name="recipientRole">
+            <option value="signer">Signer</option>
+            <option value="viewer">Viewer</option>
+          </select>
+        </label>
+      `;
+      list.appendChild(row);
+    });
+  });
+
+  const signatureDocumentForm = document.getElementById("signatureDocumentForm");
+  if (signatureDocumentForm) {
+    signatureDocumentForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const formData = new FormData(form);
+      const request = state.requests.find((item) => item.id === formData.get("requestId"));
+      const file = formData.get("document");
+      const names = formData.getAll("recipientName").map(String);
+      const emails = formData.getAll("recipientEmail").map(String);
+      const roles = formData.getAll("recipientRole").map(String);
+      const recipients = emails.map((email, index) => ({
+        name: names[index],
+        email,
+        role: roles[index] || "signer"
+      })).filter((recipient) => recipient.name && recipient.email);
+
+      if (!request) {
+        showToast("Select a request.");
+        return;
+      }
+      if (!file?.name) {
+        showToast("Choose a document.");
+        return;
+      }
+      if (!recipients.length) {
+        showToast("Add at least one recipient.");
+        return;
+      }
+
+      await withActionLock("signature-document-form", form, async () => {
+        try {
+          await createSignatureDocument({
+            request,
+            profile: state.profile,
+            file,
+            title: formData.get("title") || file.name,
+            recipients
+          });
+          state.signatureDocuments = await loadSignatureDocuments();
+          form.reset();
+          showToast("Document sent for signature.");
+          render();
+        } catch (error) {
+          showAppError(error, "Send for signature");
+        }
+      });
+    });
+  }
 
   const clientForm = document.getElementById("clientForm");
   if (clientForm) {
@@ -3029,6 +3291,9 @@ function resetSessionState() {
   state.team = [];
   state.requestAssignments = [];
   state.requestClientContacts = [];
+  state.signatureDocuments = [];
+  state.publicSignature = null;
+  state.publicSignatureToken = "";
   state.messageDrafts = {};
   state.clientDraft = {};
   state.requestDraft = {};

@@ -241,6 +241,8 @@ let demoMessages = [
   }
 ];
 
+let demoSignatureDocuments = [];
+
 const demoRequests = [
   {
     id: demoIds.requestId,
@@ -1555,6 +1557,90 @@ export async function uploadRequestAttachment({ request, profile, file }) {
   });
 
   if (error) throw error;
+}
+
+export async function loadSignatureDocuments() {
+  if (useLocalAdminProxy()) return localApi("/signature-documents");
+  if (useDemo()) return demoSignatureDocuments;
+  return appApi("/signature-documents");
+}
+
+export async function createSignatureDocument({ request, profile, file, recipients = [], title }) {
+  if (useDemo()) {
+    const document = {
+      id: crypto.randomUUID(),
+      request_id: request.id,
+      uploaded_by: profile.id,
+      title: title || file.name,
+      status: "sent",
+      file_name: file.name,
+      mime_type: file.type || null,
+      file_size: file.size,
+      sent_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+      recipients: recipients.map((recipient) => ({
+        id: crypto.randomUUID(),
+        name: recipient.name,
+        email: recipient.email,
+        role: recipient.role || "signer",
+        status: "sent",
+        signing_url: `${window.location.origin}/?sign=demo-${crypto.randomUUID()}`
+      }))
+    };
+    demoSignatureDocuments.unshift(document);
+    return document;
+  }
+
+  const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
+  const storagePath = `${request.client_id}/${request.id}/signatures/${Date.now()}-${safeFileName}`;
+  const upload = await supabase.storage
+    .from("request-attachments")
+    .upload(storagePath, file, {
+      cacheControl: "3600",
+      upsert: false
+    });
+  if (upload.error) throw upload.error;
+
+  return appApi("/signature-documents", {
+    method: "POST",
+    body: JSON.stringify({
+      requestId: request.id,
+      title: title || file.name,
+      bucketName: "request-attachments",
+      storagePath,
+      fileName: file.name,
+      mimeType: file.type || null,
+      fileSize: file.size,
+      recipients
+    })
+  });
+}
+
+export async function loadSignatureByToken(token) {
+  if (useDemo()) {
+    return {
+      document: { title: "Demo Agreement.pdf", status: "sent" },
+      recipient: { name: "Demo Signer", email: "demo@example.com", status: "viewed" },
+      recipients: [{ name: "Demo Signer", email: "demo@example.com", status: "viewed" }],
+      document_url: ""
+    };
+  }
+  const response = await fetch(`/api/signatures/${encodeURIComponent(token)}`, { cache: "no-store" });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.error || `Signature link failed: ${response.status}`);
+  return payload;
+}
+
+export async function signSignatureRecipient(token, typedSignature) {
+  if (useDemo()) return { signed: true, completed: true };
+  const response = await fetch(`/api/signatures/${encodeURIComponent(token)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ typedSignature })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.error || `Signature failed: ${response.status}`);
+  return payload;
 }
 
 export async function loadDeliverables(requestId) {

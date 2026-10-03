@@ -128,6 +128,30 @@ export async function supabaseAdminFetch(path, options = {}) {
   }
 }
 
+export async function createStorageSignedUrl(bucketName, storagePath, expiresIn = 3600) {
+  requireSupabaseAdmin();
+  const encodedPath = String(storagePath || "")
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+  const response = await fetch(`${supabaseUrl}/storage/v1/object/sign/${encodeURIComponent(bucketName)}/${encodedPath}`, {
+    method: "POST",
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ expiresIn }),
+    cache: "no-store"
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.message || payload?.error || `Storage signed URL failed: ${response.status}`);
+  }
+  const signedUrl = payload?.signedURL || payload?.signedUrl;
+  return signedUrl?.startsWith("http") ? signedUrl : `${supabaseUrl}/storage/v1${signedUrl}`;
+}
+
 export async function selectOne(table, query) {
   const rows = await supabaseAdminFetch(rest(table, query), {
     headers: { Accept: "application/json" }
@@ -360,6 +384,46 @@ export async function sendRequestAccessEmail({ email, name, requestLabel }) {
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
     console.warn("[Clients] Request access email failed", detail);
+    return { sent: false, reason: detail || `Resend returned ${response.status}.` };
+  }
+
+  const payload = await response.json().catch(() => ({}));
+  return { sent: true, id: payload?.id || null };
+}
+
+export async function sendSignatureRequestEmail({ email, name, documentTitle, signingUrl }) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return { sent: false, reason: "No email address was provided." };
+  if (!resendApiKey) {
+    const reasonText = "RESEND_API_KEY is not configured.";
+    console.warn(`[Clients] ${reasonText} Skipping signature request email.`);
+    return { sent: false, reason: reasonText };
+  }
+  if (notificationFrom.includes("yourdomain.com") || notificationFrom.includes("example.com")) {
+    const reasonText = "NOTIFICATION_FROM still uses a placeholder domain. Add a verified Resend sender/domain.";
+    console.warn(`[Clients] ${reasonText}`);
+    return { sent: false, reason: reasonText };
+  }
+
+  const greeting = name ? `Hi ${name},` : "Hi,";
+  const text = `${greeting}\n\nYou have a document to review and sign in Clients: ${documentTitle || "Document"}.\n\nOpen your secure signing link:\n${signingUrl}\n\nIf you were not expecting this, you can ignore this email.`;
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${resendApiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      from: notificationFrom,
+      to: [normalizedEmail],
+      subject: `Signature requested: ${documentTitle || "Document"}`,
+      text
+    })
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    console.warn("[Clients] Signature request email failed", detail);
     return { sent: false, reason: detail || `Resend returned ${response.status}.` };
   }
 

@@ -1540,3 +1540,31 @@ a {
 .history-card .open-request-link {
   color: var(--green);
 }
+
+.signature-recipient-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(160px, 220px) auto;
+  gap: 16px;
+  align-items: end;
+  margin-bottom: 16px;
+}
+
+.signature-signing-shell {
+  align-items: flex-start;
+  padding-top: 40px;
+}
+
+.signature-signing-card {
+  max-width: 860px;
+}
+
+.signature-document-link {
+  display: inline-flex;
+  text-decoration: none;
+}
+
+@media (max-width: 900px) {
+  .signature-recipient-row {
+    grid-template-columns: 1fr;
+  }
+}
