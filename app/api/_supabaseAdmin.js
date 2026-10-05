@@ -152,6 +152,30 @@ export async function createStorageSignedUrl(bucketName, storagePath, expiresIn 
   return signedUrl?.startsWith("http") ? signedUrl : `${supabaseUrl}/storage/v1${signedUrl}`;
 }
 
+export async function uploadStorageObject(bucketName, storagePath, body, { contentType = "application/octet-stream", upsert = false } = {}) {
+  requireSupabaseAdmin();
+  const encodedPath = String(storagePath || "")
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+  const response = await fetch(`${supabaseUrl}/storage/v1/object/${encodeURIComponent(bucketName)}/${encodedPath}`, {
+    method: "POST",
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+      "Content-Type": contentType,
+      "x-upsert": upsert ? "true" : "false"
+    },
+    body,
+    cache: "no-store"
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.message || payload?.error || `Storage upload failed: ${response.status}`);
+  }
+  return payload;
+}
+
 export async function selectOne(table, query) {
   const rows = await supabaseAdminFetch(rest(table, query), {
     headers: { Accept: "application/json" }

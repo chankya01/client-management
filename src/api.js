@@ -1623,7 +1623,8 @@ export async function loadSignatureByToken(token) {
       document: { title: "Demo Agreement.pdf", status: "sent" },
       recipient: { name: "Demo Signer", email: "demo@example.com", status: "viewed" },
       recipients: [{ name: "Demo Signer", email: "demo@example.com", status: "viewed" }],
-      document_url: ""
+      document_url: "",
+      signed_document_url: ""
     };
   }
   const response = await fetch(`/api/signatures/${encodeURIComponent(token)}`, { cache: "no-store" });
@@ -1633,7 +1634,7 @@ export async function loadSignatureByToken(token) {
 }
 
 export async function signSignatureRecipient(token, typedSignature) {
-  if (useDemo()) return { signed: true, completed: true };
+  if (useDemo()) return { signed: true, completed: true, signed_document_url: "" };
   const response = await fetch(`/api/signatures/${encodeURIComponent(token)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

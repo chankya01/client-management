@@ -1954,6 +1954,18 @@ a {
   max-width: 860px;
 }
 
+.signature-review-card {
+  margin-top: 18px;
+}
+
+.signature-document-preview {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  height: min(68vh, 720px);
+  min-height: 420px;
+  width: 100%;
+}
+
 .signature-document-link {
   display: inline-flex;
   text-decoration: none;
@@ -1978,5 +1990,10 @@ a {
 
   .signature-document-detail-grid {
     grid-template-columns: 1fr;
+  }
+
+  .signature-document-preview {
+    height: 58vh;
+    min-height: 320px;
   }
 }

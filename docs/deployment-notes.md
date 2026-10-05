@@ -57,3 +57,27 @@ For email delivery, configure these Vercel Preview environment variables and red
 - `RESEND_API_KEY`
 - `NOTIFICATION_FROM` using a verified Resend sender/domain
 - `APP_URL` or `NEXT_PUBLIC_APP_URL` pointing to the preview or target app URL
+
+## 2026-10-06 — Signature phase 3 signed proof copy
+
+- Branch: `feature-internal-signatures`
+- No SQL migration required.
+
+### What changed
+
+- Public signing links now show an inline document review area before the signer submits their typed signature.
+- When a signer completes signing, the server generates a signed certificate PDF recording:
+  - document id and request id;
+  - signer name and email;
+  - typed signature;
+  - signed timestamp;
+  - captured IP address;
+  - recipient audit id.
+- The generated signed certificate PDF is uploaded to the existing `request-attachments` storage bucket and indexed through the existing `files` table as a request attachment.
+- The signing page shows an `Open Signed Certificate` link after the recipient signs.
+
+### Existing app impact
+
+No existing tables were altered.
+
+The original uploaded document is not modified in-place. This phase creates a separate signed proof certificate PDF. A future phase can add visual PDF stamping/placement on top of the original document if needed.

@@ -2389,13 +2389,24 @@ function renderPublicSignature() {
   }
   const alreadySigned = payload.recipient?.status === "signed";
   const canSign = payload.recipient?.role === "signer";
+  const documentUrl = payload.document_url || "";
+  const signedDocumentUrl = payload.signed_document_url || "";
   root.innerHTML = `
     <main class="signin-shell signature-signing-shell">
       <section class="signin-card signature-signing-card">
         ${brandLogo("signin")}
         <h1>${escapeHtml(payload.document?.title || "Review and Sign")}</h1>
         <p class="helper">Signing as ${escapeHtml(payload.recipient?.name || payload.recipient?.email || "recipient")}.</p>
-        ${payload.document_url ? `<p><a class="primary signature-document-link" href="${escapeHtml(payload.document_url)}" target="_blank" rel="noopener noreferrer">Open Document</a></p>` : `<p class="helper">Document preview is not available.</p>`}
+        ${documentUrl ? `
+          <section class="card signature-review-card">
+            <div class="section-heading-row">
+              <p class="section-label">Review Document</p>
+              <a class="secondary small-action" href="${escapeHtml(documentUrl)}" target="_blank" rel="noopener noreferrer">Open Full Document</a>
+            </div>
+            <iframe class="signature-document-preview" src="${escapeHtml(documentUrl)}" title="Document preview"></iframe>
+            <p class="helper">Review the document before signing. If the preview does not load, open the full document.</p>
+          </section>
+        ` : `<p class="helper">Document preview is not available.</p>`}
         <section class="card">
           <p class="section-label">Recipients</p>
           ${(payload.recipients || []).map((recipient) => `
@@ -2414,6 +2425,7 @@ function renderPublicSignature() {
           <section class="card">
             <h2>Already Signed</h2>
             <p class="helper">This document has already been signed by you.</p>
+            ${signedDocumentUrl ? `<p><a class="primary signature-document-link" href="${escapeHtml(signedDocumentUrl)}" target="_blank" rel="noopener noreferrer">Open Signed Certificate</a></p>` : ""}
           </section>
         ` : `
           <form class="card" id="publicSignatureForm">
