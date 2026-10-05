@@ -749,13 +749,22 @@ async function goToPage(page, { requestId, clientId, replace = false, scroll = t
   render();
   if (scroll) {
     if (isConversationPage(page)) {
-      window.requestAnimationFrame(() => {
-        document.querySelector("[data-message-end]")?.scrollIntoView({ behavior: "smooth", block: "end" });
-      });
+      scrollConversationToEnd();
     } else {
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   }
+}
+
+function scrollConversationToEnd({ behavior = "smooth" } = {}) {
+  const scrollToEnd = () => {
+    document.querySelector("[data-message-end]")?.scrollIntoView({ behavior, block: "end" });
+  };
+  window.requestAnimationFrame(() => {
+    scrollToEnd();
+    window.requestAnimationFrame(scrollToEnd);
+    window.setTimeout(scrollToEnd, 120);
+  });
 }
 
 async function refreshActiveMessages({ markRead = false } = {}) {
@@ -1807,8 +1816,8 @@ function messagesPage() {
         <p class="subtitle message-subtitle">${escapeHtml(requestFromName)} · ${escapeHtml(requestTitle())}</p>
         <p class="assigned-line">Team: ${escapeHtml(assignedPeopleText(state.activeRequest.id))}</p>
       </div>
-      ${clientRequestSwitcher()}
-      <div class="client-message-layout">
+      <div class="message-layout client-message-layout">
+        ${clientRequestSwitcher()}
         <section>
           <div class="date-row conversation-row"><span>Conversation</span></div>
           ${requestMessages.map(messageCard).join("") || emptyMessage()}

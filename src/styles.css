@@ -540,9 +540,7 @@ h2 {
 }
 
 .client-message-layout {
-  display: grid;
   gap: 28px;
-  align-items: start;
 }
 
 .client-request-select-card {
