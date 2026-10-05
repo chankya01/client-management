@@ -1886,7 +1886,20 @@ function attachmentCard(file) {
 function clientRequestSwitcher() {
   if (isInternal() || !state.requests.length) return "";
   return `
-    <section class="card request-switcher client-request-select-card">
+    <aside class="card request-switcher message-request-list client-request-list-card">
+      <p class="section-label">Requests</p>
+      ${state.requests.map((request) => `
+        <button type="button" class="${request.id === state.activeRequest?.id ? "active" : ""}" data-client-message-request="${request.id}">
+          <span>
+            <strong>${escapeHtml(displayRequestNumber(request))}</strong>
+            <span>${escapeHtml(request.title)}</span>
+            <span>${escapeHtml(clientName(request.client_id))}</span>
+          </span>
+          ${requestUnreadBadge(request.id)}
+        </button>
+      `).join("")}
+    </aside>
+    <section class="client-request-select-card">
       <label class="field" for="clientMessageRequestSelect">
         <span>Request</span>
         <select id="clientMessageRequestSelect" data-client-message-request-select>

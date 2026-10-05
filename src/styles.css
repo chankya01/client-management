@@ -546,15 +546,23 @@ h2 {
 }
 
 .client-request-select-card {
-  margin: 0 0 24px;
+  display: none;
+  margin: 0 0 18px;
+  max-width: 100%;
 }
 
 .client-request-select-card .field {
   margin: 0;
 }
 
+.client-request-select-card select {
+  min-height: 42px;
+  padding: 9px 12px;
+}
+
 .client-request-select-card .helper {
-  margin: 10px 0 0;
+  font-size: 13px;
+  margin: 6px 0 0;
 }
 
 .client-message-sidebar {
@@ -1601,6 +1609,14 @@ button:disabled,
 
   .history-card .request-card-meta {
     grid-template-columns: 1fr;
+  }
+
+  .client-request-list-card {
+    display: none;
+  }
+
+  .client-request-select-card {
+    display: block;
   }
 
   .history-card .request-card-meta time {
