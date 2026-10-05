@@ -1542,11 +1542,12 @@ button:disabled,
   .client-nav button {
     gap: 4px;
     justify-content: center;
+    justify-self: center;
     min-height: 30px;
     min-width: 0;
-    padding: 4px;
-    font-size: 11px;
-    width: 100%;
+    padding: 4px 8px;
+    font-size: 12px;
+    width: auto;
   }
 
   .client-nav .count {
@@ -1606,7 +1607,37 @@ button:disabled,
     grid-column: auto;
   }
 
+  .history-card {
+    margin-bottom: 16px;
+    padding: 14px;
+  }
+
+  .history-card h2 {
+    font-size: 16px;
+    line-height: 1.25;
+    margin-bottom: 4px;
+  }
+
+  .history-card p {
+    font-size: 14px;
+    line-height: 1.45;
+    margin-bottom: 10px;
+  }
+
+  .history-card .deliverable-row {
+    gap: 6px;
+    padding: 8px 0;
+  }
+
+  .history-card .deliverable-row,
+  .history-card .deliverable-row time,
+  .history-card .deliverable-row .status-pill,
+  .history-card .assigned-line {
+    font-size: 13px;
+  }
+
   .request-card-status {
+    gap: 8px;
     justify-self: start;
   }
 
