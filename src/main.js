@@ -2390,6 +2390,8 @@ function renderPublicSignature() {
   const alreadySigned = payload.recipient?.status === "signed";
   const canSign = payload.recipient?.role === "signer";
   const documentUrl = payload.document_url || "";
+  const documentPreviewUrl = payload.document_preview_url || "";
+  const canPreviewInline = Boolean(payload.can_inline_preview && documentPreviewUrl);
   const signedDocumentUrl = payload.signed_document_url || "";
   root.innerHTML = `
     <main class="signin-shell signature-signing-shell">
@@ -2403,8 +2405,14 @@ function renderPublicSignature() {
               <p class="section-label">Review Document</p>
               <a class="secondary small-action" href="${escapeHtml(documentUrl)}" target="_blank" rel="noopener noreferrer">Open Full Document</a>
             </div>
-            <iframe class="signature-document-preview" src="${escapeHtml(documentUrl)}" title="Document preview"></iframe>
-            <p class="helper">Review the document before signing. If the preview does not load, open the full document.</p>
+            ${canPreviewInline ? `
+              <iframe class="signature-document-preview" src="${escapeHtml(documentPreviewUrl)}" title="Document preview"></iframe>
+              <p class="helper">Review the PDF before signing. It will only open separately if you click Open Full Document.</p>
+            ` : `
+              <div class="signature-document-preview signature-document-preview-empty">
+                <p>Inline preview is available for PDF documents. Use Open Full Document to review this file.</p>
+              </div>
+            `}
           </section>
         ` : `<p class="helper">Document preview is not available.</p>`}
         <section class="card">

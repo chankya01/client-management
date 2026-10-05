@@ -1966,6 +1966,15 @@ a {
   width: 100%;
 }
 
+.signature-document-preview-empty {
+  align-items: center;
+  color: var(--muted);
+  display: grid;
+  justify-items: center;
+  padding: 24px;
+  text-align: center;
+}
+
 .signature-document-link {
   display: inline-flex;
   text-decoration: none;

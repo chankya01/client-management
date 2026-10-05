@@ -136,6 +136,8 @@ async function loadSignature(token) {
 export async function GET(_request, { params }) {
   try {
     const payload = await loadSignature(params.token);
+    const isPdf = payload.document.mime_type === "application/pdf"
+      || String(payload.document.file_name || "").toLowerCase().endsWith(".pdf");
     if (payload.recipient.status === "sent") {
       const now = new Date().toISOString();
       await supabaseAdminFetch(tablePath("signature_recipients", `?id=eq.${encodeValue(payload.recipient.id)}`), {
@@ -176,6 +178,8 @@ export async function GET(_request, { params }) {
       },
       recipients: payload.recipients,
       document_url: payload.document_url,
+      document_preview_url: isPdf ? `/api/signatures/${encodeURIComponent(params.token)}/document` : null,
+      can_inline_preview: isPdf,
       signed_document_url: payload.signed_document_url
     });
   } catch (error) {

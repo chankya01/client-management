@@ -176,6 +176,26 @@ export async function uploadStorageObject(bucketName, storagePath, body, { conte
   return payload;
 }
 
+export async function downloadStorageObject(bucketName, storagePath) {
+  requireSupabaseAdmin();
+  const encodedPath = String(storagePath || "")
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+  const response = await fetch(`${supabaseUrl}/storage/v1/object/${encodeURIComponent(bucketName)}/${encodedPath}`, {
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`
+    },
+    cache: "no-store"
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(detail || `Storage download failed: ${response.status}`);
+  }
+  return response;
+}
+
 export async function selectOne(table, query) {
   const rows = await supabaseAdminFetch(rest(table, query), {
     headers: { Accept: "application/json" }
