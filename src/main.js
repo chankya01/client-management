@@ -2252,7 +2252,7 @@ function signatureDocumentsPage() {
               </select>
             </label>
           </div>
-          <label class="field"><span>PDF/DOCX Document</span><input id="signatureDocumentInput" name="document" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required /></label>
+          <label class="field"><span>PDF Document</span><input id="signatureDocumentInput" name="document" type="file" accept=".pdf,application/pdf" required /></label>
           <div class="selected-file-row" data-selected-file-for="signatureDocumentInput" hidden>
             <span data-selected-file-name></span>
             <button class="remove-file-button" type="button" data-clear-file="signatureDocumentInput" aria-label="Remove selected file">×</button>
@@ -2263,7 +2263,7 @@ function signatureDocumentsPage() {
             <button class="secondary" type="button" data-action="add-signature-recipient">Add Recipient</button>
             <button class="primary" type="submit">Send Document</button>
           </div>
-          <p class="helper">Use Needs Signature for agreements/SOWs. Use View Only for invoices or documents that only need to be shared.</p>
+          <p class="helper">Use PDF for in-browser signing. Convert DOC/DOCX to PDF before sending for signature. Use View Only for invoices or documents that only need to be shared.</p>
         </form>
       ` : ""}
       <section class="card">
@@ -2390,8 +2390,10 @@ function renderPublicSignature() {
   const alreadySigned = payload.recipient?.status === "signed";
   const canSign = payload.recipient?.role === "signer";
   const documentUrl = payload.document_url || "";
+  const documentInlineUrl = payload.document_inline_url || documentUrl;
   const documentPreviewUrl = payload.document_preview_url || "";
   const canPreviewInline = Boolean(payload.can_inline_preview && documentPreviewUrl);
+  const fullDocumentLabel = canPreviewInline ? "Open Full Document" : "Download Document";
   const signedDocumentUrl = payload.signed_document_url || "";
   root.innerHTML = `
     <main class="signin-shell signature-signing-shell">
@@ -2403,14 +2405,14 @@ function renderPublicSignature() {
           <section class="card signature-review-card">
             <div class="section-heading-row">
               <p class="section-label">Review Document</p>
-              <a class="secondary small-action" href="${escapeHtml(documentUrl)}" target="_blank" rel="noopener noreferrer">Open Full Document</a>
+              <a class="secondary small-action" href="${escapeHtml(documentInlineUrl)}" target="_blank" rel="noopener noreferrer">${fullDocumentLabel}</a>
             </div>
             ${canPreviewInline ? `
               <iframe class="signature-document-preview" src="${escapeHtml(documentPreviewUrl)}" title="Document preview"></iframe>
               <p class="helper">Review the PDF before signing. It will only open separately if you click Open Full Document.</p>
             ` : `
               <div class="signature-document-preview signature-document-preview-empty">
-                <p>Inline preview is available for PDF documents. Use Open Full Document to review this file.</p>
+                <p>Inline signing preview is available for PDF documents only. Download this file to review it, or resend the document as a PDF for in-browser signing.</p>
               </div>
             `}
           </section>

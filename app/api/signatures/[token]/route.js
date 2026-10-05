@@ -178,6 +178,7 @@ export async function GET(_request, { params }) {
       },
       recipients: payload.recipients,
       document_url: payload.document_url,
+      document_inline_url: `/api/signatures/${encodeURIComponent(params.token)}/document`,
       document_preview_url: isPdf ? `/api/signatures/${encodeURIComponent(params.token)}/document` : null,
       can_inline_preview: isPdf,
       signed_document_url: payload.signed_document_url

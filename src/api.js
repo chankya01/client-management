@@ -1624,6 +1624,7 @@ export async function loadSignatureByToken(token) {
       recipient: { name: "Demo Signer", email: "demo@example.com", status: "viewed" },
       recipients: [{ name: "Demo Signer", email: "demo@example.com", status: "viewed" }],
       document_url: "",
+      document_inline_url: "",
       document_preview_url: "",
       can_inline_preview: false,
       signed_document_url: ""

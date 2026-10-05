@@ -67,7 +67,8 @@ For email delivery, configure these Vercel Preview environment variables and red
 
 - Public signing links now show an inline PDF review area before the signer submits their typed signature.
 - PDF preview is served through a token-scoped app route with inline content disposition instead of embedding the private Supabase storage URL directly.
-- Non-PDF documents do not attempt inline browser preview; signers use `Open Full Document` to review those files.
+- Non-PDF documents do not attempt inline browser preview; signers use `Download Document` to review those files.
+- The send-document form accepts PDFs for signing so the in-browser signing experience matches the Adobe-style flow.
 - When a signer completes signing, the server generates a signed certificate PDF recording:
   - document id and request id;
   - signer name and email;
