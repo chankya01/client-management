@@ -1122,7 +1122,7 @@ function navHtml() {
     <header class="topbar">
       <div class="topbar-inner">
         ${brandLogo("nav")}
-        <nav class="nav" aria-label="Client portal">
+        <nav class="nav client-nav" aria-label="Client portal">
           ${navButton("dashboard", "Dashboard")}
           ${navButton("messages", `Messages ${unreadCount ? `<span class="count">${unreadCount}</span>` : ""}`)}
           ${navButton("account", "Account")}
@@ -2137,6 +2137,15 @@ function render() {
 
   root.innerHTML = `${navHtml()}<main>${pageHtml}</main>${toastHtml()}`;
   attachEvents();
+  keepActiveNavVisible();
+}
+
+function keepActiveNavVisible() {
+  const activeTab = document.querySelector(".nav button.active");
+  if (!activeTab) return;
+  window.requestAnimationFrame(() => {
+    activeTab.scrollIntoView({ block: "nearest", inline: "center" });
+  });
 }
 
 function attachEvents() {
