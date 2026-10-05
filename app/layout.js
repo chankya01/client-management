@@ -5,6 +5,11 @@ export const metadata = {
   description: "Client, admin, and developer workspace"
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1
+};
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
