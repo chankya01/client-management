@@ -1630,18 +1630,31 @@ export async function loadSignatureByToken(token) {
       signed_document_url: ""
     };
   }
-  const response = await fetch(`/api/signatures/${encodeURIComponent(token)}`, { cache: "no-store" });
+  const { data } = await supabase.auth.getSession();
+  const accessToken = data?.session?.access_token;
+  const response = await fetch(`/api/signatures/${encodeURIComponent(token)}`, {
+    cache: "no-store",
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
+  });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload?.error || `Signature link failed: ${response.status}`);
   return payload;
 }
 
-export async function signSignatureRecipient(token, typedSignature) {
+export async function signSignatureRecipient(token, signatureFields) {
   if (useDemo()) return { signed: true, completed: true, signed_document_url: "" };
+  const body = typeof signatureFields === "string"
+    ? { typedSignature: signatureFields }
+    : { ...(signatureFields || {}) };
+  const { data } = await supabase.auth.getSession();
+  const accessToken = data?.session?.access_token;
   const response = await fetch(`/api/signatures/${encodeURIComponent(token)}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ typedSignature })
+    headers: {
+      "Content-Type": "application/json",
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+    },
+    body: JSON.stringify(body)
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload?.error || `Signature failed: ${response.status}`);

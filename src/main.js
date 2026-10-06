@@ -2393,60 +2393,65 @@ function renderPublicSignature() {
   const documentInlineUrl = payload.document_inline_url || documentUrl;
   const documentPreviewUrl = payload.document_preview_url || "";
   const canPreviewInline = Boolean(payload.can_inline_preview && documentPreviewUrl);
-  const fullDocumentLabel = canPreviewInline ? "Open Full Document" : "Download Document";
+  const fullDocumentLabel = canPreviewInline ? "Open PDF in New Tab" : "Download Document";
   const signedDocumentUrl = payload.signed_document_url || "";
   root.innerHTML = `
-    <main class="signin-shell signature-signing-shell">
-      <section class="signin-card signature-signing-card">
-        ${brandLogo("signin")}
-        <h1>${escapeHtml(payload.document?.title || "Review and Sign")}</h1>
-        <p class="helper">Signing as ${escapeHtml(payload.recipient?.name || payload.recipient?.email || "recipient")}.</p>
-        ${documentUrl ? `
-          <section class="card signature-review-card">
-            <div class="section-heading-row">
-              <p class="section-label">Review Document</p>
-              <a class="secondary small-action" href="${escapeHtml(documentInlineUrl)}" target="_blank" rel="noopener noreferrer">${fullDocumentLabel}</a>
+    <main class="signature-pdf-shell">
+      <header class="signature-pdf-header">
+        <span>${brandLogo("signin")}</span>
+        <span>
+          <h1>${escapeHtml(payload.document?.title || "Review and Sign")}</h1>
+          <p class="helper">Signing as ${escapeHtml(payload.recipient?.name || payload.recipient?.email || "recipient")}.</p>
+        </span>
+        ${documentUrl ? `<a class="secondary small-action" href="${escapeHtml(documentInlineUrl)}" target="_blank" rel="noopener noreferrer">${fullDocumentLabel}</a>` : ""}
+      </header>
+      <section class="signature-pdf-layout">
+        <section class="signature-pdf-viewer-card">
+          ${canPreviewInline ? `
+            <iframe class="signature-document-preview signature-document-preview-full" src="${escapeHtml(documentPreviewUrl)}" title="PDF signing document"></iframe>
+          ` : `
+            <div class="signature-document-preview signature-document-preview-empty signature-document-preview-full">
+              <p>This signing flow needs a PDF document. Download this file to review it, or ask the team to resend it as a PDF.</p>
             </div>
-            ${canPreviewInline ? `
-              <iframe class="signature-document-preview" src="${escapeHtml(documentPreviewUrl)}" title="Document preview"></iframe>
-              <p class="helper">Review the PDF before signing. It will only open separately if you click Open Full Document.</p>
-            ` : `
-              <div class="signature-document-preview signature-document-preview-empty">
-                <p>Inline signing preview is available for PDF documents only. Download this file to review it, or resend the document as a PDF for in-browser signing.</p>
-              </div>
-            `}
-          </section>
-        ` : `<p class="helper">Document preview is not available.</p>`}
-        <section class="card">
-          <p class="section-label">Recipients</p>
-          ${(payload.recipients || []).map((recipient) => `
-            <div class="deliverable-row">
-              <span>${escapeHtml(recipient.name || recipient.email)}<small>${escapeHtml(recipient.email || "")}</small></span>
-              <span class="status-pill">${escapeHtml(signatureStatusLabel(recipient.status))}</span>
-            </div>
-          `).join("")}
+          `}
         </section>
-        ${!canSign ? `
+        <aside class="signature-side-panel">
           <section class="card">
-            <h2>Document Shared</h2>
-            <p class="helper">This document is view-only. No signature is required from you.</p>
+            <p class="section-label">Recipients</p>
+            ${(payload.recipients || []).map((recipient) => `
+              <div class="deliverable-row">
+                <span>${escapeHtml(recipient.name || recipient.email)}<small>${escapeHtml(recipient.email || "")}</small></span>
+                <span class="status-pill">${escapeHtml(signatureStatusLabel(recipient.status))}</span>
+              </div>
+            `).join("")}
           </section>
-        ` : alreadySigned ? `
-          <section class="card">
-            <h2>Already Signed</h2>
-            <p class="helper">This document has already been signed by you.</p>
-            ${signedDocumentUrl ? `<p><a class="primary signature-document-link" href="${escapeHtml(signedDocumentUrl)}" target="_blank" rel="noopener noreferrer">Open Signed Certificate</a></p>` : ""}
-          </section>
-        ` : `
-          <form class="card" id="publicSignatureForm">
-            <p class="section-label">Sign Document</p>
-            <label class="field"><span>Type your full name</span><input name="typedSignature" required /></label>
-            <p class="helper">By clicking Sign Document, you agree that your typed name is your electronic signature for this document.</p>
-            <button class="primary" type="submit">Sign Document</button>
-          </form>
-        `}
-        ${toastHtml()}
+          ${!canSign ? `
+            <section class="card">
+              <h2>Document Shared</h2>
+              <p class="helper">This document is view-only. No signature is required from you.</p>
+            </section>
+          ` : alreadySigned ? `
+            <section class="card">
+              <h2>Already Signed</h2>
+              <p class="helper">This document has already been signed by you.</p>
+              ${signedDocumentUrl ? `<p><a class="primary signature-document-link" href="${escapeHtml(signedDocumentUrl)}" target="_blank" rel="noopener noreferrer">Open Signed PDF</a></p>` : ""}
+            </section>
+          ` : `
+            <form class="card" id="publicSignatureForm">
+              <p class="section-label">Sign PDF</p>
+              <div class="signature-field-grid">
+                <label class="field"><span>Signature</span><input name="typedSignature" required autocomplete="off" /></label>
+                <label class="field"><span>Name</span><input name="signerName" required autocomplete="name" /></label>
+                <label class="field"><span>Title</span><input name="signerTitle" required autocomplete="organization-title" /></label>
+                <label class="field"><span>Date</span><input name="signatureDate" type="date" required /></label>
+              </div>
+              <p class="helper">Review the PDF, then enter each field manually. These values will be stamped onto the signed PDF.</p>
+              <button class="primary" type="submit" ${canPreviewInline ? "" : "disabled"}>Sign Document</button>
+            </form>
+          `}
+        </aside>
       </section>
+      ${toastHtml()}
     </main>
   `;
   attachPublicSignatureEvents();
@@ -2550,7 +2555,12 @@ function attachPublicSignatureEvents() {
     const values = Object.fromEntries(new FormData(event.currentTarget));
     await withActionLock("public-signature", event.currentTarget, async () => {
       try {
-        await signSignatureRecipient(state.publicSignatureToken, values.typedSignature);
+        await signSignatureRecipient(state.publicSignatureToken, {
+          typedSignature: values.typedSignature,
+          signerName: values.signerName,
+          signerTitle: values.signerTitle,
+          signatureDate: values.signatureDate
+        });
         state.publicSignature = await loadSignatureByToken(state.publicSignatureToken);
         showToast("Document signed.");
         renderPublicSignature();

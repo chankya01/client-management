@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createHmac } from "node:crypto";
 import { appConfig } from "../../src/config.js";
 
 const supabaseUrl = process.env.SUPABASE_URL
@@ -33,6 +34,17 @@ export function apiJson(payload, status = 200) {
 
 export function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
+}
+
+export function signatureAccessCookieName(token) {
+  const safeToken = String(token || "").replace(/[^a-zA-Z0-9]/g, "").slice(0, 48);
+  return `signature_access_${safeToken || "document"}`;
+}
+
+export function signatureAccessCookieValue(token, recipientId) {
+  requireSupabaseAdmin();
+  const value = `${token}:${recipientId}`;
+  return createHmac("sha256", serviceRoleKey).update(value).digest("hex");
 }
 
 export function requireSupabaseAdmin() {

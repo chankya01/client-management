@@ -1,19 +1,41 @@
 import {
   apiJson,
   createStorageSignedUrl,
+  currentProfile,
+  downloadStorageObject,
   encodeValue,
   handleApiError,
   normalizeEmail,
+  signatureAccessCookieName,
+  signatureAccessCookieValue,
   supabaseAdminFetch,
   tablePath,
   uploadStorageObject
 } from "../../_supabaseAdmin.js";
 
-function pdfEscape(value) {
+function safePdfText(value) {
   return String(value ?? "")
-    .replaceAll("\\", "\\\\")
-    .replaceAll("(", "\\(")
-    .replaceAll(")", "\\)");
+    .replace(/[\r\n]+/g, " ")
+    .replace(/[^\x20-\x7E]/g, "")
+    .trim();
+}
+
+function truncatePdfText(value, maxLength = 95) {
+  const text = safePdfText(value);
+  return text.length > maxLength ? `${text.slice(0, Math.max(0, maxLength - 3))}...` : text;
+}
+
+function signedPdfPath(document, recipient) {
+  return `${document.request_id}/signatures/signed/${document.id}/${recipient.id}-signed.pdf`;
+}
+
+function signedPdfFileName(document) {
+  const baseName = String(document.title || document.file_name || "signed-document")
+    .replace(/\.[^.]+$/, "")
+    .replace(/[^a-zA-Z0-9._-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "") || "signed-document";
+  return `${baseName}-signed.pdf`;
 }
 
 function formatAuditDate(value) {
@@ -29,60 +51,7 @@ function formatAuditDate(value) {
   }
 }
 
-function textLine(text, x, y, size = 12, font = "F1") {
-  return `BT /${font} ${size} Tf ${x} ${y} Td (${pdfEscape(text)}) Tj ET`;
-}
-
-function createSignatureCertificatePdf({ document, recipient, signedAt, ipAddress }) {
-  const lines = [
-    textLine("Clients", 72, 740, 18, "F2"),
-    textLine("Electronic Signature Certificate", 72, 710, 22, "F2"),
-    textLine("This certificate records the electronic signing event for the document below.", 72, 680, 11),
-    textLine(`Document: ${document.title || document.file_name || "Document"}`, 72, 645, 12, "F2"),
-    textLine(`File: ${document.file_name || "Uploaded document"}`, 72, 625),
-    textLine(`Document ID: ${document.id}`, 72, 605),
-    textLine(`Request ID: ${document.request_id}`, 72, 585),
-    textLine("Signer", 72, 545, 14, "F2"),
-    textLine(`Name: ${recipient.name || recipient.email}`, 72, 522),
-    textLine(`Email: ${recipient.email}`, 72, 502),
-    textLine(`Typed signature: ${recipient.typed_signature || recipient.name || recipient.email}`, 72, 482, 12, "F2"),
-    textLine(`Signed at: ${formatAuditDate(signedAt)}`, 72, 462),
-    textLine(`IP address: ${ipAddress || "Not captured"}`, 72, 442),
-    textLine("Consent", 72, 402, 14, "F2"),
-    textLine("The signer agreed that their typed name is their electronic signature.", 72, 379),
-    textLine("This certificate is generated automatically by Clients after the signing action.", 72, 359),
-    textLine("Audit Trail", 72, 319, 14, "F2"),
-    textLine(`Recipient ID: ${recipient.id}`, 72, 296),
-    textLine(`User agent captured separately in the recipient audit record.`, 72, 276),
-    "0.8 w 72 250 468 0 l S",
-    textLine("Generated signed proof copy", 72, 225, 10)
-  ].join("\n");
-
-  const objects = [
-    "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>",
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>",
-    `<< /Length ${Buffer.byteLength(lines, "utf8")} >>\nstream\n${lines}\nendstream`
-  ];
-
-  let pdf = "%PDF-1.4\n";
-  const offsets = [0];
-  objects.forEach((object, index) => {
-    offsets[index + 1] = Buffer.byteLength(pdf, "utf8");
-    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
-  });
-  const xrefOffset = Buffer.byteLength(pdf, "utf8");
-  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-  offsets.slice(1).forEach((offset) => {
-    pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
-  });
-  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
-  return Buffer.from(pdf, "utf8");
-}
-
-function signedCertificatePath(document, recipient) {
+function legacySignedCertificatePath(document, recipient) {
   return `${document.request_id}/signatures/signed/${document.id}/${recipient.id}-signature-certificate.pdf`;
 }
 
@@ -111,14 +80,15 @@ async function loadSignature(token) {
     tablePath("signature_recipients", `?select=id,name,email,role,status,viewed_at,signed_at,declined_at&document_id=eq.${encodeValue(document.id)}&order=created_at.asc`)
   );
   const documentUrl = await createStorageSignedUrl(document.bucket_name, document.storage_path);
-  const signedCertificateStoragePath = signedCertificatePath(document, recipient);
+  const signedCertificateStoragePath = legacySignedCertificatePath(document, recipient);
+  const signedPdfStoragePath = signedPdfPath(document, recipient);
   let signedDocumentUrl = null;
   try {
     const files = await supabaseAdminFetch(
-      tablePath("files", `?select=id&storage_path=eq.${encodeValue(signedCertificateStoragePath)}&limit=1`)
+      tablePath("files", `?select=id,storage_path&or=(storage_path.eq.${encodeValue(signedPdfStoragePath)},storage_path.eq.${encodeValue(signedCertificateStoragePath)})&limit=1`)
     );
     if (files?.length) {
-      signedDocumentUrl = await createStorageSignedUrl(document.bucket_name, signedCertificateStoragePath);
+      signedDocumentUrl = await createStorageSignedUrl(document.bucket_name, files[0].storage_path);
     }
   } catch {
     signedDocumentUrl = null;
@@ -136,6 +106,7 @@ async function loadSignature(token) {
 export async function GET(_request, { params }) {
   try {
     const payload = await loadSignature(params.token);
+    const matchingPortalProfile = await requireMatchingPortalSessionIfNeeded(_request, payload.recipient);
     const isPdf = payload.document.mime_type === "application/pdf"
       || String(payload.document.file_name || "").toLowerCase().endsWith(".pdf");
     if (payload.recipient.status === "sent") {
@@ -165,7 +136,7 @@ export async function GET(_request, { params }) {
       payload.recipient.viewed_at = now;
     }
 
-    return apiJson({
+    const response = apiJson({
       document: payload.document,
       recipient: {
         id: payload.recipient.id,
@@ -183,15 +154,174 @@ export async function GET(_request, { params }) {
       can_inline_preview: isPdf,
       signed_document_url: payload.signed_document_url
     });
+    if (matchingPortalProfile?.id) {
+      response.cookies.set({
+        name: signatureAccessCookieName(params.token),
+        value: signatureAccessCookieValue(params.token, payload.recipient.id),
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        path: "/",
+        maxAge: 60 * 10
+      });
+    }
+    return response;
   } catch (error) {
     return handleApiError(error);
   }
 }
 
-async function createSignedCertificateFile({ request, document, recipient, signedAt, ipAddress }) {
-  const storagePath = signedCertificatePath(document, recipient);
-  const fileName = `${String(document.title || document.file_name || "document").replace(/[^a-zA-Z0-9._-]/g, "-")}-signature-certificate.pdf`;
-  const pdfBuffer = createSignatureCertificatePdf({ document, recipient, signedAt, ipAddress });
+async function profileForRecipientEmail(email) {
+  const recipientEmail = normalizeEmail(email);
+  if (!recipientEmail) return null;
+  const profiles = await supabaseAdminFetch(
+    tablePath("profiles", `?select=id,email&email=eq.${encodeValue(recipientEmail)}&limit=1`)
+  );
+  return profiles?.[0] || null;
+}
+
+async function requireMatchingPortalSessionIfNeeded(request, recipient) {
+  const profile = await profileForRecipientEmail(recipient.email);
+  if (!profile?.id) return null;
+
+  let signedInProfile = null;
+  try {
+    signedInProfile = await currentProfile(request);
+  } catch (error) {
+    const authError = new Error("Please sign in with the recipient portal account before signing this document.");
+    authError.status = error.status === 401 || error.status === 403 ? error.status : 401;
+    throw authError;
+  }
+
+  if (normalizeEmail(signedInProfile.email) !== normalizeEmail(recipient.email)) {
+    const error = new Error("This signing link belongs to a different recipient account. Please sign in with the matching recipient email.");
+    error.status = 403;
+    throw error;
+  }
+
+  return signedInProfile;
+}
+
+function cleanSignatureFields(body) {
+  return {
+    typedSignature: String(body.typedSignature || "").trim(),
+    signerName: String(body.signerName || "").trim(),
+    signerTitle: String(body.signerTitle || "").trim(),
+    signatureDate: String(body.signatureDate || "").trim()
+  };
+}
+
+function validateSignatureFields(signatureFields) {
+  if (!signatureFields.typedSignature) return "Enter your signature.";
+  if (!signatureFields.signerName) return "Enter your name.";
+  if (!signatureFields.signerTitle) return "Enter your title.";
+  if (!signatureFields.signatureDate) return "Enter the signing date.";
+  if (signatureFields.typedSignature.length < 2) return "Signature is too short.";
+  if (signatureFields.signerName.length < 2) return "Name is too short.";
+  return "";
+}
+
+async function downloadDocumentBuffer(document) {
+  const storageResponse = await downloadStorageObject(document.bucket_name, document.storage_path);
+  const arrayBuffer = await storageResponse.arrayBuffer();
+  return Buffer.from(arrayBuffer);
+}
+
+function isPdfDocument(document) {
+  return document.mime_type === "application/pdf"
+    || String(document.file_name || "").toLowerCase().endsWith(".pdf");
+}
+
+async function createSignedPdfBuffer({ document, recipient, signedAt, ipAddress, signatureFields }) {
+  if (!isPdfDocument(document)) {
+    const error = new Error("Only PDF documents can be signed in this flow. Please resend the document as a PDF.");
+    error.status = 400;
+    throw error;
+  }
+
+  const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+  const sourceBytes = await downloadDocumentBuffer(document);
+  const pdfDoc = await PDFDocument.load(sourceBytes, { ignoreEncryption: true });
+  const pages = pdfDoc.getPages();
+  if (!pages.length) {
+    const error = new Error("The PDF has no pages to sign.");
+    error.status = 400;
+    throw error;
+  }
+
+  const page = pages[pages.length - 1];
+  const { width } = page.getSize();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const blockWidth = Math.min(500, Math.max(260, width - 72));
+  const blockHeight = 118;
+  const x = 36;
+  const y = 36;
+  const lineY = y + blockHeight - 34;
+
+  page.drawRectangle({
+    x,
+    y,
+    width: blockWidth,
+    height: blockHeight,
+    borderColor: rgb(0.38, 0.11, 0.51),
+    borderWidth: 1.4,
+    color: rgb(1, 1, 1),
+    opacity: 0.96
+  });
+  page.drawText("Electronic Signature", {
+    x: x + 14,
+    y: y + blockHeight - 22,
+    size: 11,
+    font: boldFont,
+    color: rgb(0.2, 0.2, 0.2)
+  });
+  page.drawLine({
+    start: { x: x + 14, y: lineY },
+    end: { x: x + blockWidth - 14, y: lineY },
+    thickness: 0.6,
+    color: rgb(0.72, 0.76, 0.82)
+  });
+
+  const rows = [
+    ["Signature", signatureFields.typedSignature, "left"],
+    ["Name", signatureFields.signerName, "left"],
+    ["Title", signatureFields.signerTitle, "left"],
+    ["Date", signatureFields.signatureDate, "left"],
+    ["Recipient", recipient.email, "right"],
+    ["Signed at", formatAuditDate(signedAt), "right"],
+    ["IP", ipAddress || "Not captured", "right"]
+  ];
+  let leftIndex = 0;
+  let rightIndex = 0;
+  rows.forEach(([label, value, column], index) => {
+    const isRightColumn = column === "right";
+    const rowX = isRightColumn ? x + Math.min(265, blockWidth / 2 + 10) : x + 14;
+    const rowY = lineY - 16 - ((isRightColumn ? rightIndex++ : leftIndex++) * 14);
+    page.drawText(`${label}:`, {
+      x: rowX,
+      y: rowY,
+      size: 8.5,
+      font: boldFont,
+      color: rgb(0.25, 0.29, 0.35)
+    });
+    page.drawText(truncatePdfText(value, isRightColumn ? 42 : 58), {
+      x: rowX + 58,
+      y: rowY,
+      size: index === 0 ? 10 : 8.5,
+      font: index === 0 ? boldFont : font,
+      color: index === 0 ? rgb(0.32, 0.08, 0.44) : rgb(0.1, 0.1, 0.1)
+    });
+  });
+
+  const signedBytes = await pdfDoc.save({ useObjectStreams: false });
+  return Buffer.from(signedBytes);
+}
+
+async function createSignedPdfFile({ request, document, recipient, signedAt, ipAddress, signatureFields }) {
+  const storagePath = signedPdfPath(document, recipient);
+  const fileName = signedPdfFileName(document);
+  const pdfBuffer = await createSignedPdfBuffer({ document, recipient, signedAt, ipAddress, signatureFields });
   await uploadStorageObject(document.bucket_name, storagePath, pdfBuffer, {
     contentType: "application/pdf",
     upsert: true
@@ -219,7 +349,7 @@ async function createSignedCertificateFile({ request, document, recipient, signe
       document_id: document.id,
       recipient_id: recipient.id,
       event_type: "signed_copy_created",
-      event_note: `Signed certificate PDF created for ${recipient.name || recipient.email}.`
+      event_note: `Signed PDF created for ${recipient.name || recipient.email}.`
     })
   });
 
@@ -229,26 +359,37 @@ async function createSignedCertificateFile({ request, document, recipient, signe
 export async function POST(request, { params }) {
   try {
     const body = await request.json();
-    const typedSignature = String(body.typedSignature || "").trim();
-    if (!typedSignature) return apiJson({ error: "Type your full name to sign." }, 400);
+    const signatureFields = cleanSignatureFields(body);
+    const validationError = validateSignatureFields(signatureFields);
+    if (validationError) return apiJson({ error: validationError }, 400);
 
     const payload = await loadSignature(params.token);
     if (payload.recipient.status === "signed") {
       return apiJson({ error: "This document has already been signed by this recipient." }, 400);
     }
 
-    if (normalizeEmail(payload.recipient.email) && typedSignature.length < 2) {
-      return apiJson({ error: "Signature name is too short." }, 400);
-    }
+    await requireMatchingPortalSessionIfNeeded(request, payload.recipient);
 
     const now = new Date().toISOString();
     const ipAddress = request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || null;
+    const requestRows = await supabaseAdminFetch(
+      tablePath("requests", `?select=id,client_id&id=eq.${encodeValue(payload.document.request_id)}&limit=1`)
+    );
+    const signedDocumentUrl = await createSignedPdfFile({
+      request: requestRows?.[0] || null,
+      document: payload.document,
+      recipient: payload.recipient,
+      signedAt: now,
+      ipAddress,
+      signatureFields
+    });
+
     await supabaseAdminFetch(tablePath("signature_recipients", `?id=eq.${encodeValue(payload.recipient.id)}`), {
       method: "PATCH",
       body: JSON.stringify({
         status: "signed",
         signed_at: now,
-        typed_signature: typedSignature,
+        typed_signature: signatureFields.typedSignature,
         signed_ip: ipAddress,
         signed_user_agent: request.headers.get("user-agent") || null
       })
@@ -256,7 +397,7 @@ export async function POST(request, { params }) {
 
     payload.recipient.status = "signed";
     payload.recipient.signed_at = now;
-    payload.recipient.typed_signature = typedSignature;
+    payload.recipient.typed_signature = signatureFields.typedSignature;
     payload.recipient.signed_ip = ipAddress;
 
     await supabaseAdminFetch(tablePath("signature_events"), {
@@ -265,7 +406,7 @@ export async function POST(request, { params }) {
         document_id: payload.document.id,
         recipient_id: payload.recipient.id,
         event_type: "signed",
-        event_note: `${payload.recipient.name || payload.recipient.email} signed as ${typedSignature}.`
+        event_note: `${payload.recipient.name || payload.recipient.email} signed the document.`
       })
     });
 
@@ -296,17 +437,6 @@ export async function POST(request, { params }) {
 
     if (payload.document.uploaded_by) {
       try {
-        const requestRows = await supabaseAdminFetch(
-          tablePath("requests", `?select=id,client_id&id=eq.${encodeValue(payload.document.request_id)}&limit=1`)
-        );
-        const signedDocumentUrl = await createSignedCertificateFile({
-          request: requestRows?.[0] || null,
-          document: payload.document,
-          recipient: payload.recipient,
-          signedAt: now,
-          ipAddress
-        });
-
         await supabaseAdminFetch(tablePath("request_messages"), {
           method: "POST",
           body: JSON.stringify({
@@ -318,13 +448,12 @@ export async function POST(request, { params }) {
             is_internal: false
           })
         });
-        return apiJson({ signed: true, completed: allSigned, signed_document_url: signedDocumentUrl });
       } catch (messageError) {
-        console.warn("[Clients] Signature signed copy/message entry failed", messageError);
+        console.warn("[Clients] Signature message entry failed", messageError);
       }
     }
 
-    return apiJson({ signed: true, completed: allSigned });
+    return apiJson({ signed: true, completed: allSigned, signed_document_url: signedDocumentUrl });
   } catch (error) {
     return handleApiError(error);
   }
