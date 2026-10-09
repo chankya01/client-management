@@ -56,6 +56,27 @@ function publicRecipient(recipient, profile, documentTitle, requestOrigin) {
   };
 }
 
+function cleanAgreementContent(body) {
+  const title = String(body.title || "Service Agreement").trim();
+  return {
+    title,
+    scope: String(body.scope || "").trim(),
+    services: String(body.services || "").trim(),
+    price: String(body.price || "").trim(),
+    timeline: String(body.timeline || "").trim(),
+    terms: String(body.terms || "").trim(),
+    nextSteps: String(body.nextSteps || "").trim()
+  };
+}
+
+function agreementFileName(title) {
+  const safeTitle = String(title || "Service Agreement")
+    .replace(/[^a-zA-Z0-9._-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "") || "service-agreement";
+  return `${safeTitle}.html`;
+}
+
 async function documentsForProfile(profile, origin) {
   const requestIds = await visibleRequestIds(profile);
   if (!requestIds.length) return [];
@@ -89,7 +110,11 @@ async function documentsForProfile(profile, origin) {
   return Promise.all(documents.map(async (document) => {
     let documentUrl = null;
     try {
-      documentUrl = await createStorageSignedUrl(document.bucket_name, document.storage_path);
+      if (document.mime_type === "text/html") {
+        documentUrl = null;
+      } else {
+        documentUrl = await createStorageSignedUrl(document.bucket_name, document.storage_path);
+      }
     } catch {
       documentUrl = null;
     }
@@ -140,8 +165,9 @@ export async function POST(request) {
     if (!recipients.length) {
       return apiJson({ error: "Add at least one recipient." }, 400);
     }
-    if (!body.storagePath || !body.fileName) {
-      return apiJson({ error: "Upload a document before sending for signature." }, 400);
+    const agreement = cleanAgreementContent(body);
+    if (requiresSignature && (!agreement.scope || !agreement.services || !agreement.price)) {
+      return apiJson({ error: "Add scope, services, and price before sending the agreement." }, 400);
     }
 
     const createdDocuments = await supabaseAdminFetch(tablePath("signature_documents"), {
@@ -150,13 +176,13 @@ export async function POST(request) {
       body: JSON.stringify({
         request_id: requestId,
         uploaded_by: profile.id,
-        title: body.title || body.fileName || "Signature document",
+        title: agreement.title,
         status: "sent",
         bucket_name: body.bucketName || "request-attachments",
-        storage_path: body.storagePath,
-        file_name: body.fileName,
-        mime_type: body.mimeType || null,
-        file_size: body.fileSize || null,
+        storage_path: `agreements/${requestId}/${Date.now()}-${agreementFileName(agreement.title)}`,
+        file_name: agreementFileName(agreement.title),
+        mime_type: "text/html",
+        file_size: JSON.stringify(agreement).length,
         sent_at: new Date().toISOString()
       })
     });
@@ -171,6 +197,15 @@ export async function POST(request) {
         ...recipient,
         status: "sent"
       })))
+    });
+
+    await supabaseAdminFetch(tablePath("signature_events"), {
+      method: "POST",
+      body: JSON.stringify({
+        document_id: document.id,
+        event_type: "agreement_snapshot",
+        event_note: JSON.stringify(agreement)
+      })
     });
 
     await supabaseAdminFetch(tablePath("signature_events"), {
@@ -193,13 +228,6 @@ export async function POST(request) {
       })
     )));
 
-    let documentUrl = null;
-    try {
-      documentUrl = await createStorageSignedUrl(document.bucket_name, document.storage_path);
-    } catch {
-      documentUrl = null;
-    }
-
     let messageResult = { created: false };
     try {
       await supabaseAdminFetch(tablePath("request_messages"), {
@@ -207,7 +235,7 @@ export async function POST(request) {
         body: JSON.stringify({
           request_id: requestId,
           sender_id: profile.id,
-          message: `${requiresSignature ? "Document sent for signature" : "Document shared"}: ${document.title || document.file_name || "Document"}. Recipients received their private link by email.`,
+          message: `${requiresSignature ? "Agreement sent for signature" : "Agreement shared"}: ${document.title || "Service Agreement"}. Recipients received their private link by email.`,
           is_internal: false
         })
       });
@@ -219,7 +247,7 @@ export async function POST(request) {
 
     return apiJson({
       ...document,
-      document_url: documentUrl,
+      document_url: null,
       recipients: (recipientRows || []).map((recipient) => publicRecipient(recipient, profile, document.title, origin)),
       email_results: emailResults,
       message_result: messageResult

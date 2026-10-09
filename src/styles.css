@@ -1954,13 +1954,13 @@ a {
   max-width: 860px;
 }
 
-.signature-pdf-shell {
+.proposal-signing-shell {
   background: #f8fafc;
   min-height: 100vh;
-  padding: 20px;
+  padding: 24px;
 }
 
-.signature-pdf-header {
+.proposal-header {
   align-items: center;
   background: #fff;
   border: 2px solid var(--line);
@@ -1968,46 +1968,112 @@ a {
   box-shadow: var(--shadow-soft);
   display: grid;
   gap: 18px;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  margin: 0 auto 18px;
-  max-width: 1440px;
+  grid-template-columns: auto minmax(0, 1fr);
+  margin: 0 auto 20px;
+  max-width: 1180px;
   padding: 18px 22px;
 }
 
-.signature-pdf-header h1 {
+.proposal-header h1 {
   margin: 0 0 4px;
 }
 
-.signature-pdf-layout {
+.proposal-layout {
   align-items: start;
   display: grid;
-  gap: 18px;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+  gap: 20px;
+  grid-template-columns: 220px minmax(0, 1fr);
   margin: 0 auto;
-  max-width: 1440px;
+  max-width: 1180px;
 }
 
-.signature-pdf-viewer-card,
-.signature-side-panel {
-  display: grid;
-  gap: 18px;
-}
-
-.signature-pdf-viewer-card {
+.proposal-nav {
   background: #fff;
   border: 2px solid var(--line);
   border-radius: 18px;
   box-shadow: var(--shadow-soft);
-  padding: 14px;
-}
-
-.signature-side-panel {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
   position: sticky;
   top: 18px;
 }
 
-.signature-review-card {
+.proposal-nav a {
+  border-radius: 10px;
+  color: var(--ink);
+  font-weight: 800;
+  padding: 10px 12px;
+  text-decoration: none;
+}
+
+.proposal-nav a:hover,
+.proposal-nav a:focus {
+  background: #f3e8ff;
+  color: var(--green);
+}
+
+.proposal-content {
+  display: grid;
+  gap: 20px;
+}
+
+.proposal-section {
+  background: #fff;
+  border: 2px solid var(--line);
+  border-radius: 18px;
+  box-shadow: var(--shadow-soft);
+  padding: 28px;
+}
+
+.proposal-hero h2 {
+  font-size: clamp(2rem, 4vw, 3.5rem);
+  line-height: 1.05;
+  margin: 8px 0 16px;
+  max-width: 760px;
+}
+
+.proposal-grid,
+.proposal-two-column {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-top: 18px;
+}
+
+.proposal-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.proposal-grid div,
+.proposal-two-column > div {
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.proposal-grid strong,
+.proposal-grid span {
+  display: block;
+}
+
+.proposal-grid span,
+.proposal-copy {
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.proposal-copy {
+  white-space: normal;
+}
+
+.proposal-two-column h3 {
+  margin: 0 0 8px;
+}
+
+.proposal-sign-card {
+  border-color: var(--green);
 }
 
 .signature-field-grid {
@@ -2018,28 +2084,6 @@ a {
 
 .signature-field-grid .field {
   margin: 0;
-}
-
-.signature-document-preview {
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  height: min(68vh, 720px);
-  min-height: 420px;
-  width: 100%;
-}
-
-.signature-document-preview-full {
-  height: calc(100vh - 120px);
-  min-height: 680px;
-}
-
-.signature-document-preview-empty {
-  align-items: center;
-  color: var(--muted);
-  display: grid;
-  justify-items: center;
-  padding: 24px;
-  text-align: center;
 }
 
 .signature-document-link {
@@ -2068,32 +2112,25 @@ a {
     grid-template-columns: 1fr;
   }
 
-  .signature-document-preview {
-    height: 58vh;
-    min-height: 320px;
-  }
-
-  .signature-pdf-shell {
+  .proposal-signing-shell {
     padding: 12px;
   }
 
-  .signature-pdf-header,
-  .signature-pdf-layout {
+  .proposal-header,
+  .proposal-layout,
+  .proposal-grid,
+  .proposal-two-column {
     grid-template-columns: 1fr;
   }
 
-  .signature-pdf-header {
+  .proposal-header,
+  .proposal-section {
     align-items: start;
     padding: 16px;
   }
 
-  .signature-side-panel {
+  .proposal-nav {
     position: static;
-  }
-
-  .signature-document-preview-full {
-    height: 65vh;
-    min-height: 420px;
   }
 
   .signature-field-grid {

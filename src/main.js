@@ -1205,7 +1205,7 @@ function adminNavHtml() {
           ${canManage ? navButton("admin-clients", "Clients") : ""}
           ${navButton("admin-requests", "Requests")}
           ${navButton("admin-messages", `Messages ${totalUnreadCount() ? `<span class="count">${totalUnreadCount()}</span>` : ""}`)}
-          ${navButton("admin-documents", "Documents")}
+          ${navButton("admin-documents", "Agreements")}
           ${navButton("admin-team", "Team")}
           ${navButton("admin-settings", "Settings")}
           <button class="nav-logout" data-action="logout">Logout</button>
@@ -2088,12 +2088,11 @@ function signatureDocumentCard(document) {
     <article class="signature-document-item signature-document-detail-card">
       <div class="signature-document-header">
         <span>
-          <strong>${escapeHtml(document.title || document.file_name || "Signature Document")}</strong>
-          <small>${escapeHtml(request ? `${displayRequestNumber(request)} · ${request.title}` : "Request document")}</small>
-          <small>${escapeHtml(document.file_name || "")}</small>
+          <strong>${escapeHtml(document.title || "Agreement")}</strong>
+          <small>${escapeHtml(request ? `${displayRequestNumber(request)} · ${request.title}` : "Request agreement")}</small>
+          <small>Web agreement</small>
         </span>
         <span class="signature-document-actions">
-          ${document.document_url ? `<a class="secondary small-action" href="${escapeHtml(document.document_url)}" target="_blank" rel="noopener noreferrer">Open Document</a>` : ""}
           <span class="status-pill">${escapeHtml(signatureStatusLabel(document.status))}</span>
         </span>
       </div>
@@ -2117,23 +2116,23 @@ function requestSignatureDocumentsCard(request) {
   return `
     <section class="card request-documents-card">
       <div class="section-heading-row">
-        <p class="section-label">Attached Documents</p>
+        <p class="section-label">Agreements</p>
       </div>
       <div class="request-documents-scroll">
         ${documents.map((document) => `
           <button class="signature-document-row ${selectedDocument?.id === document.id ? "active" : ""}" type="button" data-select-signature-document="${document.id}">
             <span>
-              <strong>${escapeHtml(document.title || document.file_name || "Document")}</strong>
-              <small>${escapeHtml(document.file_name || "")}</small>
+              <strong>${escapeHtml(document.title || "Agreement")}</strong>
+              <small>Web agreement</small>
             </span>
             <span class="signature-document-row-actions">
               <span class="status-pill">${escapeHtml(signatureStatusLabel(document.status))}</span>
               ${selectedDocument?.id === document.id ? `<span class="collapse-document-detail" aria-hidden="true">⌃</span>` : ""}
             </span>
           </button>
-        `).join("") || `<p class="helper">No documents have been sent for this request yet.</p>`}
+        `).join("") || `<p class="helper">No agreements have been sent for this request yet.</p>`}
       </div>
-      ${selectedDocument ? signatureDocumentCard(selectedDocument) : documents.length ? `<p class="helper">Select a document to view recipients, links, and activity.</p>` : ""}
+      ${selectedDocument ? signatureDocumentCard(selectedDocument) : documents.length ? `<p class="helper">Select an agreement to view recipients, links, and activity.</p>` : ""}
     </section>
   `;
 }
@@ -2159,6 +2158,12 @@ function signatureDraftFromForm(form) {
     requestId: String(formData.get("requestId") || ""),
     title: String(formData.get("title") || ""),
     documentPurpose: String(formData.get("documentPurpose") || "signature"),
+    scope: String(formData.get("scope") || ""),
+    services: String(formData.get("services") || ""),
+    price: String(formData.get("price") || ""),
+    timeline: String(formData.get("timeline") || ""),
+    terms: String(formData.get("terms") || ""),
+    nextSteps: String(formData.get("nextSteps") || ""),
     recipients: names.map((name, index) => ({
       name,
       email: emails[index] || "",
@@ -2211,8 +2216,8 @@ function signatureDocumentsPage() {
   if (!isInternal()) {
     return `
       <section class="page">
-        <h1>Documents</h1>
-        <p class="subtitle">Documents are attached to each request. Open a request to view its documents and signing status.</p>
+        <h1>Agreements</h1>
+        <p class="subtitle">Agreements are attached to each request. Open a request to view its agreement and signing status.</p>
         ${clientRequestCards(state.requests)}
       </section>
     `;
@@ -2226,11 +2231,11 @@ function signatureDocumentsPage() {
 
   return `
     <section class="${isInternal() ? "admin-page" : "page"}">
-      <h1>Documents</h1>
-      <p class="subtitle">Send documents for signature, or share view-only documents like invoices.</p>
+      <h1>Agreements</h1>
+      <p class="subtitle">Create a proposal-style agreement page, then send it for client signature.</p>
       ${isInternal() ? `
         <form class="card" id="signatureDocumentForm">
-          <p class="section-label">Send Document</p>
+          <p class="section-label">Send Agreement</p>
           <div class="form-grid">
             <label class="field"><span>Client</span>
               <select name="clientId" data-signature-client-select required>
@@ -2244,7 +2249,7 @@ function signatureDocumentsPage() {
                 ${clientRequests.map((request) => `<option value="${request.id}" ${request.id === selectedRequest?.id ? "selected" : ""}>${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(request.title)}</option>`).join("")}
               </select>
             </label>
-            <label class="field"><span>Document Title</span><input name="title" placeholder="Service Agreement" value="${escapeHtml(draft.title || "")}" /></label>
+            <label class="field"><span>Agreement Title</span><input name="title" placeholder="Service Agreement" value="${escapeHtml(draft.title || "")}" /></label>
             <label class="field"><span>Purpose</span>
               <select name="documentPurpose">
                 <option value="signature" ${(draft.documentPurpose || "signature") !== "view" ? "selected" : ""}>Needs Signature</option>
@@ -2252,23 +2257,28 @@ function signatureDocumentsPage() {
               </select>
             </label>
           </div>
-          <label class="field"><span>PDF Document</span><input id="signatureDocumentInput" name="document" type="file" accept=".pdf,application/pdf" required /></label>
-          <div class="selected-file-row" data-selected-file-for="signatureDocumentInput" hidden>
-            <span data-selected-file-name></span>
-            <button class="remove-file-button" type="button" data-clear-file="signatureDocumentInput" aria-label="Remove selected file">×</button>
+          <label class="field"><span>Scope</span><textarea name="scope" rows="4" placeholder="Describe the project scope and what the client is approving.">${escapeHtml(draft.scope || "")}</textarea></label>
+          <div class="form-grid">
+            <label class="field"><span>Services</span><textarea name="services" rows="4" placeholder="Accessibility audit, VPAT, remediation validation...">${escapeHtml(draft.services || "")}</textarea></label>
+            <label class="field"><span>Price</span><textarea name="price" rows="4" placeholder="$2,500 total, payment schedule, or package price.">${escapeHtml(draft.price || "")}</textarea></label>
           </div>
+          <div class="form-grid">
+            <label class="field"><span>Timeline</span><textarea name="timeline" rows="4" placeholder="Expected kickoff, turnaround, milestones.">${escapeHtml(draft.timeline || "")}</textarea></label>
+            <label class="field"><span>Next Steps</span><textarea name="nextSteps" rows="4" placeholder="What happens after the client signs?">${escapeHtml(draft.nextSteps || "")}</textarea></label>
+          </div>
+          <label class="field"><span>Terms</span><textarea name="terms" rows="6" placeholder="Agreement terms the client should review before signing.">${escapeHtml(draft.terms || "")}</textarea></label>
           <p class="section-label">Recipients</p>
           <div data-signature-recipient-list>${signatureRecipientInputs(selectedRequest)}</div>
           <div class="signature-form-actions">
             <button class="secondary" type="button" data-action="add-signature-recipient">Add Recipient</button>
-            <button class="primary" type="submit">Send Document</button>
+            <button class="primary" type="submit">Send Agreement</button>
           </div>
-          <p class="helper">Use PDF for in-browser signing. Convert DOC/DOCX to PDF before sending for signature. Use View Only for invoices or documents that only need to be shared.</p>
+          <p class="helper">Clients see company/process information first, then scope, services, price, terms, and the signature form at the bottom.</p>
         </form>
       ` : ""}
       <section class="card">
-        <p class="section-label">Request Documents</p>
-        <p class="helper">Documents are shown inside their related request. Open a request to view its sent documents, recipients, signing links, and activity trail.</p>
+        <p class="section-label">Request Agreements</p>
+        <p class="helper">Agreements are shown inside their related request. Open a request to view recipients, signing links, and activity trail.</p>
       </section>
     </section>
   `;
@@ -2381,6 +2391,24 @@ function downloadIcon() {
   return `<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 20h14v-2H5v2Zm7-16v9.17l3.59-3.58L17 11l-6 6-6-6 1.41-1.41L10 13.17V4h2Z"/></svg>`;
 }
 
+function agreementText(value, fallback = "To be confirmed by the project team.") {
+  const text = String(value || "").trim();
+  return text || fallback;
+}
+
+function multilineHtml(value, fallback) {
+  return escapeHtml(agreementText(value, fallback)).replace(/\n/g, "<br>");
+}
+
+function agreementTermsHtml(agreement) {
+  const fallbackTerms = [
+    "By signing this agreement, the signer confirms they are authorized to accept the scope, services, pricing, and timeline shown on this page.",
+    "Both parties agree to collaborate in good faith, provide timely access and feedback, and use this signed agreement as the project approval record.",
+    "Electronic acceptance through this portal is intended to have the same effect as a handwritten signature."
+  ].join("\n\n");
+  return multilineHtml(agreement?.terms, fallbackTerms);
+}
+
 function renderPublicSignature() {
   const payload = state.publicSignature;
   if (!payload) {
@@ -2389,34 +2417,73 @@ function renderPublicSignature() {
   }
   const alreadySigned = payload.recipient?.status === "signed";
   const canSign = payload.recipient?.role === "signer";
-  const documentUrl = payload.document_url || "";
-  const documentInlineUrl = payload.document_inline_url || documentUrl;
-  const documentPreviewUrl = payload.document_preview_url || "";
-  const canPreviewInline = Boolean(payload.can_inline_preview && documentPreviewUrl);
-  const fullDocumentLabel = canPreviewInline ? "Open PDF in New Tab" : "Download Document";
-  const signedDocumentUrl = payload.signed_document_url || "";
+  const agreement = payload.agreement || {};
   root.innerHTML = `
-    <main class="signature-pdf-shell">
-      <header class="signature-pdf-header">
+    <main class="proposal-signing-shell">
+      <header class="proposal-header">
         <span>${brandLogo("signin")}</span>
         <span>
-          <h1>${escapeHtml(payload.document?.title || "Review and Sign")}</h1>
-          <p class="helper">Signing as ${escapeHtml(payload.recipient?.name || payload.recipient?.email || "recipient")}.</p>
+          <h1>${escapeHtml(agreement.title || payload.document?.title || "Service Agreement")}</h1>
+          <p class="helper">Prepared for ${escapeHtml(payload.recipient?.name || payload.recipient?.email || "recipient")}.</p>
         </span>
-        ${documentUrl ? `<a class="secondary small-action" href="${escapeHtml(documentInlineUrl)}" target="_blank" rel="noopener noreferrer">${fullDocumentLabel}</a>` : ""}
       </header>
-      <section class="signature-pdf-layout">
-        <section class="signature-pdf-viewer-card">
-          ${canPreviewInline ? `
-            <iframe class="signature-document-preview signature-document-preview-full" src="${escapeHtml(documentPreviewUrl)}" title="PDF signing document"></iframe>
-          ` : `
-            <div class="signature-document-preview signature-document-preview-empty signature-document-preview-full">
-              <p>This signing flow needs a PDF document. Download this file to review it, or ask the team to resend it as a PDF.</p>
+
+      <section class="proposal-layout">
+        <nav class="proposal-nav" aria-label="Agreement sections">
+          <a href="#overview">Overview</a>
+          <a href="#scope">Scope</a>
+          <a href="#services">Services & Price</a>
+          <a href="#terms">Terms</a>
+          <a href="#sign">Sign</a>
+        </nav>
+
+        <article class="proposal-content">
+          <section class="proposal-section proposal-hero" id="overview">
+            <p class="section-label">Accessible.org Agreement</p>
+            <h2>Accessibility services, clear scope, and simple approval.</h2>
+            <p>Accessible.org helps organizations audit, remediate, validate, and document accessibility work without a heavy enterprise sales process.</p>
+            <div class="proposal-grid">
+              <div><strong>Transparent</strong><span>Scope, services, and pricing are shown before signing.</span></div>
+              <div><strong>Practical</strong><span>Work is organized around audits, remediation, validation, and documentation.</span></div>
+              <div><strong>Trackable</strong><span>Recipients and activity remain attached to the related request.</span></div>
             </div>
-          `}
-        </section>
-        <aside class="signature-side-panel">
-          <section class="card">
+          </section>
+
+          <section class="proposal-section" id="scope">
+            <p class="section-label">Project Scope</p>
+            <div class="proposal-copy">${multilineHtml(agreement.scope)}</div>
+          </section>
+
+          <section class="proposal-section" id="services">
+            <p class="section-label">Services & Pricing</p>
+            <div class="proposal-two-column">
+              <div>
+                <h3>Services</h3>
+                <div class="proposal-copy">${multilineHtml(agreement.services)}</div>
+              </div>
+              <div>
+                <h3>Price</h3>
+                <div class="proposal-copy">${multilineHtml(agreement.price)}</div>
+              </div>
+            </div>
+            <div class="proposal-two-column">
+              <div>
+                <h3>Timeline</h3>
+                <div class="proposal-copy">${multilineHtml(agreement.timeline, "Timeline will be confirmed after kickoff.")}</div>
+              </div>
+              <div>
+                <h3>Next Steps</h3>
+                <div class="proposal-copy">${multilineHtml(agreement.nextSteps, "After signing, the team will confirm kickoff details and next milestones.")}</div>
+              </div>
+            </div>
+          </section>
+
+          <section class="proposal-section" id="terms">
+            <p class="section-label">Terms</p>
+            <div class="proposal-copy">${agreementTermsHtml(agreement)}</div>
+          </section>
+
+          <section class="proposal-section" id="recipients">
             <p class="section-label">Recipients</p>
             ${(payload.recipients || []).map((recipient) => `
               <div class="deliverable-row">
@@ -2425,31 +2492,31 @@ function renderPublicSignature() {
               </div>
             `).join("")}
           </section>
+
           ${!canSign ? `
-            <section class="card">
-              <h2>Document Shared</h2>
-              <p class="helper">This document is view-only. No signature is required from you.</p>
+            <section class="proposal-section" id="sign">
+              <h2>Agreement Shared</h2>
+              <p class="helper">This agreement is view-only. No signature is required from you.</p>
             </section>
           ` : alreadySigned ? `
-            <section class="card">
+            <section class="proposal-section" id="sign">
               <h2>Already Signed</h2>
-              <p class="helper">This document has already been signed by you.</p>
-              ${signedDocumentUrl ? `<p><a class="primary signature-document-link" href="${escapeHtml(signedDocumentUrl)}" target="_blank" rel="noopener noreferrer">Open Signed PDF</a></p>` : ""}
+              <p class="helper">This agreement has already been signed by you.</p>
             </section>
           ` : `
-            <form class="card" id="publicSignatureForm">
-              <p class="section-label">Sign PDF</p>
+            <form class="proposal-section proposal-sign-card" id="publicSignatureForm">
+              <p class="section-label">Accept and Sign</p>
+              <p class="helper">Enter these details yourself. They become the signing record for this agreement.</p>
               <div class="signature-field-grid">
                 <label class="field"><span>Signature</span><input name="typedSignature" required autocomplete="off" /></label>
                 <label class="field"><span>Name</span><input name="signerName" required autocomplete="name" /></label>
                 <label class="field"><span>Title</span><input name="signerTitle" required autocomplete="organization-title" /></label>
                 <label class="field"><span>Date</span><input name="signatureDate" type="date" required /></label>
               </div>
-              <p class="helper">Review the PDF, then enter each field manually. These values will be stamped onto the signed PDF.</p>
-              <button class="primary" type="submit" ${canPreviewInline ? "" : "disabled"}>Sign Document</button>
+              <button class="primary" type="submit">Accept and Sign</button>
             </form>
           `}
-        </aside>
+        </article>
       </section>
       ${toastHtml()}
     </main>
@@ -2562,10 +2629,10 @@ function attachPublicSignatureEvents() {
           signatureDate: values.signatureDate
         });
         state.publicSignature = await loadSignatureByToken(state.publicSignatureToken);
-        showToast("Document signed.");
+        showToast("Agreement signed.");
         renderPublicSignature();
       } catch (error) {
-        showAppError(error, "Sign document");
+        showAppError(error, "Sign agreement");
       }
     });
   });
@@ -2869,11 +2936,13 @@ function attachEvents() {
       signatureDraftFromForm(form);
       const formData = new FormData(form);
       const request = state.requests.find((item) => item.id === formData.get("requestId"));
-      const file = formData.get("document");
       const names = formData.getAll("recipientName").map(String);
       const emails = formData.getAll("recipientEmail").map(String);
       const roles = formData.getAll("recipientRole").map(String);
       const requiresSignature = formData.get("documentPurpose") !== "view";
+      const scope = String(formData.get("scope") || "").trim();
+      const services = String(formData.get("services") || "").trim();
+      const price = String(formData.get("price") || "").trim();
       const recipients = emails.map((email, index) => ({
         name: names[index],
         email,
@@ -2884,8 +2953,8 @@ function attachEvents() {
         showToast("Select a request.");
         return;
       }
-      if (!file?.name) {
-        showToast("Choose a document.");
+      if (requiresSignature && (!scope || !services || !price)) {
+        showToast("Add scope, services, and price before sending.");
         return;
       }
       if (!recipients.length) {
@@ -2898,8 +2967,13 @@ function attachEvents() {
           const createdDocument = await createSignatureDocument({
             request,
             profile: state.profile,
-            file,
-            title: formData.get("title") || file.name,
+            title: formData.get("title") || "Service Agreement",
+            scope,
+            services,
+            price,
+            timeline: formData.get("timeline"),
+            terms: formData.get("terms"),
+            nextSteps: formData.get("nextSteps"),
             recipients,
             requiresSignature
           });
@@ -2911,8 +2985,8 @@ function attachEvents() {
           const failedEmail = (createdDocument.email_results || []).find((result) => result && result.sent === false);
           const messageWarning = createdDocument.message_result?.created === false ? " Message entry was not created." : "";
           showToast(failedEmail
-            ? `Document saved, but email was not sent: ${failedEmail.reason || "email service failed."}${messageWarning}`
-            : `${requiresSignature ? "Document sent for signature." : "Document sent for viewing."}${messageWarning}`
+            ? `Agreement saved, but email was not sent: ${failedEmail.reason || "email service failed."}${messageWarning}`
+            : `${requiresSignature ? "Agreement sent for signature." : "Agreement sent for viewing."}${messageWarning}`
           );
           render();
         } catch (error) {

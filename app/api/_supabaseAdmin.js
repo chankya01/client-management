@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { createHmac } from "node:crypto";
 import { appConfig } from "../../src/config.js";
 
 const supabaseUrl = process.env.SUPABASE_URL
@@ -34,17 +33,6 @@ export function apiJson(payload, status = 200) {
 
 export function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
-}
-
-export function signatureAccessCookieName(token) {
-  const safeToken = String(token || "").replace(/[^a-zA-Z0-9]/g, "").slice(0, 48);
-  return `signature_access_${safeToken || "document"}`;
-}
-
-export function signatureAccessCookieValue(token, recipientId) {
-  requireSupabaseAdmin();
-  const value = `${token}:${recipientId}`;
-  return createHmac("sha256", serviceRoleKey).update(value).digest("hex");
 }
 
 export function requireSupabaseAdmin() {
@@ -162,50 +150,6 @@ export async function createStorageSignedUrl(bucketName, storagePath, expiresIn 
   }
   const signedUrl = payload?.signedURL || payload?.signedUrl;
   return signedUrl?.startsWith("http") ? signedUrl : `${supabaseUrl}/storage/v1${signedUrl}`;
-}
-
-export async function uploadStorageObject(bucketName, storagePath, body, { contentType = "application/octet-stream", upsert = false } = {}) {
-  requireSupabaseAdmin();
-  const encodedPath = String(storagePath || "")
-    .split("/")
-    .map((part) => encodeURIComponent(part))
-    .join("/");
-  const response = await fetch(`${supabaseUrl}/storage/v1/object/${encodeURIComponent(bucketName)}/${encodedPath}`, {
-    method: "POST",
-    headers: {
-      apikey: serviceRoleKey,
-      Authorization: `Bearer ${serviceRoleKey}`,
-      "Content-Type": contentType,
-      "x-upsert": upsert ? "true" : "false"
-    },
-    body,
-    cache: "no-store"
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(payload?.message || payload?.error || `Storage upload failed: ${response.status}`);
-  }
-  return payload;
-}
-
-export async function downloadStorageObject(bucketName, storagePath) {
-  requireSupabaseAdmin();
-  const encodedPath = String(storagePath || "")
-    .split("/")
-    .map((part) => encodeURIComponent(part))
-    .join("/");
-  const response = await fetch(`${supabaseUrl}/storage/v1/object/${encodeURIComponent(bucketName)}/${encodedPath}`, {
-    headers: {
-      apikey: serviceRoleKey,
-      Authorization: `Bearer ${serviceRoleKey}`
-    },
-    cache: "no-store"
-  });
-  if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    throw new Error(detail || `Storage download failed: ${response.status}`);
-  }
-  return response;
 }
 
 export async function selectOne(table, query) {

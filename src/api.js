@@ -1565,19 +1565,32 @@ export async function loadSignatureDocuments() {
   return appApi("/signature-documents");
 }
 
-export async function createSignatureDocument({ request, profile, file, recipients = [], title, requiresSignature = true }) {
+export async function createSignatureDocument({
+  request,
+  profile,
+  recipients = [],
+  title,
+  scope,
+  services,
+  price,
+  timeline,
+  terms,
+  nextSteps,
+  requiresSignature = true
+}) {
   if (useDemo()) {
     const document = {
       id: crypto.randomUUID(),
       request_id: request.id,
       uploaded_by: profile.id,
-      title: title || file.name,
+      title: title || "Service Agreement",
       status: "sent",
-      file_name: file.name,
-      mime_type: file.type || null,
-      file_size: file.size,
+      file_name: `${(title || "Service Agreement").replace(/[^a-zA-Z0-9._-]/g, "-")}.html`,
+      mime_type: "text/html",
+      file_size: 0,
       sent_at: new Date().toISOString(),
       created_at: new Date().toISOString(),
+      agreement: { title, scope, services, price, timeline, terms, nextSteps },
       recipients: recipients.map((recipient) => ({
         id: crypto.randomUUID(),
         name: recipient.name,
@@ -1591,26 +1604,17 @@ export async function createSignatureDocument({ request, profile, file, recipien
     return document;
   }
 
-  const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
-  const storagePath = `${request.client_id}/${request.id}/signatures/${Date.now()}-${safeFileName}`;
-  const upload = await supabase.storage
-    .from("request-attachments")
-    .upload(storagePath, file, {
-      cacheControl: "3600",
-      upsert: false
-    });
-  if (upload.error) throw upload.error;
-
   return appApi("/signature-documents", {
     method: "POST",
     body: JSON.stringify({
       requestId: request.id,
-      title: title || file.name,
-      bucketName: "request-attachments",
-      storagePath,
-      fileName: file.name,
-      mimeType: file.type || null,
-      fileSize: file.size,
+      title,
+      scope,
+      services,
+      price,
+      timeline,
+      terms,
+      nextSteps,
       recipients,
       requiresSignature
     })
@@ -1620,14 +1624,19 @@ export async function createSignatureDocument({ request, profile, file, recipien
 export async function loadSignatureByToken(token) {
   if (useDemo()) {
     return {
-      document: { title: "Demo Agreement.pdf", status: "sent" },
+      document: { title: "Demo Agreement", status: "sent" },
+      agreement: {
+        title: "Demo Agreement",
+        scope: "Accessibility audit and remediation support for the selected request.",
+        services: "Accessibility audit, issue review, remediation guidance, and validation.",
+        price: "$2,500",
+        timeline: "Two weeks from project kickoff.",
+        terms: "By signing, the recipient confirms they are authorized to accept this agreement and agrees to the scope, pricing, and terms shown on this page.",
+        nextSteps: "After signing, the team will confirm kickoff details and next milestones."
+      },
       recipient: { name: "Demo Signer", email: "demo@example.com", status: "viewed" },
       recipients: [{ name: "Demo Signer", email: "demo@example.com", status: "viewed" }],
-      document_url: "",
-      document_inline_url: "",
-      document_preview_url: "",
-      can_inline_preview: false,
-      signed_document_url: ""
+      events: []
     };
   }
   const { data } = await supabase.auth.getSession();
@@ -1642,7 +1651,7 @@ export async function loadSignatureByToken(token) {
 }
 
 export async function signSignatureRecipient(token, signatureFields) {
-  if (useDemo()) return { signed: true, completed: true, signed_document_url: "" };
+  if (useDemo()) return { signed: true, completed: true };
   const body = typeof signatureFields === "string"
     ? { typedSignature: signatureFields }
     : { ...(signatureFields || {}) };

@@ -58,34 +58,34 @@ For email delivery, configure these Vercel Preview environment variables and red
 - `NOTIFICATION_FROM` using a verified Resend sender/domain
 - `APP_URL` or `NEXT_PUBLIC_APP_URL` pointing to the preview or target app URL
 
-## 2026-10-06 — Signature phase 3 manual signer fields and protected portal signing
+## 2026-10-10 — Proposal-style web agreements
 
 - Branch: `feature-internal-signatures`
 - No SQL migration required.
 
 ### What changed
 
-- Public signing links now open into a PDF-first signing screen with the PDF viewer as the main content.
-- PDF preview is served through a token-scoped app route with inline content disposition instead of embedding the private Supabase storage URL directly.
-- Non-PDF documents do not attempt inline browser preview; signers use `Download Document` to review those files.
-- The send-document form accepts PDFs for signing so the in-browser signing experience matches the Adobe-style flow.
-- Added `pdf-lib` so the server can write signer-entered fields back onto the PDF.
+- The PDF-first signing experiment was removed. There is no `pdf-lib` dependency and the app no longer creates stamped PDF copies.
+- Internal users now create proposal-style web agreements attached to a request.
+- Admin/developer/reviewer users fill agreement content in the app:
+  - scope;
+  - services;
+  - price;
+  - timeline;
+  - terms;
+  - next steps.
+- The client opens the signing link and reviews a web agreement page with company/process context, scope, services/pricing, terms, recipients, and a signature section at the bottom.
 - Signers manually enter all signing fields. Nothing is prepopulated:
   - signature;
   - name;
   - title;
   - date.
 - If the recipient email already belongs to an existing portal profile, the signing API requires a signed-in Supabase session for that same recipient email before accepting the signature.
-- When a signer completes signing, the server creates a signed PDF copy by stamping a signature block onto the last page of the uploaded PDF. The block records:
-  - signer-entered signature, name, title, and date;
-  - recipient email;
-  - signed timestamp;
-  - captured IP address;
-- The generated signed PDF is uploaded to the existing `request-attachments` storage bucket and indexed through the existing `files` table as a request attachment.
-- The signing page shows an `Open Signed PDF` link after the recipient signs.
+- Agreement content is stored as an `agreement_snapshot` event so it remains tied to the signature record without requiring another table.
+- Signing still updates `signature_recipients`, `signature_documents`, `signature_events`, and the related request message timeline.
 
 ### Existing app impact
 
 No existing tables were altered.
 
-The original uploaded document is not modified in-place. This phase creates a separate signed PDF copy. Signature placement is currently automatic on the last page; a future phase can add signer/admin-controlled field placement on top of the original PDF.
+The agreement feature continues to use the additive signature tables created earlier. Existing client/request/message/team flows should not be affected.
