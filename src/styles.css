@@ -2068,6 +2068,40 @@ a {
   white-space: normal;
 }
 
+.agreement-textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  min-height: 420px;
+}
+
+.agreement-body {
+  color: var(--ink);
+}
+
+.agreement-body h3 {
+  color: var(--ink);
+  font-size: 1.25rem;
+  margin: 28px 0 10px;
+}
+
+.agreement-body h3:first-child {
+  margin-top: 0;
+}
+
+.agreement-body p {
+  margin: 0 0 12px;
+}
+
+.agreement-body .agreement-bullet {
+  margin-left: 18px;
+  position: relative;
+}
+
+.agreement-body .agreement-bullet::before {
+  content: "•";
+  left: -18px;
+  position: absolute;
+}
+
 .proposal-two-column h3 {
   margin: 0 0 8px;
 }

@@ -2158,12 +2158,7 @@ function signatureDraftFromForm(form) {
     requestId: String(formData.get("requestId") || ""),
     title: String(formData.get("title") || ""),
     documentPurpose: String(formData.get("documentPurpose") || "signature"),
-    scope: String(formData.get("scope") || ""),
-    services: String(formData.get("services") || ""),
-    price: String(formData.get("price") || ""),
-    timeline: String(formData.get("timeline") || ""),
-    terms: String(formData.get("terms") || ""),
-    nextSteps: String(formData.get("nextSteps") || ""),
+    agreementText: String(formData.get("agreementText") || ""),
     recipients: names.map((name, index) => ({
       name,
       email: emails[index] || "",
@@ -2232,7 +2227,7 @@ function signatureDocumentsPage() {
   return `
     <section class="${isInternal() ? "admin-page" : "page"}">
       <h1>Agreements</h1>
-      <p class="subtitle">Create a proposal-style agreement page, then send it for client signature.</p>
+      <p class="subtitle">Paste or edit the complete agreement text, then send it for client signature.</p>
       ${isInternal() ? `
         <form class="card" id="signatureDocumentForm">
           <p class="section-label">Send Agreement</p>
@@ -2257,23 +2252,14 @@ function signatureDocumentsPage() {
               </select>
             </label>
           </div>
-          <label class="field"><span>Scope</span><textarea name="scope" rows="4" placeholder="Describe the project scope and what the client is approving.">${escapeHtml(draft.scope || "")}</textarea></label>
-          <div class="form-grid">
-            <label class="field"><span>Services</span><textarea name="services" rows="4" placeholder="Accessibility audit, VPAT, remediation validation...">${escapeHtml(draft.services || "")}</textarea></label>
-            <label class="field"><span>Price</span><textarea name="price" rows="4" placeholder="$2,500 total, payment schedule, or package price.">${escapeHtml(draft.price || "")}</textarea></label>
-          </div>
-          <div class="form-grid">
-            <label class="field"><span>Timeline</span><textarea name="timeline" rows="4" placeholder="Expected kickoff, turnaround, milestones.">${escapeHtml(draft.timeline || "")}</textarea></label>
-            <label class="field"><span>Next Steps</span><textarea name="nextSteps" rows="4" placeholder="What happens after the client signs?">${escapeHtml(draft.nextSteps || "")}</textarea></label>
-          </div>
-          <label class="field"><span>Terms</span><textarea name="terms" rows="6" placeholder="Agreement terms the client should review before signing.">${escapeHtml(draft.terms || "")}</textarea></label>
+          <label class="field"><span>Agreement Text</span><textarea name="agreementText" class="agreement-textarea" rows="22" placeholder="Paste the complete agreement text here. Include project overview, services, price, timeline, payment terms, legal terms, and signature wording.">${escapeHtml(draft.agreementText || "")}</textarea></label>
           <p class="section-label">Recipients</p>
           <div data-signature-recipient-list>${signatureRecipientInputs(selectedRequest)}</div>
           <div class="signature-form-actions">
             <button class="secondary" type="button" data-action="add-signature-recipient">Add Recipient</button>
             <button class="primary" type="submit">Send Agreement</button>
           </div>
-          <p class="helper">Clients see company/process information first, then scope, services, price, terms, and the signature form at the bottom.</p>
+          <p class="helper">Clients see the agreement as a clean web page and sign at the bottom. Any client, scope, services, price, or timeline changes should be made directly in the full agreement text.</p>
         </form>
       ` : ""}
       <section class="card">
@@ -2396,17 +2382,27 @@ function agreementText(value, fallback = "To be confirmed by the project team.")
   return text || fallback;
 }
 
-function multilineHtml(value, fallback) {
-  return escapeHtml(agreementText(value, fallback)).replace(/\n/g, "<br>");
-}
-
-function agreementTermsHtml(agreement) {
-  const fallbackTerms = [
-    "By signing this agreement, the signer confirms they are authorized to accept the scope, services, pricing, and timeline shown on this page.",
-    "Both parties agree to collaborate in good faith, provide timely access and feedback, and use this signed agreement as the project approval record.",
+function agreementBodyHtml(agreement) {
+  const fallbackText = [
+    "Accessibility Services Agreement",
+    "",
+    "Project Overview",
+    "Accessible.org will provide accessibility services for the selected client and request.",
+    "",
+    "Key Terms",
+    "By signing this agreement, the signer confirms they are authorized to accept the agreement shown on this page.",
+    "",
     "Electronic acceptance through this portal is intended to have the same effect as a handwritten signature."
-  ].join("\n\n");
-  return multilineHtml(agreement?.terms, fallbackTerms);
+  ].join("\n");
+  const text = agreementText(agreement?.agreementText || agreement?.terms, fallbackText);
+  const headingPattern = /^(Accessibility Services Agreement|Project Overview|Key Terms|Project Timeline|Communication and Project Management|Platforms and Tools|Accessibility Tracker|Scope|Payment Terms|Project Completion|Validation|Limitation of Liability|Confidentiality|Termination|Governing Law|Severability|Entire Agreement|In Witness Whereof|Client|Accessible\\.org, LLC)$/i;
+  return text.split(/\n/).map((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return `<br>`;
+    if (headingPattern.test(trimmed)) return `<h3>${escapeHtml(trimmed)}</h3>`;
+    if (/^[•*-]\s+/.test(trimmed)) return `<p class="agreement-bullet">${escapeHtml(trimmed.replace(/^[•*-]\s+/, ""))}</p>`;
+    return `<p>${escapeHtml(trimmed)}</p>`;
+  }).join("");
 }
 
 function renderPublicSignature() {
@@ -2431,9 +2427,8 @@ function renderPublicSignature() {
       <section class="proposal-layout">
         <nav class="proposal-nav" aria-label="Agreement sections">
           <a href="#overview">Overview</a>
-          <a href="#scope">Scope</a>
-          <a href="#services">Services & Price</a>
-          <a href="#terms">Terms</a>
+          <a href="#agreement">Agreement</a>
+          <a href="#recipients">Recipients</a>
           <a href="#sign">Sign</a>
         </nav>
 
@@ -2449,38 +2444,9 @@ function renderPublicSignature() {
             </div>
           </section>
 
-          <section class="proposal-section" id="scope">
-            <p class="section-label">Project Scope</p>
-            <div class="proposal-copy">${multilineHtml(agreement.scope)}</div>
-          </section>
-
-          <section class="proposal-section" id="services">
-            <p class="section-label">Services & Pricing</p>
-            <div class="proposal-two-column">
-              <div>
-                <h3>Services</h3>
-                <div class="proposal-copy">${multilineHtml(agreement.services)}</div>
-              </div>
-              <div>
-                <h3>Price</h3>
-                <div class="proposal-copy">${multilineHtml(agreement.price)}</div>
-              </div>
-            </div>
-            <div class="proposal-two-column">
-              <div>
-                <h3>Timeline</h3>
-                <div class="proposal-copy">${multilineHtml(agreement.timeline, "Timeline will be confirmed after kickoff.")}</div>
-              </div>
-              <div>
-                <h3>Next Steps</h3>
-                <div class="proposal-copy">${multilineHtml(agreement.nextSteps, "After signing, the team will confirm kickoff details and next milestones.")}</div>
-              </div>
-            </div>
-          </section>
-
-          <section class="proposal-section" id="terms">
-            <p class="section-label">Terms</p>
-            <div class="proposal-copy">${agreementTermsHtml(agreement)}</div>
+          <section class="proposal-section" id="agreement">
+            <p class="section-label">Agreement</p>
+            <div class="proposal-copy agreement-body">${agreementBodyHtml(agreement)}</div>
           </section>
 
           <section class="proposal-section" id="recipients">
@@ -2940,9 +2906,7 @@ function attachEvents() {
       const emails = formData.getAll("recipientEmail").map(String);
       const roles = formData.getAll("recipientRole").map(String);
       const requiresSignature = formData.get("documentPurpose") !== "view";
-      const scope = String(formData.get("scope") || "").trim();
-      const services = String(formData.get("services") || "").trim();
-      const price = String(formData.get("price") || "").trim();
+      const agreementText = String(formData.get("agreementText") || "").trim();
       const recipients = emails.map((email, index) => ({
         name: names[index],
         email,
@@ -2953,8 +2917,8 @@ function attachEvents() {
         showToast("Select a request.");
         return;
       }
-      if (requiresSignature && (!scope || !services || !price)) {
-        showToast("Add scope, services, and price before sending.");
+      if (!agreementText) {
+        showToast("Add the agreement text before sending.");
         return;
       }
       if (!recipients.length) {
@@ -2968,12 +2932,7 @@ function attachEvents() {
             request,
             profile: state.profile,
             title: formData.get("title") || "Service Agreement",
-            scope,
-            services,
-            price,
-            timeline: formData.get("timeline"),
-            terms: formData.get("terms"),
-            nextSteps: formData.get("nextSteps"),
+            agreementText,
             recipients,
             requiresSignature
           });

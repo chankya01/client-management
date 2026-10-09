@@ -11,12 +11,7 @@ import {
 function defaultAgreement(document) {
   return {
     title: document?.title || "Service Agreement",
-    scope: "",
-    services: "",
-    price: "",
-    timeline: "",
-    terms: "",
-    nextSteps: ""
+    agreementText: ""
   };
 }
 

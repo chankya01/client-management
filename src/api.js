@@ -1570,12 +1570,7 @@ export async function createSignatureDocument({
   profile,
   recipients = [],
   title,
-  scope,
-  services,
-  price,
-  timeline,
-  terms,
-  nextSteps,
+  agreementText,
   requiresSignature = true
 }) {
   if (useDemo()) {
@@ -1590,7 +1585,7 @@ export async function createSignatureDocument({
       file_size: 0,
       sent_at: new Date().toISOString(),
       created_at: new Date().toISOString(),
-      agreement: { title, scope, services, price, timeline, terms, nextSteps },
+      agreement: { title, agreementText },
       recipients: recipients.map((recipient) => ({
         id: crypto.randomUUID(),
         name: recipient.name,
@@ -1609,12 +1604,7 @@ export async function createSignatureDocument({
     body: JSON.stringify({
       requestId: request.id,
       title,
-      scope,
-      services,
-      price,
-      timeline,
-      terms,
-      nextSteps,
+      agreementText,
       recipients,
       requiresSignature
     })
@@ -1627,12 +1617,7 @@ export async function loadSignatureByToken(token) {
       document: { title: "Demo Agreement", status: "sent" },
       agreement: {
         title: "Demo Agreement",
-        scope: "Accessibility audit and remediation support for the selected request.",
-        services: "Accessibility audit, issue review, remediation guidance, and validation.",
-        price: "$2,500",
-        timeline: "Two weeks from project kickoff.",
-        terms: "By signing, the recipient confirms they are authorized to accept this agreement and agrees to the scope, pricing, and terms shown on this page.",
-        nextSteps: "After signing, the team will confirm kickoff details and next milestones."
+        agreementText: "Accessibility Services Agreement\n\nProject Overview\nAccessible.org will provide accessibility services for the selected client and request.\n\nKey Terms\nBy signing, the recipient confirms they are authorized to accept this agreement and agrees to the terms shown on this page."
       },
       recipient: { name: "Demo Signer", email: "demo@example.com", status: "viewed" },
       recipients: [{ name: "Demo Signer", email: "demo@example.com", status: "viewed" }],

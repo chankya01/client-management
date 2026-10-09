@@ -58,14 +58,18 @@ function publicRecipient(recipient, profile, documentTitle, requestOrigin) {
 
 function cleanAgreementContent(body) {
   const title = String(body.title || "Service Agreement").trim();
+  const agreementText = String(body.agreementText || "").trim();
+  const legacyText = [
+    body.scope ? `Project Scope\n${String(body.scope).trim()}` : "",
+    body.services ? `Services\n${String(body.services).trim()}` : "",
+    body.price ? `Price\n${String(body.price).trim()}` : "",
+    body.timeline ? `Timeline\n${String(body.timeline).trim()}` : "",
+    body.terms ? `Terms\n${String(body.terms).trim()}` : "",
+    body.nextSteps ? `Next Steps\n${String(body.nextSteps).trim()}` : ""
+  ].filter(Boolean).join("\n\n");
   return {
     title,
-    scope: String(body.scope || "").trim(),
-    services: String(body.services || "").trim(),
-    price: String(body.price || "").trim(),
-    timeline: String(body.timeline || "").trim(),
-    terms: String(body.terms || "").trim(),
-    nextSteps: String(body.nextSteps || "").trim()
+    agreementText: agreementText || legacyText
   };
 }
 
@@ -166,8 +170,8 @@ export async function POST(request) {
       return apiJson({ error: "Add at least one recipient." }, 400);
     }
     const agreement = cleanAgreementContent(body);
-    if (requiresSignature && (!agreement.scope || !agreement.services || !agreement.price)) {
-      return apiJson({ error: "Add scope, services, and price before sending the agreement." }, 400);
+    if (!agreement.agreementText) {
+      return apiJson({ error: "Add the agreement text before sending." }, 400);
     }
 
     const createdDocuments = await supabaseAdminFetch(tablePath("signature_documents"), {

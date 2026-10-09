@@ -67,21 +67,16 @@ For email delivery, configure these Vercel Preview environment variables and red
 
 - The PDF-first signing experiment was removed. There is no `pdf-lib` dependency and the app no longer creates stamped PDF copies.
 - Internal users now create proposal-style web agreements attached to a request.
-- Admin/developer/reviewer users fill agreement content in the app:
-  - scope;
-  - services;
-  - price;
-  - timeline;
-  - terms;
-  - next steps.
-- The client opens the signing link and reviews a web agreement page with company/process context, scope, services/pricing, terms, recipients, and a signature section at the bottom.
+- Admin/developer/reviewer users paste or edit one complete agreement body instead of filling separate required scope/service/price fields.
+- The complete agreement body can include the project overview, services, pricing, timeline, payment terms, legal terms, and signature wording from the source agreement.
+- The client opens the signing link and reviews a web agreement page with company/process context, the complete agreement, recipients, and a signature section at the bottom.
 - Signers manually enter all signing fields. Nothing is prepopulated:
   - signature;
   - name;
   - title;
   - date.
 - If the recipient email already belongs to an existing portal profile, the signing API requires a signed-in Supabase session for that same recipient email before accepting the signature.
-- Agreement content is stored as an `agreement_snapshot` event so it remains tied to the signature record without requiring another table.
+- Agreement content is stored as an `agreement_snapshot` event so the exact version sent for signature remains tied to the signature record without requiring another table.
 - Signing still updates `signature_recipients`, `signature_documents`, `signature_events`, and the related request message timeline.
 
 ### Existing app impact
