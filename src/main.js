@@ -70,6 +70,7 @@ const state = {
   signatureDocuments: [],
   publicSignature: null,
   publicSignatureToken: signatureTokenFromUrl(),
+  publicSignatureError: "",
   messageDrafts: {},
   clientDraft: {},
   requestDraft: {},
@@ -901,7 +902,15 @@ async function boot() {
   const recoveryFlow = isPasswordRecoveryFlow();
   try {
     if (state.publicSignatureToken) {
-      state.publicSignature = await withTimeout(loadSignatureByToken(state.publicSignatureToken), "Signature document loading");
+      try {
+        state.session = await withTimeout(getSession(), "Session check");
+        state.publicSignature = await withTimeout(loadSignatureByToken(state.publicSignatureToken), "Signature document loading");
+        state.publicSignatureError = "";
+      } catch (error) {
+        console.warn(`[${APP_NAME}] Signature link loading`, error);
+        state.publicSignature = null;
+        state.publicSignatureError = error?.message || "This signing link could not be loaded. Please request a fresh link.";
+      }
       state.loading = false;
       render();
       return;
@@ -1028,7 +1037,11 @@ function renderSignIn() {
     </main>
   `;
 
-  document.getElementById("signinForm").addEventListener("submit", async (event) => {
+  attachSignInEvents();
+}
+
+function attachSignInEvents() {
+  document.getElementById("signinForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const values = Object.fromEntries(new FormData(event.currentTarget));
     try {
@@ -1044,7 +1057,7 @@ function renderSignIn() {
     }
   });
 
-  document.querySelector("[data-action='forgot-password']").addEventListener("click", () => {
+  document.querySelector("[data-action='forgot-password']")?.addEventListener("click", () => {
     state.authView = "forgot-password";
     render();
   });
@@ -1141,6 +1154,22 @@ async function completeSignIn(session) {
   state.loading = true;
   state.loadError = "";
   render();
+  if (state.publicSignatureToken) {
+    try {
+      state.publicSignature = await loadSignatureByToken(state.publicSignatureToken);
+      state.publicSignatureError = "";
+      state.loading = false;
+      showToast(`Signed in to ${APP_NAME}.`);
+      render();
+      return;
+    } catch (error) {
+      state.publicSignature = null;
+      state.publicSignatureError = error?.message || "This signing link could not be loaded. Please request a fresh link.";
+      state.loading = false;
+      render();
+      return;
+    }
+  }
   await loadPortalData();
   state.loading = false;
   state.page = defaultPage();
@@ -2408,7 +2437,44 @@ function agreementBodyHtml(agreement) {
 function renderPublicSignature() {
   const payload = state.publicSignature;
   if (!payload) {
-    root.innerHTML = `<main class="signin-shell"><section class="signin-card">${brandLogo("signin")}<h1>Signing link unavailable</h1><p class="helper">This signing link could not be loaded. Please request a fresh link.</p>${toastHtml()}</section></main>`;
+    const errorMessage = state.publicSignatureError || "This signing link could not be loaded. Please request a fresh link.";
+    const needsSignIn = /sign in|recipient portal account|different recipient account/i.test(errorMessage);
+    root.innerHTML = needsSignIn ? `
+      <main class="signin-shell">
+        <form class="signin-card" id="signinForm">
+          ${brandLogo("signin")}
+          <h1>Sign in to open agreement</h1>
+          <p class="helper">${escapeHtml(errorMessage)}</p>
+          <label class="field">
+            <span>Email Address</span>
+            <input name="email" type="email" autocomplete="email" required />
+          </label>
+          <label class="field">
+            <span>Password</span>
+            <input name="password" type="password" autocomplete="current-password" required />
+          </label>
+          <label class="password-toggle">
+            <input type="checkbox" data-toggle-password="password" />
+            <span>Show Password</span>
+          </label>
+          <button class="primary" type="submit">Sign In and Open Agreement</button>
+          <div class="signin-actions">
+            <button class="link-button" type="button" data-action="forgot-password">Forgot Password?</button>
+          </div>
+        </form>
+        ${toastHtml()}
+      </main>
+    ` : `
+      <main class="signin-shell">
+        <section class="signin-card">
+          ${brandLogo("signin")}
+          <h1>Signing link unavailable</h1>
+          <p class="helper">${escapeHtml(errorMessage)}</p>
+          ${toastHtml()}
+        </section>
+      </main>
+    `;
+    if (needsSignIn) attachSignInEvents();
     return;
   }
   const alreadySigned = payload.recipient?.status === "signed";

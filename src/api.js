@@ -1631,7 +1631,11 @@ export async function loadSignatureByToken(token) {
     headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
   });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload?.error || `Signature link failed: ${response.status}`);
+  if (!response.ok) {
+    const error = new Error(payload?.error || `Signature link failed: ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
   return payload;
 }
 
