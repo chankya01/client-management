@@ -79,7 +79,8 @@ a:hover { text-decoration: underline; }
 }
 
 .admin-topbar-inner {
-  width: min(100%, 1480px);
+  justify-content: flex-start;
+  width: 100%;
 }
 
 .brand {
@@ -241,13 +242,13 @@ main {
 
 .admin-topbar + main,
 body:has(.admin-page) main {
-  width: min(100%, 1480px);
-  max-width: 1480px;
+  width: 100%;
+  max-width: none;
 }
 
 body:has(.client-message-layout) main {
-  width: min(100%, 1280px);
-  max-width: 1280px;
+  width: 100%;
+  max-width: none;
 }
 
 h1 {
