@@ -2413,81 +2413,22 @@ function agreementText(value, fallback = "To be confirmed by the project team.")
 
 function agreementFullText(agreement) {
   return agreementText(agreement?.agreementText || agreement?.terms, [
-    "Accessibility Services Agreement",
+    "Agreement",
     "",
-    "Project Overview",
-    "Accessible.org will provide accessibility services for the selected client and request.",
+    "Overview",
+    "Agreement content will be added here.",
     "",
-    "Key Terms",
-    "By signing this agreement, the signer confirms they are authorized to accept the agreement shown on this page.",
+    "Terms",
+    "Detailed terms will be added here.",
     "",
-    "Electronic acceptance through this portal is intended to have the same effect as a handwritten signature."
+    "Signature",
+    "The recipient can review the proposal and sign when ready."
   ].join("\n"));
-}
-
-function normalizeAgreementLines(text) {
-  return String(text || "")
-    .replace(/(Price:\s*\$[\d,]+)(?=[A-Z])/g, "$1\n\n")
-    .split(/\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-}
-
-function extractAgreementSection(text, startHeading, endHeadings = []) {
-  const lines = normalizeAgreementLines(text);
-  const startIndex = lines.findIndex((line) => line.toLowerCase() === startHeading.toLowerCase());
-  if (startIndex < 0) return "";
-  const endIndex = lines.findIndex((line, index) => (
-    index > startIndex && endHeadings.some((heading) => line.toLowerCase() === heading.toLowerCase())
-  ));
-  return lines.slice(startIndex + 1, endIndex > startIndex ? endIndex : undefined).join("\n");
-}
-
-function extractProposalServiceItems(text) {
-  const lines = normalizeAgreementLines(text);
-  const ignoredHeadings = new Set([
-    "accessibility services agreement",
-    "project overview",
-    "key terms",
-    "project timeline",
-    "communication and project management",
-    "platforms and tools"
-  ]);
-  const items = [];
-  let current = null;
-
-  lines.forEach((line) => {
-    const priceMatch = line.match(/^Price:\s*(.+)$/i);
-    if (priceMatch && current) {
-      current.price = priceMatch[1].trim();
-      items.push(current);
-      current = null;
-      return;
-    }
-
-    if (/^[•*-]\s+/.test(line)) {
-      if (current) current.details.push(line.replace(/^[•*-]\s+/, ""));
-      return;
-    }
-
-    if (ignoredHeadings.has(line.toLowerCase()) || /^Total Cost:/i.test(line)) return;
-    if (current && !current.price && current.details.length) {
-      items.push(current);
-    }
-    current = { title: line, details: [], price: "" };
-  });
-
-  if (current && current.details.length) items.push(current);
-  return items.filter((item) => item.title && (item.details.length || item.price)).slice(0, 6);
-}
-
-function extractTotalCost(text) {
-  return String(text || "").match(/Total Cost:\s*([^\n.]+)/i)?.[1]?.trim() || "";
 }
 
 function agreementBodyHtml(agreement) {
   const text = agreementFullText(agreement);
-  const headingPattern = /^(Accessibility Services Agreement|Project Overview|Key Terms|Project Timeline|Communication and Project Management|Platforms and Tools|Accessibility Tracker|Scope|Payment Terms|Project Completion|Validation|Limitation of Liability|Confidentiality|Termination|Governing Law|Severability|Entire Agreement|In Witness Whereof|Client|Accessible\\.org, LLC)$/i;
+  const headingPattern = /^(Agreement|Overview|Company|Services|Pricing|Terms|Signature|Project Summary|Next Steps)$/i;
   return text.split(/\n/).map((line) => {
     const trimmed = line.trim();
     if (!trimmed) return `<br>`;
@@ -2543,10 +2484,8 @@ function renderPublicSignature() {
   const alreadySigned = payload.recipient?.status === "signed";
   const canSign = payload.recipient?.role === "signer";
   const agreement = payload.agreement || {};
-  const fullAgreementText = agreementFullText(agreement);
-  const projectOverview = extractAgreementSection(fullAgreementText, "Project Overview", ["Key Terms", "Project Timeline"]);
-  const serviceItems = extractProposalServiceItems(projectOverview || fullAgreementText);
-  const totalCost = extractTotalCost(fullAgreementText);
+  const recipientName = payload.recipient?.name || payload.recipient?.email || "recipient";
+  const agreementTitle = agreement.title || payload.document?.title || "Proposal";
   root.innerHTML = `
     <main class="proposal-site">
       <header class="proposal-topbar">
@@ -2562,9 +2501,9 @@ function renderPublicSignature() {
 
       <section class="proposal-page proposal-cover" id="company">
         <div class="proposal-page-inner">
-          <p class="proposal-kicker">Prepared for ${escapeHtml(payload.recipient?.name || payload.recipient?.email || "recipient")}</p>
-          <h1>${escapeHtml(agreement.title || payload.document?.title || "Accessibility Services Agreement")}</h1>
-          <p class="proposal-lede">A clear, request-specific agreement for accessibility services, pricing, timelines, and terms.</p>
+          <p class="proposal-kicker">Prepared for ${escapeHtml(recipientName)}</p>
+          <h1>${escapeHtml(agreementTitle)}</h1>
+          <p class="proposal-lede">A simple proposal page with company details, services, pricing, terms, and signature in one clean flow.</p>
           <div class="proposal-hero-actions">
             <a class="primary" href="#terms">Review Terms</a>
             <a class="secondary" href="#sign">Go to Signature</a>
@@ -2574,24 +2513,24 @@ function renderPublicSignature() {
 
       <section class="proposal-page" id="services">
         <div class="proposal-page-inner">
-          <p class="proposal-kicker">Accessible.org</p>
-          <h2>Accessibility + compliance work, organized end to end.</h2>
-          <p class="proposal-lede">We help teams identify accessibility issues, understand remediation priorities, validate fixes, and document conformance.</p>
+          <p class="proposal-kicker">Company</p>
+          <h2>Simple process, clear details.</h2>
+          <p class="proposal-lede">This section will introduce the company, explain the engagement, and keep the proposal easy for the client to review.</p>
           <div class="proposal-feature-grid">
             <article>
               <span>01</span>
-              <h3>Manual audits</h3>
-              <p>Technical accessibility experts evaluate the digital asset against WCAG and provide practical findings.</p>
+              <h3>Details</h3>
+              <p>Use this area for the high-level context the client should understand before reviewing the proposal.</p>
             </article>
             <article>
               <span>02</span>
-              <h3>Remediation support</h3>
-              <p>Support is available for issue validation, technical questions, and remediation follow-up.</p>
+              <h3>Services</h3>
+              <p>List the services included in the engagement in a short, readable format.</p>
             </article>
             <article>
               <span>03</span>
-              <h3>Documentation</h3>
-              <p>When included, VPAT / ACR documentation is issued after validation and review.</p>
+              <h3>Approval</h3>
+              <p>Keep the final action clear so the recipient can accept and sign after reviewing everything.</p>
             </article>
           </div>
         </div>
@@ -2600,24 +2539,24 @@ function renderPublicSignature() {
       <section class="proposal-page proposal-muted-page" id="pricing">
         <div class="proposal-page-inner">
           <p class="proposal-kicker">Project summary</p>
-          <h2>Services and pricing from this agreement.</h2>
+          <h2>Services and pricing.</h2>
           <div class="proposal-pricing-grid">
-            ${serviceItems.length ? serviceItems.map((item) => `
-              <article class="proposal-price-card">
-                <h3>${escapeHtml(item.title)}</h3>
-                <ul>
-                  ${item.details.map((detail) => `<li>${escapeHtml(detail)}</li>`).join("")}
-                </ul>
-                ${item.price ? `<strong>${escapeHtml(item.price)}</strong>` : ""}
-              </article>
-            `).join("") : `
-              <article class="proposal-price-card">
-                <h3>Project details</h3>
-                <p>The services, scope, price, and timeline are listed in the agreement terms below.</p>
-              </article>
-            `}
+            <article class="proposal-price-card">
+              <span>01</span>
+              <h3>Service package</h3>
+              <p>Placeholder service details. We can replace this with admin-entered scope later.</p>
+            </article>
+            <article class="proposal-price-card">
+              <span>02</span>
+              <h3>Timeline</h3>
+              <p>Placeholder timeline details. We can connect this to request or agreement fields later.</p>
+            </article>
+            <article class="proposal-price-card">
+              <span>03</span>
+              <h3>Pricing</h3>
+              <p>Placeholder pricing details. We can replace this with the final proposal amount later.</p>
+            </article>
           </div>
-          ${totalCost ? `<div class="proposal-total"><span>Total Cost</span><strong>${escapeHtml(totalCost)}</strong></div>` : ""}
         </div>
       </section>
 
@@ -2626,7 +2565,7 @@ function renderPublicSignature() {
           <p class="proposal-kicker">How it works</p>
           <h2>Simple process, expert results.</h2>
           <div class="proposal-process-list">
-            ${["Details", "Audit", "Remediation", "Validation", "Documentation"].map((step, index) => `
+            ${["Details", "Services", "Pricing", "Terms"].map((step, index) => `
               <article>
                 <span>${index + 1}</span>
                 <h3>${step}</h3>
@@ -2639,7 +2578,7 @@ function renderPublicSignature() {
       <section class="proposal-page proposal-terms-page" id="terms">
         <div class="proposal-page-inner">
           <p class="proposal-kicker">Agreement terms</p>
-          <h2>Complete terms for review.</h2>
+          <h2>Terms for review.</h2>
           <div class="agreement-body">${agreementBodyHtml(agreement)}</div>
         </div>
       </section>
@@ -2648,7 +2587,7 @@ function renderPublicSignature() {
         <div class="proposal-page-inner proposal-signature-layout">
           <section>
             <p class="proposal-kicker">Recipients</p>
-            <h2>Signature status</h2>
+            <h2>Signature</h2>
             <div class="proposal-recipient-list">
               ${(payload.recipients || []).map((recipient) => `
                 <div class="deliverable-row">
