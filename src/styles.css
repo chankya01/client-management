@@ -1959,7 +1959,10 @@ a {
   color: var(--ink);
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
+  margin: 0;
   min-height: 100vh;
+  padding: 0;
+  width: 100%;
 }
 
 .proposal-sidebar {
