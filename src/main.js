@@ -2581,12 +2581,18 @@ function renderAgreementTerms(details) {
       ${multilineParagraph(details.servicesText)}
 
       <h3>Key Terms</h3>
-      <p><strong>Total Cost:</strong> ${escapeHtml(totalCost)}. Payment terms are set forth in the Payment Terms section.</p>
-      <p><strong>Electronic Payment Only:</strong> All payments must be made electronically. Physical checks and third-party payment platforms are not accepted unless specifically agreed upon in advance.</p>
-      <p><strong>Accessibility Tracker:</strong> ${escapeHtml(trackerText)}</p>
-      <p><strong>Scope:</strong> The scope named in this Agreement is final upon execution. Post-execution changes are addressed through Addendum and may involve additional fees.</p>
-      <p><strong>Technical Support Hours:</strong> Technical support hours are estimated, not fixed.</p>
-      <p><strong>Validation Windows:</strong> ${escapeHtml(validationText)}</p>
+      <h4>Total Cost</h4>
+      <p>${escapeHtml(totalCost)}. Payment terms are set forth in the Payment Terms section.</p>
+      <h4>Electronic Payment Only</h4>
+      <p>All payments must be made electronically. Physical checks and third-party payment platforms are not accepted unless specifically agreed upon in advance.</p>
+      <h4>Accessibility Tracker</h4>
+      <p>${escapeHtml(trackerText)}</p>
+      <h4>Scope</h4>
+      <p>The scope named in this Agreement is final upon execution. Post-execution changes are addressed through Addendum and may involve additional fees.</p>
+      <h4>Technical Support Hours</h4>
+      <p>Technical support hours are estimated, not fixed.</p>
+      <h4>Validation Windows</h4>
+      <p>${escapeHtml(validationText)}</p>
 
       <h3>Project Timeline</h3>
       <p>Project start date is one day after payment is received by Service Provider. If access to content within scope is required and has not been provided when payment is received, the project start date is one day after Service Provider receives working access.</p>
@@ -2609,7 +2615,8 @@ function renderAgreementTerms(details) {
       ${multilineList(details.scopeText) || `<p>${escapeHtml(project)}</p>`}
 
       <h3>Project Cost</h3>
-      <p><strong>Total Cost:</strong> ${escapeHtml(totalCost)}</p>
+      <h4>Total Cost</h4>
+      <p>${escapeHtml(totalCost)}</p>
       ${multilineList(details.costBreakdownText)}
 
       <h3>Project Completion</h3>
