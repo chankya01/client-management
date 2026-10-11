@@ -2122,14 +2122,16 @@ a {
 }
 
 .proposal-about-content,
-.proposal-training-content {
+.proposal-training-content,
+.proposal-terms-content {
   color: #4f545b;
   line-height: 1.65;
   max-width: 860px;
 }
 
 .proposal-about-content h3,
-.proposal-training-content h3 {
+.proposal-training-content h3,
+.proposal-terms-content h3 {
   color: #111;
   font-size: 20px;
   letter-spacing: -0.02em;
@@ -2138,12 +2140,14 @@ a {
 }
 
 .proposal-about-content p,
-.proposal-training-content p {
+.proposal-training-content p,
+.proposal-terms-content p {
   margin: 0 0 16px;
 }
 
 .proposal-about-content ul,
-.proposal-training-content ul {
+.proposal-training-content ul,
+.proposal-terms-content ul {
   margin: 0 0 16px;
   padding-left: 22px;
 }

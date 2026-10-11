@@ -2177,17 +2177,78 @@ function signatureRecipientDefaults(request) {
   return [...primary, ...ccContacts].filter((recipient) => recipient.email);
 }
 
+function todayIsoDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function agreementDefaultsForRequest(request) {
+  const client = state.clients.find((item) => item.id === request?.client_id);
+  const clientDisplayName = client?.name || clientName(request?.client_id) || "Client";
+  const serviceName = request?.service_type || request?.title || "Accessibility Services";
+  const projectName = request?.title || request?.description || "the selected digital asset";
+  return {
+    agreementDate: todayIsoDate(),
+    clientLegalName: clientDisplayName,
+    projectName,
+    wcagStandard: "WCAG 2.2 AA",
+    timeline: "2-week timeline",
+    totalCost: "",
+    projectOverview: `Accessible.org will provide ${serviceName} for ${clientDisplayName} for ${projectName}. Project completion is governed by the Project Completion section below.`,
+    servicesText: `${serviceName}\n${"WCAG 2.2 AA"} standard\nScope defined below\n2-week timeline\nPrice: `,
+    scopeText: request?.description || projectName,
+    deliverablesText: "Audit Report",
+    costBreakdownText: "",
+    trackerRequirement: "required-if-validation",
+    validationIncluded: "yes",
+    technicalSupportIncluded: "no",
+    vpatIncluded: "no"
+  };
+}
+
+function agreementDraftValue(name, request) {
+  const defaults = agreementDefaultsForRequest(request);
+  const value = state.signatureDraft?.[name];
+  return value !== undefined && value !== null && String(value) !== "" ? value : defaults[name] || "";
+}
+
+function agreementDetailsFromFormData(formData, request) {
+  const defaults = agreementDefaultsForRequest(request);
+  const textValue = (name) => String(formData.get(name) || defaults[name] || "").trim();
+  return {
+    kind: "accessible_terms_v1",
+    agreementDate: textValue("agreementDate"),
+    clientLegalName: textValue("clientLegalName"),
+    projectName: textValue("projectName"),
+    wcagStandard: textValue("wcagStandard"),
+    timeline: textValue("timeline"),
+    totalCost: textValue("totalCost"),
+    projectOverview: textValue("projectOverview"),
+    servicesText: textValue("servicesText"),
+    scopeText: textValue("scopeText"),
+    deliverablesText: textValue("deliverablesText"),
+    costBreakdownText: textValue("costBreakdownText"),
+    trackerRequirement: textValue("trackerRequirement"),
+    validationIncluded: textValue("validationIncluded"),
+    technicalSupportIncluded: textValue("technicalSupportIncluded"),
+    vpatIncluded: textValue("vpatIncluded")
+  };
+}
+
 function signatureDraftFromForm(form) {
   const formData = new FormData(form);
   const names = formData.getAll("recipientName").map(String);
   const emails = formData.getAll("recipientEmail").map(String);
   const roles = formData.getAll("recipientRole").map(String);
+  const requestId = String(formData.get("requestId") || "");
+  const request = state.requests.find((item) => item.id === requestId);
+  const agreementDetails = agreementDetailsFromFormData(formData, request);
 
   state.signatureDraft = {
     clientId: String(formData.get("clientId") || ""),
-    requestId: String(formData.get("requestId") || ""),
+    requestId,
     title: String(formData.get("title") || ""),
     documentPurpose: String(formData.get("documentPurpose") || "signature"),
+    ...agreementDetails,
     recipients: names.map((name, index) => ({
       name,
       email: emails[index] || "",
@@ -2222,6 +2283,42 @@ function signatureRecipientInputs(request) {
       </label>
     </div>
   `).join("");
+}
+
+function agreementParameterInputs(request) {
+  return `
+    <p class="section-label">Terms Parameters</p>
+    <p class="helper">These fields generate the Terms page. The legal boilerplate stays common; these values are injected into the agreement.</p>
+    <div class="form-grid">
+      <label class="field"><span>Agreement Date</span><input name="agreementDate" type="date" value="${escapeHtml(agreementDraftValue("agreementDate", request))}" /></label>
+      <label class="field"><span>Client Legal Name</span><input name="clientLegalName" value="${escapeHtml(agreementDraftValue("clientLegalName", request))}" /></label>
+      <label class="field"><span>Project / Asset Name</span><input name="projectName" value="${escapeHtml(agreementDraftValue("projectName", request))}" /></label>
+      <label class="field"><span>WCAG Standard</span>
+        <select name="wcagStandard">
+          ${["WCAG 2.1 AA", "WCAG 2.2 AA"].map((option) => `<option value="${option}" ${agreementDraftValue("wcagStandard", request) === option ? "selected" : ""}>${option}</option>`).join("")}
+        </select>
+      </label>
+      <label class="field"><span>Timeline</span><input name="timeline" value="${escapeHtml(agreementDraftValue("timeline", request))}" /></label>
+      <label class="field"><span>Total Cost</span><input name="totalCost" placeholder="$2,550" value="${escapeHtml(agreementDraftValue("totalCost", request))}" /></label>
+      <label class="field"><span>Tracker Requirement</span>
+        <select name="trackerRequirement">
+          <option value="required-if-validation" ${agreementDraftValue("trackerRequirement", request) !== "not-required" ? "selected" : ""}>Required only if validation is needed</option>
+          <option value="not-required" ${agreementDraftValue("trackerRequirement", request) === "not-required" ? "selected" : ""}>Not required</option>
+        </select>
+      </label>
+      <label class="field"><span>Validation Included</span>
+        <select name="validationIncluded">
+          <option value="yes" ${agreementDraftValue("validationIncluded", request) !== "no" ? "selected" : ""}>Yes</option>
+          <option value="no" ${agreementDraftValue("validationIncluded", request) === "no" ? "selected" : ""}>No</option>
+        </select>
+      </label>
+    </div>
+    <label class="field"><span>Project Overview</span><textarea name="projectOverview" rows="4">${escapeHtml(agreementDraftValue("projectOverview", request))}</textarea></label>
+    <label class="field"><span>Services and Pricing</span><textarea name="servicesText" rows="6">${escapeHtml(agreementDraftValue("servicesText", request))}</textarea></label>
+    <label class="field"><span>Project Scope</span><textarea name="scopeText" rows="6">${escapeHtml(agreementDraftValue("scopeText", request))}</textarea></label>
+    <label class="field"><span>Deliverables</span><textarea name="deliverablesText" rows="4">${escapeHtml(agreementDraftValue("deliverablesText", request))}</textarea></label>
+    <label class="field"><span>Cost Breakdown</span><textarea name="costBreakdownText" rows="4">${escapeHtml(agreementDraftValue("costBreakdownText", request))}</textarea></label>
+  `;
 }
 
 function clientOptionsForDocuments() {
@@ -2281,6 +2378,7 @@ function signatureDocumentsPage() {
               </select>
             </label>
           </div>
+          ${agreementParameterInputs(selectedRequest)}
           <p class="section-label">Recipients</p>
           <div data-signature-recipient-list>${signatureRecipientInputs(selectedRequest)}</div>
           <div class="signature-form-actions">
@@ -2405,6 +2503,158 @@ function downloadIcon() {
   return `<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 20h14v-2H5v2Zm7-16v9.17l3.59-3.58L17 11l-6 6-6-6 1.41-1.41L10 13.17V4h2Z"/></svg>`;
 }
 
+function parseAgreementDetailsFromSnapshot(agreement, payload) {
+  const text = String(agreement?.agreementText || "").trim();
+  if (text) {
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed?.kind === "accessible_terms_v1") return parsed;
+    } catch {
+      return {
+        kind: "legacy_text",
+        agreementDate: todayIsoDate(),
+        clientLegalName: "Client",
+        projectName: agreement?.title || payload?.document?.title || "the selected digital asset",
+        projectOverview: text,
+        servicesText: "",
+        scopeText: "",
+        deliverablesText: "",
+        costBreakdownText: "",
+        totalCost: "",
+        timeline: "",
+        wcagStandard: "WCAG 2.2 AA",
+        trackerRequirement: "required-if-validation",
+        validationIncluded: "yes"
+      };
+    }
+  }
+  return {
+    kind: "accessible_terms_v1",
+    agreementDate: todayIsoDate(),
+    clientLegalName: "Client",
+    projectName: agreement?.title || payload?.document?.title || "the selected digital asset",
+    projectOverview: "Accessible.org will provide accessibility services for Client for the selected digital asset. Project completion is governed by the Project Completion section below.",
+    servicesText: "Accessibility Services\nScope defined below\nPrice: ",
+    scopeText: "Scope to be defined by the agreement administrator.",
+    deliverablesText: "Audit Report",
+    costBreakdownText: "",
+    totalCost: "",
+    timeline: "2-week timeline",
+    wcagStandard: "WCAG 2.2 AA",
+    trackerRequirement: "required-if-validation",
+    validationIncluded: "yes"
+  };
+}
+
+function multilineParagraph(value) {
+  const lines = String(value || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (!lines.length) return "";
+  return `<p>${lines.map(escapeHtml).join("<br />")}</p>`;
+}
+
+function multilineList(value) {
+  const lines = String(value || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (!lines.length) return "";
+  return `<ul>${lines.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul>`;
+}
+
+function renderAgreementTerms(details) {
+  const client = details.clientLegalName || "Client";
+  const project = details.projectName || "the selected digital asset";
+  const totalCost = details.totalCost || "the amount shown in the Project Cost section";
+  const trackerText = details.trackerRequirement === "not-required"
+    ? "Accessibility Tracker is not required for this agreement unless the parties later agree otherwise in writing."
+    : "Accessibility Tracker is required only if Client would like Service Provider to validate fixes. Tracker is not required for the audit or other services. If validation is needed, Client may sign up month-to-month or purchase a plan upfront through this Agreement.";
+  const validationText = details.validationIncluded === "no"
+    ? "Validation is not included unless later added by written Addendum."
+    : "Remediation must begin within 21 days of audit report delivery, no gap in project activity may exceed 14 days, and remediation and validation must be completed within 4 months of audit report delivery. Outside these windows, a new audit is required.";
+
+  return `
+    <div class="proposal-terms-content">
+      <h3>Accessibility Services Agreement</h3>
+      <p>This Services Agreement is made on ${escapeHtml(details.agreementDate || todayIsoDate())} between Accessible.org, LLC, a Texas company with its principal place of business at 770 Broadway Street Ste 104 #1126, San Antonio, Texas 78209 (“Service Provider”), and ${escapeHtml(client)} (“Client”).</p>
+
+      <h3>Project Overview</h3>
+      ${multilineParagraph(details.projectOverview || `Accessible.org will provide accessibility services for ${client} for ${project}. Project completion is governed by the Project Completion section below.`)}
+
+      <h3>Services and Pricing</h3>
+      ${multilineParagraph(details.servicesText)}
+
+      <h3>Key Terms</h3>
+      <p><strong>Total Cost:</strong> ${escapeHtml(totalCost)}. Payment terms are set forth in the Payment Terms section.</p>
+      <p><strong>Electronic Payment Only:</strong> All payments must be made electronically. Physical checks and third-party payment platforms are not accepted unless specifically agreed upon in advance.</p>
+      <p><strong>Accessibility Tracker:</strong> ${escapeHtml(trackerText)}</p>
+      <p><strong>Scope:</strong> The scope named in this Agreement is final upon execution. Post-execution changes are addressed through Addendum and may involve additional fees.</p>
+      <p><strong>Technical Support Hours:</strong> Technical support hours are estimated, not fixed.</p>
+      <p><strong>Validation Windows:</strong> ${escapeHtml(validationText)}</p>
+
+      <h3>Project Timeline</h3>
+      <p>Project start date is one day after payment is received by Service Provider. If access to content within scope is required and has not been provided when payment is received, the project start date is one day after Service Provider receives working access.</p>
+      <p>Service Provider will deliver applicable deliverables according to the following timeline: ${escapeHtml(details.timeline || "timeline stated in the selected services")}.</p>
+
+      <h3>Communication and Project Management</h3>
+      <p>Service Provider utilizes Accessibility Tracker for validation and related technical questions, email for non-technical project-related correspondence, and video calls for scheduled consultation and support.</p>
+      <p>Routine status questions and check-ins prior to established deadlines are not included in the scope of services. Additional project management or communication platforms such as Basecamp, Slack, or custom project email addresses require prior negotiation and may incur additional fees.</p>
+
+      <h3>Audit Process</h3>
+      <p>Service Provider conducts formal accessibility evaluations using desktop and, when selected, mobile environments. Evaluation methodologies may include screen reader testing, keyboard-only interaction, code inspection, visual inspection, browser zoom review, color contrast analysis, and automated accessibility scan as a secondary review.</p>
+      <p>Audit work is measured against ${escapeHtml(details.wcagStandard || "WCAG 2.2 AA")} unless another standard is expressly stated in this Agreement.</p>
+
+      <h3>Project Deliverables</h3>
+      ${multilineList(details.deliverablesText) || "<p>Deliverables will be those identified in this Agreement and any later Addendum.</p>"}
+      <p>Service Provider retains ownership of its methodologies, templates, evaluation processes, and pre-existing materials. Upon receipt of full payment, Service Provider grants Client a perpetual, non-exclusive, royalty-free, worldwide license to use the deliverables identified in this Agreement for Client’s business purposes.</p>
+
+      <h3>Project Scope</h3>
+      <p>Audit scope includes only the content, non-document media, URLs, pages, screens, assets, or documents named below. Scope does not include documents, third-party portals, subdomains, websites, pages, screens, properties, or platforms not named below.</p>
+      ${multilineList(details.scopeText) || `<p>${escapeHtml(project)}</p>`}
+
+      <h3>Project Cost</h3>
+      <p><strong>Total Cost:</strong> ${escapeHtml(totalCost)}</p>
+      ${multilineList(details.costBreakdownText)}
+
+      <h3>Project Completion</h3>
+      <p>The project is complete when all deliverables identified in this Agreement, and any deliverables added through Addendum, have been delivered to Client. Validation activity and technical support are governed separately by their respective sections of this Agreement and do not affect the determination of project completion unless expressly stated.</p>
+
+      <h3>No Vendor Onboarding</h3>
+      <p>Service Provider does not participate in vendor onboarding, registration, approval, or qualification processes. Service Provider does not complete vendor portals, security questionnaires, supplier registration forms, background check workflows, insurance verification systems, or similar third-party platforms.</p>
+
+      <h3>Payment Terms</h3>
+      <p>Payment is due prior to project start. Payment options include wire transfer, crypto, and payment methods available through Stripe, including credit card, Amazon Pay, and ACH Direct Debit. Service Provider does not accept payment through third-party accounts payable or payment platforms unless specifically agreed upon in advance.</p>
+      <p>Additional services pertinent to this project may be added without a new agreement through written Addendum signed by both parties. Each Addendum will identify the additional services and associated cost.</p>
+
+      <h3>Governing Law</h3>
+      <p>This Agreement shall be governed by and construed in accordance with the laws of the State of Texas without giving effect to any choice or conflict of law provision or rule.</p>
+
+      <h3>Dispute Resolution</h3>
+      <p>Any dispute arising out of or relating to this Agreement shall be resolved in Bexar County, Texas. For claims exceeding $20,000, the parties agree to first attempt resolution through non-binding mediation in San Antonio, Texas, with costs split equally. Client consents to jurisdiction and venue in Bexar County, Texas and waives any right to a jury trial in any proceeding arising out of or related to this Agreement.</p>
+
+      <h3>Confidentiality</h3>
+      <p>Each party agrees to hold in confidence all confidential information disclosed by the other party in connection with this Agreement. Confidentiality obligations continue for two years from the date of this Agreement and do not apply to information that is publicly available, independently developed, or rightfully received from a third party.</p>
+
+      <h3>No Third-Party Beneficiaries</h3>
+      <p>This Agreement is for the sole benefit of the parties and does not create rights in any third party.</p>
+
+      <h3>Indemnification</h3>
+      <p>Each party is responsible for its own acts and omissions. Client agrees that Service Provider’s services and deliverables do not guarantee legal compliance, prevent claims, or eliminate all accessibility risk.</p>
+
+      <h3>Force Majeure</h3>
+      <p>Neither party will be liable for delay or failure to perform caused by circumstances beyond its reasonable control, including acts of God, natural disasters, war, terrorism, labor disputes, government action, internet or hosting outages, and other events outside the affected party’s control.</p>
+
+      <h3>Assignment</h3>
+      <p>Client may not assign this Agreement without Service Provider’s prior written consent. Service Provider may assign this Agreement in connection with a merger, acquisition, corporate reorganization, or sale of substantially all assets.</p>
+
+      <h3>Notices</h3>
+      <p>Notices under this Agreement must be provided in writing to the parties using the contact information associated with this engagement.</p>
+
+      <h3>Severability</h3>
+      <p>If any provision of this Agreement is held invalid or unenforceable, the remaining provisions remain in full force and effect.</p>
+
+      <h3>Entire Agreement</h3>
+      <p>This Agreement contains the entire agreement between the parties and supersedes all prior agreements and understandings, both written and oral, with respect to the subject matter hereof, except that any mutual non-disclosure agreement between the parties remains in effect.</p>
+    </div>
+  `;
+}
+
 function renderPublicSignature() {
   const payload = state.publicSignature;
   if (!payload) {
@@ -2453,6 +2703,7 @@ function renderPublicSignature() {
   const agreement = payload.agreement || {};
   const recipientName = payload.recipient?.name || payload.recipient?.email || "recipient";
   const agreementTitle = agreement.title || payload.document?.title || "Proposal";
+  const agreementDetails = parseAgreementDetailsFromSnapshot(agreement, payload);
   const proposalPages = ["services", "training", "about", "terms"];
   const activeProposalPage = proposalPages.includes(state.publicProposalPage) ? state.publicProposalPage : "services";
   state.publicProposalPage = activeProposalPage;
@@ -2670,11 +2921,7 @@ function renderPublicSignature() {
 
         <section class="${proposalSectionClass("terms")} proposal-terms-section" id="terms">
           <h2>Terms & Conditions</h2>
-          <div class="proposal-copy-shell">
-            <div class="proposal-line wide"></div>
-            <div class="proposal-line"></div>
-            <div class="proposal-line short"></div>
-          </div>
+          ${renderAgreementTerms(agreementDetails)}
           <div class="proposal-authorized-row">
             <span>Duly authorized, for and on behalf of the Customer</span>
           </div>
@@ -3098,7 +3345,13 @@ function attachEvents() {
       if (form) signatureDraftFromForm(form);
       state.activeRequest = state.requests.find((request) => request.id === event.currentTarget.value) || state.activeRequest;
       state.signatureClientSelection = state.activeRequest?.client_id || state.signatureClientSelection;
-      if (event.currentTarget.value) setSignatureDraftRecipientsForRequest(state.activeRequest);
+      if (event.currentTarget.value) {
+        state.signatureDraft = {
+          ...state.signatureDraft,
+          ...agreementDefaultsForRequest(state.activeRequest)
+        };
+        setSignatureDraftRecipientsForRequest(state.activeRequest);
+      }
       render();
     });
   }
@@ -3162,11 +3415,12 @@ function attachEvents() {
 
       await withActionLock("signature-document-form", form, async () => {
         try {
+          const agreementDetails = agreementDetailsFromFormData(formData, request);
           const createdDocument = await createSignatureDocument({
             request,
             profile: state.profile,
             title: formData.get("title") || "Service Agreement",
-            agreementText: "",
+            agreementText: JSON.stringify(agreementDetails),
             recipients,
             requiresSignature
           });
