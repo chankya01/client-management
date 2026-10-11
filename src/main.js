@@ -2453,7 +2453,7 @@ function renderPublicSignature() {
   const agreement = payload.agreement || {};
   const recipientName = payload.recipient?.name || payload.recipient?.email || "recipient";
   const agreementTitle = agreement.title || payload.document?.title || "Proposal";
-  const proposalPages = ["services", "pricing", "training", "about", "terms"];
+  const proposalPages = ["services", "training", "about", "terms"];
   const activeProposalPage = proposalPages.includes(state.publicProposalPage) ? state.publicProposalPage : "services";
   state.publicProposalPage = activeProposalPage;
   const proposalSectionClass = (page) => `proposal-section${page === activeProposalPage ? "" : " proposal-section-hidden"}`;
@@ -2466,7 +2466,6 @@ function renderPublicSignature() {
         ${brandLogo("signin")}
         <nav class="proposal-sidebar-nav" aria-label="Proposal sections">
           ${proposalNavButton("services", "Services")}
-          ${proposalNavButton("pricing", "Pricing")}
           ${proposalNavButton("training", "Training")}
           ${proposalNavButton("about", "About")}
           ${proposalNavButton("terms", "Terms")}
@@ -2510,21 +2509,6 @@ function renderPublicSignature() {
               <h2>Custom Accessibility Statement</h2>
               <p>Kris Rivenburgh can create a custom accessibility statement for your organization. The statement can align with your organization’s policy and commitment while positively reflecting your current investments and accessibility efforts. Cost: $250 to start; varies based on project request.</p>
             </article>
-          </div>
-        </section>
-
-        <section class="${proposalSectionClass("pricing")}" id="pricing">
-          <h2>Pricing</h2>
-          <div class="proposal-pricing-box">
-            <div class="proposal-pricing-heading">Service Pricing Confirmation</div>
-            <div class="proposal-pricing-row">
-              <strong>Service</strong>
-              <strong>Price</strong>
-            </div>
-            <div class="proposal-pricing-row proposal-total-row">
-              <span>Total</span>
-              <strong>Amount</strong>
-            </div>
           </div>
         </section>
 
