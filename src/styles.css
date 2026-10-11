@@ -2074,6 +2074,11 @@ a {
   margin: 0 0 14px;
 }
 
+.proposal-service-details .proposal-service-price {
+  color: #111;
+  margin-top: 18px;
+}
+
 .proposal-service-columns {
   display: grid;
   gap: 24px;

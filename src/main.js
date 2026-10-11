@@ -2510,35 +2510,43 @@ function renderPublicSignature() {
                 <li>Browser Testing: Chrome and Safari</li>
                 <li>Device Testing: Desktop, with optional mobile testing</li>
               </ul>
+              <p class="proposal-service-price"><strong>Price:</strong> $100–$250 per page or screen; $25–$100 for light pages/screens.</p>
             </article>
             <article>
               <h2>VPATs / ACRs</h2>
               <p>We audit your asset and complete a Voluntary Product Accessibility Template (VPAT), creating an Accessibility Conformance Report (ACR) to document your product’s accessibility status.</p>
               <p>This documentation is essential for meeting procurement requirements.</p>
+              <p class="proposal-service-price"><strong>Price:</strong> $350 for WCAG edition in addition to audit cost; $550 for Section 508 edition; $650 for EU edition; $950 for INT edition.</p>
             </article>
             <article>
               <h2>Technical Support</h2>
               <p>Technical support can be used to validate remediation work, answer accessibility implementation questions, and help teams complete fixes with confidence.</p>
+              <p class="proposal-service-price"><strong>Price:</strong> $195/hour, minimum 3 hours.</p>
             </article>
             <article>
               <h2>Certification</h2>
               <p>Certification-related documents can help communicate accessibility progress, project completion, conformance status, and supporting evidence after required criteria are met.</p>
+              <p class="proposal-service-price"><strong>Price:</strong> Not sold separately; issued when requirements for certification are met.</p>
             </article>
             <article>
               <h2>User Testing</h2>
               <p>User testing involves people who use assistive technologies reviewing digital assets and providing practical feedback, with session documentation available for evidence.</p>
+              <p class="proposal-service-price"><strong>Price:</strong> $550 per session; $450 per session with audit service.</p>
             </article>
             <article>
               <h2>Document Remediation</h2>
               <p>Document remediation improves PDFs, Word documents, PowerPoint files, and other document types so they better meet accessibility standards.</p>
+              <p class="proposal-service-price"><strong>Price:</strong> Starts at $7/page.</p>
             </article>
             <article>
               <h2>Expedited Accessibility</h2>
               <p>Expedited accessibility support is available for urgent timelines, including fast-turnaround requests when timing is critical.</p>
+              <p class="proposal-service-price"><strong>Price:</strong> $250–$750 depending on document size/content.</p>
             </article>
             <article>
               <h2>Custom Accessibility Statement</h2>
               <p>A custom accessibility statement can reflect an organization’s accessibility policy, commitment, current efforts, and improvement path.</p>
+              <p class="proposal-service-price"><strong>Price:</strong> $250 to start; varies based on project request.</p>
             </article>
           </div>
         </section>
