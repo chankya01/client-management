@@ -2468,13 +2468,54 @@ function renderPublicSignature() {
       <div class="proposal-document">
         <section class="proposal-section" id="services">
           <h1>Services</h1>
-          <div class="proposal-numbered-list">
-            ${["Service 1", "Service 2", "Service 3"].map((item, index) => `
-              <article>
-                <h3>${index + 1}. ${item}</h3>
-                <div class="proposal-note-box"></div>
-              </article>
-            `).join("")}
+          <p class="proposal-service-lede">Accessible.org can help make your website, app, or other digital asset meet WCAG 2.1 AA or 2.2 AA standards and follow best practices in ADA compliance.</p>
+          <div class="proposal-service-summary">
+            <h3>All Services</h3>
+            <p>Most popular:</p>
+            <div class="proposal-service-columns">
+              <div>
+                <h4>Audits</h4>
+                <ul>
+                  <li>Audits</li>
+                  <li>VPATs / ACRs</li>
+                  <li>Technical Support</li>
+                </ul>
+              </div>
+              <div>
+                <h4>Complementary</h4>
+                <ul>
+                  <li>Certification</li>
+                  <li>User Testing</li>
+                  <li>Document Remediation</li>
+                  <li>Expedited Accessibility</li>
+                  <li>Custom Accessibility Statement</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          <div class="proposal-service-details">
+            <article>
+              <h2>Audits</h2>
+              <p>We evaluate the accessibility of your digital asset, such as a website, to identify all accessibility issues using WCAG 2.1 AA or WCAG 2.2 AA as our baseline standard.</p>
+              <h3>Includes:</h3>
+              <ul>
+                <li>Screen Reader Testing</li>
+                <li>Keyboard Testing</li>
+                <li>Touch and Gesture Testing</li>
+                <li>Visual Inspection</li>
+                <li>Audible Inspection</li>
+                <li>Code Inspection</li>
+                <li>Color Contrast Analyzer</li>
+                <li>AXE Scan as secondary review</li>
+                <li>Browser Testing: Chrome and Safari</li>
+                <li>Device Testing: Desktop, with optional mobile testing</li>
+              </ul>
+            </article>
+            <article>
+              <h2>VPATs / ACRs</h2>
+              <p>We audit your asset and complete a Voluntary Product Accessibility Template (VPAT), creating an Accessibility Conformance Report (ACR) to document your product’s accessibility status.</p>
+              <p>This documentation is essential for meeting procurement requirements.</p>
+            </article>
           </div>
         </section>
 

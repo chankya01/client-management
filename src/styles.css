@@ -2024,12 +2024,70 @@ a {
 
 .proposal-section h1,
 .proposal-section h2 {
-  font-size: clamp(2.2rem, 4vw, 4.25rem);
+  font-size: clamp(2rem, 3vw, 3rem);
   letter-spacing: -0.04em;
   line-height: 1.08;
-  margin: 0 0 clamp(34px, 5vw, 64px);
+  margin: 0 0 clamp(24px, 4vw, 42px);
   max-width: 900px;
   text-align: left;
+}
+
+.proposal-service-lede {
+  color: #3f4349;
+  font-size: clamp(1.05rem, 1.5vw, 1.25rem);
+  line-height: 1.65;
+  margin: 0 0 28px;
+  max-width: 860px;
+}
+
+.proposal-service-summary,
+.proposal-service-details article {
+  border-top: 1px solid #dfe6ea;
+  max-width: 860px;
+  padding-top: 24px;
+}
+
+.proposal-service-summary {
+  margin-bottom: 36px;
+}
+
+.proposal-service-summary h3,
+.proposal-service-details h3,
+.proposal-service-columns h4 {
+  color: #111;
+  font-size: 1.1rem;
+  margin: 0 0 10px;
+}
+
+.proposal-service-summary p,
+.proposal-service-details p {
+  color: #4f545b;
+  line-height: 1.65;
+  margin: 0 0 14px;
+}
+
+.proposal-service-columns {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.proposal-service-columns ul,
+.proposal-service-details ul {
+  color: #4f545b;
+  line-height: 1.7;
+  margin: 0;
+  padding-left: 22px;
+}
+
+.proposal-service-details {
+  display: grid;
+  gap: 34px;
+}
+
+.proposal-service-details article h2 {
+  font-size: clamp(1.6rem, 2.2vw, 2.2rem);
+  margin-bottom: 16px;
 }
 
 .proposal-copy-shell {
@@ -2258,7 +2316,7 @@ a {
 
   .proposal-section h1,
   .proposal-section h2 {
-    font-size: clamp(2.4rem, 12vw, 4rem);
+    font-size: clamp(2rem, 9vw, 2.8rem);
   }
 
   .proposal-copy-shell,
@@ -2286,6 +2344,10 @@ a {
   .proposal-sign-tabs {
     flex-direction: column;
     gap: 12px;
+  }
+
+  .proposal-service-columns {
+    grid-template-columns: 1fr;
   }
 
   .signature-field-grid {
