@@ -1998,16 +1998,17 @@ a {
 
 .proposal-document {
   background: #fff;
-  margin: 0 auto;
-  max-width: 1290px;
+  margin: 0;
+  max-width: none;
   min-height: 100vh;
   overflow: hidden;
   position: relative;
+  width: 100%;
 }
 
 .proposal-section {
   min-height: 100vh;
-  padding: clamp(72px, 10vw, 116px) clamp(56px, 11vw, 230px);
+  padding: clamp(72px, 9vw, 116px) clamp(40px, 8vw, 150px);
   position: relative;
 }
 
@@ -2018,11 +2019,11 @@ a {
 
 .proposal-section h1,
 .proposal-section h2 {
-  font-size: clamp(2.8rem, 4.4vw, 4.6rem);
+  font-size: clamp(2.8rem, 3.8vw, 4.6rem);
   letter-spacing: -0.045em;
   line-height: 1.05;
   margin: 0 auto;
-  max-width: 860px;
+  max-width: 960px;
   text-align: center;
 }
 
