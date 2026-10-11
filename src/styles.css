@@ -1985,16 +1985,24 @@ a {
   display: grid;
 }
 
-.proposal-sidebar-nav a {
+.proposal-sidebar-nav a,
+.proposal-sidebar-nav button {
+  background: transparent;
+  border: 0;
   color: #42464d;
+  cursor: pointer;
   font-size: 1.05rem;
   font-weight: 700;
   padding: 14px 24px;
+  text-align: left;
   text-decoration: none;
 }
 
 .proposal-sidebar-nav a:hover,
-.proposal-sidebar-nav a:focus {
+.proposal-sidebar-nav a:focus,
+.proposal-sidebar-nav button:hover,
+.proposal-sidebar-nav button:focus,
+.proposal-sidebar-nav button.active {
   background: #efefef;
   color: #222;
 }
@@ -2015,6 +2023,10 @@ a {
   min-height: auto;
   padding: clamp(56px, 6vw, 86px) clamp(32px, 6vw, 96px);
   position: relative;
+}
+
+.proposal-section-hidden {
+  display: none;
 }
 
 .proposal-section > * {
@@ -2109,13 +2121,15 @@ a {
   padding-top: 0;
 }
 
-.proposal-about-content {
+.proposal-about-content,
+.proposal-training-content {
   color: #4f545b;
   line-height: 1.65;
   max-width: 860px;
 }
 
-.proposal-about-content h3 {
+.proposal-about-content h3,
+.proposal-training-content h3 {
   color: #111;
   font-size: 20px;
   letter-spacing: -0.02em;
@@ -2123,13 +2137,33 @@ a {
   margin: 34px 0 12px;
 }
 
-.proposal-about-content p {
+.proposal-about-content p,
+.proposal-training-content p {
   margin: 0 0 16px;
 }
 
-.proposal-about-content ul {
+.proposal-about-content ul,
+.proposal-training-content ul {
   margin: 0 0 16px;
   padding-left: 22px;
+}
+
+.proposal-youtube-block {
+  margin-top: 34px;
+}
+
+.proposal-youtube-frame {
+  aspect-ratio: 16 / 9;
+  background: #111;
+  max-width: 760px;
+  overflow: hidden;
+}
+
+.proposal-youtube-frame iframe {
+  border: 0;
+  display: block;
+  height: 100%;
+  width: 100%;
 }
 
 .proposal-line {
@@ -2339,7 +2373,8 @@ a {
     overflow-x: auto;
   }
 
-  .proposal-sidebar-nav a {
+  .proposal-sidebar-nav a,
+  .proposal-sidebar-nav button {
     flex: 0 0 auto;
     padding: 12px 18px;
     white-space: nowrap;

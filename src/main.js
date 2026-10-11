@@ -71,6 +71,7 @@ const state = {
   publicSignature: null,
   publicSignatureToken: signatureTokenFromUrl(),
   publicSignatureError: "",
+  publicProposalPage: "services",
   messageDrafts: {},
   clientDraft: {},
   requestDraft: {},
@@ -2452,21 +2453,28 @@ function renderPublicSignature() {
   const agreement = payload.agreement || {};
   const recipientName = payload.recipient?.name || payload.recipient?.email || "recipient";
   const agreementTitle = agreement.title || payload.document?.title || "Proposal";
+  const proposalPages = ["services", "pricing", "training", "about", "terms"];
+  const activeProposalPage = proposalPages.includes(state.publicProposalPage) ? state.publicProposalPage : "services";
+  state.publicProposalPage = activeProposalPage;
+  const proposalSectionClass = (page) => `proposal-section${page === activeProposalPage ? "" : " proposal-section-hidden"}`;
+  const proposalNavButton = (page, label) => `
+    <button type="button" class="${page === activeProposalPage ? "active" : ""}" data-proposal-page="${page}">${label}</button>
+  `;
   root.innerHTML = `
     <main class="proposal-site">
       <aside class="proposal-sidebar">
         ${brandLogo("signin")}
         <nav class="proposal-sidebar-nav" aria-label="Proposal sections">
-          <a href="#services">Services</a>
-          <a href="#pricing">Pricing</a>
-          <a href="#training">Training</a>
-          <a href="#about">About</a>
-          <a href="#terms">Terms</a>
+          ${proposalNavButton("services", "Services")}
+          ${proposalNavButton("pricing", "Pricing")}
+          ${proposalNavButton("training", "Training")}
+          ${proposalNavButton("about", "About")}
+          ${proposalNavButton("terms", "Terms")}
         </nav>
       </aside>
 
       <div class="proposal-document">
-        <section class="proposal-section" id="services">
+        <section class="${proposalSectionClass("services")}" id="services">
           <h1>Services</h1>
           <p class="proposal-service-lede">Accessible.org can help make your website, app, or other digital asset meet WCAG 2.1 AA or 2.2 AA standards and follow best practices in ADA compliance.</p>
           <div class="proposal-service-summary">
@@ -2551,7 +2559,7 @@ function renderPublicSignature() {
           </div>
         </section>
 
-        <section class="proposal-section" id="pricing">
+        <section class="${proposalSectionClass("pricing")}" id="pricing">
           <h2>Pricing</h2>
           <div class="proposal-pricing-box">
             <div class="proposal-pricing-heading">Service Pricing Confirmation</div>
@@ -2566,12 +2574,40 @@ function renderPublicSignature() {
           </div>
         </section>
 
-        <section class="proposal-section" id="training">
+        <section class="${proposalSectionClass("training")}" id="training">
           <h2>Training</h2>
-          <div class="proposal-note-box"></div>
+          <div class="proposal-training-content">
+            <h3>Web Accessibility Training</h3>
+            <p>Web accessibility training helps teams reach and maintain WCAG 2.1 AA or WCAG 2.2 AA conformance, reduce the cost of accessibility work, and support digital accessibility compliance.</p>
+            <p>Training can be delivered through live workshops or on-demand courses so teams can learn at the right pace.</p>
+
+            <h3>Live WCAG Workshops</h3>
+            <p>Live workshop-style virtual training helps teams learn WCAG, document accessibility, and practical accessibility workflows in real time.</p>
+
+            <h3>WCAG Course</h3>
+            <p>The WCAG course is on-demand training for the Web Content Accessibility Guidelines. It is designed for individuals and teams who need plain-English explanations, practical examples, and a structured way to learn WCAG 2.1 AA and WCAG 2.2 AA.</p>
+            <p>Lessons cover every WCAG 2.1 AA success criterion plus the newer WCAG 2.2 AA success criteria. The course connects requirements to real digital assets such as websites, apps, documents, images, videos, and software.</p>
+
+            <h3>Course Materials</h3>
+            <p>Training materials include video and text explanations, practical code examples, role-based accessibility workflows, a master WCAG checklist, and supplemental resources for designers, developers, and content editors.</p>
+
+            <h3>Compliance Coverage</h3>
+            <p>WCAG training supports work toward compliance with major accessibility requirements, including ADA Title II, Section 504, Section 508, AODA, HB21-1110, and the European Accessibility Act.</p>
+
+            <h3>ADA Compliance Course</h3>
+            <p>The ADA compliance course focuses on the most commonly claimed accessibility issues in website lawsuits. It explains what each issue is, who is responsible, how to find it, how to fix it, and how to reduce risk with practical remediation work.</p>
+
+            <div class="proposal-youtube-block">
+              <h3>Training Video</h3>
+              <div class="proposal-youtube-frame">
+                <iframe title="The ADA Book YouTube videos" src="https://www.youtube.com/embed?listType=user_uploads&amp;list=adabook" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+              </div>
+              <p><a href="https://www.youtube.com/@adabook" target="_blank" rel="noopener">Open Accessible.org training videos on YouTube</a></p>
+            </div>
+          </div>
         </section>
 
-        <section class="proposal-section" id="about">
+        <section class="${proposalSectionClass("about")}" id="about">
           <h2>About</h2>
           <div class="proposal-about-content">
             <p>Accessible.org, LLC is a U.S. based digital accessibility company that puts clients first. Founded by Kris Rivenburgh, an attorney and author of The ADA Book and Digital Accessibility and Compliance, Accessible.org provides audit and VPAT services to clients across the world.</p>
@@ -2605,7 +2641,7 @@ function renderPublicSignature() {
           </div>
         </section>
 
-        <section class="proposal-section proposal-terms-section" id="terms">
+        <section class="${proposalSectionClass("terms")} proposal-terms-section" id="terms">
           <h2>Terms & Conditions</h2>
           <div class="proposal-copy-shell">
             <div class="proposal-line wide"></div>
@@ -2747,6 +2783,16 @@ function keepActiveNavVisible() {
 }
 
 function attachPublicSignatureEvents() {
+  document.querySelectorAll("[data-proposal-page]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const nextPage = button.dataset.proposalPage;
+      if (!nextPage || nextPage === state.publicProposalPage) return;
+      state.publicProposalPage = nextPage;
+      renderPublicSignature();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  });
+
   const form = document.getElementById("publicSignatureForm");
   if (!form) return;
   form.addEventListener("submit", async (event) => {
