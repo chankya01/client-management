@@ -1957,27 +1957,28 @@ a {
 .proposal-site {
   background: #f7f7f7;
   color: var(--ink);
-  display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
+  display: flex;
   margin: 0;
   min-height: 100vh;
+  overflow-x: hidden;
   padding: 0;
-  width: 100%;
+  width: 100vw;
 }
 
 .proposal-sidebar {
   background: #fff;
   box-shadow: 10px 0 30px rgba(23, 34, 53, 0.08);
+  flex: 0 0 260px;
   min-height: 100vh;
-  padding: 64px 0 0;
+  padding: 48px 0 0;
   position: sticky;
   top: 0;
-  width: 300px;
+  width: 260px;
   z-index: 20;
 }
 
 .proposal-sidebar .brand {
-  margin: 0 26px 42px;
+  margin: 0 24px 44px;
 }
 
 .proposal-sidebar-nav {
@@ -1986,9 +1987,9 @@ a {
 
 .proposal-sidebar-nav a {
   color: #42464d;
-  font-size: 1rem;
-  font-weight: 500;
-  padding: 16px 26px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  padding: 14px 24px;
   text-decoration: none;
 }
 
@@ -1996,57 +1997,52 @@ a {
 .proposal-sidebar-nav a:focus {
   background: #efefef;
   color: #222;
-  font-weight: 800;
 }
 
 .proposal-document {
   background: #fff;
+  flex: 1 1 auto;
   margin: 0;
   max-width: none;
   min-height: 100vh;
+  min-width: 0;
   overflow: hidden;
   position: relative;
-  width: auto;
 }
 
 .proposal-section {
-  min-height: 100vh;
-  padding: clamp(72px, 9vw, 116px) clamp(40px, 8vw, 150px);
+  border-bottom: 1px solid #edf0f2;
+  min-height: auto;
+  padding: clamp(56px, 6vw, 86px) clamp(32px, 6vw, 96px);
   position: relative;
 }
 
-.proposal-section > *:not(.proposal-shape) {
+.proposal-section > * {
   position: relative;
   z-index: 2;
 }
 
 .proposal-section h1,
 .proposal-section h2 {
-  font-size: clamp(2.8rem, 3.8vw, 4.6rem);
-  letter-spacing: -0.045em;
-  line-height: 1.05;
-  margin: 0 auto;
-  max-width: 960px;
-  text-align: center;
-}
-
-.proposal-cover {
-  display: grid;
-  align-content: start;
-  gap: 110px;
+  font-size: clamp(2.2rem, 4vw, 4.25rem);
+  letter-spacing: -0.04em;
+  line-height: 1.08;
+  margin: 0 0 clamp(34px, 5vw, 64px);
+  max-width: 900px;
+  text-align: left;
 }
 
 .proposal-copy-shell {
-  margin: 0 auto;
+  margin: 0;
   max-width: 820px;
-  padding-top: clamp(70px, 12vw, 150px);
+  padding-top: 0;
 }
 
 .proposal-line {
   background: #e9eef0;
   border-radius: 999px;
-  height: 20px;
-  margin: 18px 0;
+  height: 18px;
+  margin: 16px 0;
   max-width: 620px;
 }
 
@@ -2061,16 +2057,16 @@ a {
 .proposal-pricing-box {
   border: 1px solid #dfe6ea;
   border-radius: 3px;
-  margin: 0 auto;
-  max-width: 820px;
+  margin: 0;
+  max-width: 620px;
   overflow: hidden;
 }
 
 .proposal-pricing-heading {
   background: #20aee9;
   color: #fff;
-  font-size: 1.5rem;
-  padding: 22px 36px;
+  font-size: 1.35rem;
+  padding: 18px 28px;
 }
 
 .proposal-pricing-row {
@@ -2078,108 +2074,67 @@ a {
   border-top: 1px solid #dfe6ea;
   display: flex;
   justify-content: space-between;
-  padding: 28px 36px;
+  padding: 24px 28px;
 }
 
 .proposal-total-row {
-  margin-top: 32px;
+  margin-top: 0;
 }
 
 .proposal-numbered-list,
 .proposal-reason-list {
   display: grid;
-  gap: 56px;
-  margin: clamp(90px, 14vw, 170px) auto 0;
+  gap: 28px;
+  margin: 0;
   max-width: 820px;
 }
 
 .proposal-numbered-list h3,
 .proposal-reason-list h3 {
   color: #3f4349;
-  font-size: 1.8rem;
-  margin: 0 0 24px;
+  font-size: 1.45rem;
+  margin: 0 0 16px;
 }
 
 .proposal-note-box {
   background: #e9eef0;
-  min-height: 120px;
-}
-
-.proposal-reason-list article {
-  display: grid;
-  gap: 12px 32px;
-  grid-template-columns: 76px 1fr;
-}
-
-.proposal-reason-list span {
-  align-items: center;
-  background: #20aee9;
-  border-radius: 999px;
-  color: #000;
-  display: inline-flex;
-  font-size: 2rem;
-  font-weight: 800;
-  grid-row: span 3;
-  height: 76px;
-  justify-content: center;
-  width: 76px;
-}
-
-.proposal-video-placeholder {
-  align-items: center;
-  background: #070707;
-  display: flex;
-  height: clamp(240px, 32vw, 420px);
-  justify-content: center;
-  margin: clamp(90px, 14vw, 160px) auto 0;
+  min-height: 96px;
   max-width: 820px;
 }
 
-.proposal-video-placeholder span {
-  align-items: center;
-  background: #20aee9;
-  border-radius: 999px;
-  color: #fff;
-  display: inline-flex;
-  font-size: 4rem;
-  height: 140px;
-  justify-content: center;
-  width: 140px;
-}
-
 .proposal-terms-section {
-  padding-bottom: 140px;
+  padding-bottom: 90px;
 }
 
 .proposal-authorized-row {
   color: #4f545b;
-  font-size: 1.3rem;
-  margin: 90px auto 0;
+  font-size: 1.15rem;
+  margin: 42px 0 0;
   max-width: 820px;
 }
 
 .proposal-signature-area {
-  margin: 70px auto 0;
+  margin: 36px 0 0;
   max-width: 820px;
 }
 
 .proposal-recipient-list {
   display: grid;
   gap: 12px;
-  margin-bottom: 44px;
+  margin-bottom: 34px;
 }
 
 .proposal-sign-panel {
   border: 1px solid #e0e0e0;
   border-radius: 6px;
-  padding: 40px;
+  padding: 32px;
 }
 
 .proposal-sign-tabs {
   border-bottom: 1px solid #d6d6d6;
   display: flex;
   gap: 36px;
-  margin: 34px 0 28px;
+  margin: 28px 0 24px;
   padding-bottom: 12px;
   text-transform: uppercase;
 }
@@ -2188,43 +2143,6 @@ a {
   border-bottom: 4px solid #1d1d1d;
   margin-bottom: -16px;
   padding-bottom: 12px;
-}
-
-.proposal-shape {
-  background: linear-gradient(135deg, #5545ff, #20b8ef);
-  border-radius: 999px;
-  opacity: 0.95;
-  position: absolute;
-}
-
-.proposal-shape.one {
-  height: 190px;
-  right: -80px;
-  top: -70px;
-  transform: rotate(12deg);
-  width: 190px;
-}
-
-.proposal-shape.two {
-  height: 170px;
-  left: 70px;
-  top: -50px;
-  width: 170px;
-}
-
-.proposal-shape.three {
-  height: 140px;
-  right: -40px;
-  top: -20px;
-  transform: rotate(14deg);
-  width: 140px;
-}
-
-.proposal-shape.four {
-  height: 80px;
-  right: 180px;
-  top: 150px;
-  width: 80px;
 }
 
 .agreement-textarea {

@@ -2457,24 +2457,29 @@ function renderPublicSignature() {
       <aside class="proposal-sidebar">
         ${brandLogo("signin")}
         <nav class="proposal-sidebar-nav" aria-label="Proposal sections">
-          <a href="#process">Our Process & Pricing Model</a>
-          <a href="#components">Campaign Components & Examples</a>
-          <a href="#why">Why Choose Us</a>
-          <a href="#proof">Client Proof</a>
-          <a href="#next">Next Steps</a>
+          <a href="#services">Services</a>
+          <a href="#pricing">Pricing</a>
+          <a href="#training">Training</a>
+          <a href="#about">About</a>
           <a href="#terms">Terms</a>
         </nav>
       </aside>
 
       <div class="proposal-document">
-        <section class="proposal-section proposal-cover" id="process">
-          <div class="proposal-shape one"></div>
-          <h1>Our Process & Pricing Model</h1>
-          <div class="proposal-copy-shell">
-            <div class="proposal-line wide"></div>
-            <div class="proposal-line"></div>
-            <div class="proposal-line short"></div>
+        <section class="proposal-section" id="services">
+          <h1>Services</h1>
+          <div class="proposal-numbered-list">
+            ${["Service 1", "Service 2", "Service 3"].map((item, index) => `
+              <article>
+                <h3>${index + 1}. ${item}</h3>
+                <div class="proposal-note-box"></div>
+              </article>
+            `).join("")}
           </div>
+        </section>
+
+        <section class="proposal-section" id="pricing">
+          <h2>Pricing</h2>
           <div class="proposal-pricing-box">
             <div class="proposal-pricing-heading">Service Pricing Confirmation</div>
             <div class="proposal-pricing-row">
@@ -2488,48 +2493,17 @@ function renderPublicSignature() {
           </div>
         </section>
 
-        <section class="proposal-section" id="components">
-          <div class="proposal-shape two"></div>
-          <h2>Campaign Components & Examples</h2>
-          <div class="proposal-numbered-list">
-            ${["Details", "Services", "Timeline", "Reporting"].map((item, index) => `
-              <article>
-                <h3>${index + 1}. ${item}</h3>
-                <div class="proposal-note-box"></div>
-              </article>
-            `).join("")}
-          </div>
+        <section class="proposal-section" id="training">
+          <h2>Training</h2>
+          <div class="proposal-note-box"></div>
         </section>
 
-        <section class="proposal-section" id="why">
-          <div class="proposal-shape three"></div>
-          <h2>Why Choose Us</h2>
-          <div class="proposal-reason-list">
-            ${["Reason one", "Reason two", "Reason three"].map((item, index) => `
-              <article>
-                <span>${index + 1}</span>
-                <h3>${item}</h3>
-                <div class="proposal-line"></div>
-                <div class="proposal-line short"></div>
-              </article>
-            `).join("")}
-          </div>
-        </section>
-
-        <section class="proposal-section" id="proof">
-          <h2>Client Proof</h2>
-          <div class="proposal-video-placeholder">
-            <span>▶</span>
-          </div>
-        </section>
-
-        <section class="proposal-section" id="next">
-          <div class="proposal-shape four"></div>
-          <h2>Next Steps</h2>
+        <section class="proposal-section" id="about">
+          <h2>About</h2>
           <div class="proposal-copy-shell">
             <div class="proposal-line wide"></div>
             <div class="proposal-line"></div>
-            <div class="proposal-note-box"></div>
+            <div class="proposal-line short"></div>
           </div>
         </section>
 
