@@ -2148,24 +2148,6 @@ a {
   padding-left: 22px;
 }
 
-.proposal-youtube-block {
-  margin-top: 34px;
-}
-
-.proposal-youtube-frame {
-  aspect-ratio: 16 / 9;
-  background: #111;
-  max-width: 760px;
-  overflow: hidden;
-}
-
-.proposal-youtube-frame iframe {
-  border: 0;
-  display: block;
-  height: 100%;
-  width: 100%;
-}
-
 .proposal-line {
   background: #e9eef0;
   border-radius: 999px;
@@ -2207,6 +2189,49 @@ a {
 
 .proposal-total-row {
   margin-top: 0;
+}
+
+.proposal-training-table-wrap {
+  margin: 0 0 34px;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.proposal-training-table {
+  border-collapse: collapse;
+  color: #343840;
+  font-size: 0.96rem;
+  min-width: 720px;
+  width: 100%;
+}
+
+.proposal-training-table th,
+.proposal-training-table td {
+  border: 1px solid #dfe6ea;
+  padding: 14px 16px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.proposal-training-table thead th {
+  background: #f0f4f7;
+  color: #111;
+}
+
+.proposal-training-table tbody th {
+  color: #111;
+  width: 28%;
+}
+
+.proposal-training-image {
+  margin-top: 34px;
+  max-width: 760px;
+}
+
+.proposal-training-image img {
+  display: block;
+  height: auto;
+  width: 100%;
 }
 
 .proposal-numbered-list,

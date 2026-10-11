@@ -2577,32 +2577,121 @@ function renderPublicSignature() {
         <section class="${proposalSectionClass("training")}" id="training">
           <h2>Training</h2>
           <div class="proposal-training-content">
-            <h3>Web Accessibility Training</h3>
-            <p>Web accessibility training helps teams reach and maintain WCAG 2.1 AA or WCAG 2.2 AA conformance, reduce the cost of accessibility work, and support digital accessibility compliance.</p>
-            <p>Training can be delivered through live workshops or on-demand courses so teams can learn at the right pace.</p>
+            <div class="proposal-training-table-wrap">
+              <table class="proposal-training-table">
+                <thead>
+                  <tr>
+                    <th>WCAG Course Features &amp; Benefits</th>
+                    <th>Description</th>
+                    <th>Benefit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <th>Video &amp; Text Explanations</th>
+                    <td>Comprehensive coverage of WCAG 2.1 AA and 2.2 AA success criteria</td>
+                    <td>Reinforced learning through video and text</td>
+                  </tr>
+                  <tr>
+                    <th>Plain English Explanations</th>
+                    <td>Simple, jargon-free lessons</td>
+                    <td>Understand complex accessibility concepts easily</td>
+                  </tr>
+                  <tr>
+                    <th>Practical Code Examples</th>
+                    <td>Real-world application examples</td>
+                    <td>Apply knowledge immediately to actual projects</td>
+                  </tr>
+                  <tr>
+                    <th>Excel Spreadsheet Checklist</th>
+                    <td>Detailed and sortable conformance checklist</td>
+                    <td>Valuable reference sheets for projects and processes</td>
+                  </tr>
+                  <tr>
+                    <th>Certificate of Completion</th>
+                    <td>ADACompliance.net official certification</td>
+                    <td>Demonstrate expertise and training completion</td>
+                  </tr>
+                  <tr>
+                    <th>Self-Paced Learning</th>
+                    <td>Organized, straightforward, easy-to-understand structure</td>
+                    <td>Learn at your own speed and schedule</td>
+                  </tr>
+                  <tr>
+                    <th>Legal Compliance</th>
+                    <td>Supports Section 508, Section 504, ADA, AODA, HB21-1110, and EAA</td>
+                    <td>Meet various accessibility compliance requirements</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
 
-            <h3>Live WCAG Workshops</h3>
-            <p>Live workshop-style virtual training helps teams learn WCAG, document accessibility, and practical accessibility workflows in real time.</p>
+            <h3>Web Accessibility Training</h3>
+            <p>Web accessibility training is crucial for reaching and maintaining WCAG 2.1 AA conformance, reducing the cost of digital accessibility, and being compliant with the law. We offer both live workshops and on-demand courses.</p>
+            <p>To start learning right now, sign up for our <a href="https://adacompliance.net/course/wcag-course" target="_blank" rel="noopener">WCAG Course</a> at ADACompliance.net. This course is perfect for individuals or teams who want to learn WCAG 2.1 AA and/or WCAG 2.2 AA.</p>
 
             <h3>WCAG Course</h3>
-            <p>The WCAG course is on-demand training for the Web Content Accessibility Guidelines. It is designed for individuals and teams who need plain-English explanations, practical examples, and a structured way to learn WCAG 2.1 AA and WCAG 2.2 AA.</p>
-            <p>Lessons cover every WCAG 2.1 AA success criterion plus the newer WCAG 2.2 AA success criteria. The course connects requirements to real digital assets such as websites, apps, documents, images, videos, and software.</p>
+            <p>The WCAG Course includes individual lessons for all 50 WCAG 2.1 AA success criteria as well as the 6 new success criteria in WCAG 2.2 AA.</p>
+            <p>Each lesson contains simple, easy to understand explanations of what is required for each success criterion. The video and text explanations make it easy for anyone to learn what is required, even non-technical beginners who know nothing about accessibility.</p>
+            <p>Each lesson links to the official W3C documentation and, where applicable, includes curated helpful resources in case your team wants to explore the success criterion further.</p>
 
-            <h3>Course Materials</h3>
-            <p>Training materials include video and text explanations, practical code examples, role-based accessibility workflows, a master WCAG checklist, and supplemental resources for designers, developers, and content editors.</p>
+            <h3>Application of Principles</h3>
+            <p>While the principles outlined in these requirements are designed for web content such as websites, web pages, web apps, videos, and images, they are also applicable to all digital assets, including mobile apps, software, and documents.</p>
 
-            <h3>Compliance Coverage</h3>
-            <p>WCAG training supports work toward compliance with major accessibility requirements, including ADA Title II, Section 504, Section 508, AODA, HB21-1110, and the European Accessibility Act.</p>
+            <h3>Compliance with Digital Accessibility Laws</h3>
+            <p>Given that WCAG conformance is mandated by almost all digital accessibility laws, the WCAG Course can help your team in working towards compliance with many different laws and regulations including:</p>
+            <ul>
+              <li>ADA Title II</li>
+              <li>Section 504</li>
+              <li>Section 508</li>
+              <li>AODA</li>
+              <li>HB21-1110</li>
+              <li>European Accessibility Act (EAA)</li>
+            </ul>
+
+            <h3>Supplemental Materials</h3>
+            <p>To help your team put WCAG into practice, the course includes:</p>
+            <ul>
+              <li>Accessibility workflows for designers, developers, and content editors.</li>
+              <li>A master WCAG checklist in Excel spreadsheet format.</li>
+              <li>WCAG in Chunks, which groups similar success criteria together.</li>
+            </ul>
+            <p>These downloads give your organization the reminders and easy reference points they need when coding, designing, or creating content.</p>
+
+            <h3>Course Design</h3>
+            <p>This highly organized, self-paced course features modules that divide success criteria for WCAG 2.0 AA, 2.1 AA, and 2.2 AA, allowing your team to progress from foundational accessibility to newer success criteria.</p>
+            <p>We have designed this course to be as efficient and effective as possible, enabling your team to learn accessibility in less time and retain more of the information.</p>
 
             <h3>ADA Compliance Course</h3>
-            <p>The ADA compliance course focuses on the most commonly claimed accessibility issues in website lawsuits. It explains what each issue is, who is responsible, how to find it, how to fix it, and how to reduce risk with practical remediation work.</p>
+            <p>Our <a href="https://accessible.org/ada-compliance-course/" target="_blank" rel="noopener">ADA Compliance Course</a> teaches prioritizing website accessibility issues from a strategic, legal point of view. The lessons are ordered in the recommended order to prevent lawsuits and explain exactly how to find and fix each issue. This course is also on-demand so you can begin learning right now.</p>
 
-            <div class="proposal-youtube-block">
-              <h3>Training Video</h3>
-              <div class="proposal-youtube-frame">
-                <iframe title="The ADA Book YouTube videos" src="https://www.youtube.com/embed?listType=user_uploads&amp;list=adabook" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
-              </div>
-              <p><a href="https://www.youtube.com/@adabook" target="_blank" rel="noopener">Open Accessible.org training videos on YouTube</a></p>
+            <h3>Course Content and Structure</h3>
+            <p>The ADA Compliance Course centers around individual lessons for the 15 most commonly claimed accessibility issues in website accessibility lawsuits.</p>
+            <p>Each of the primary lessons is dedicated to a single issue and details:</p>
+            <ul>
+              <li>What the issue is</li>
+              <li>What role is responsible</li>
+              <li>How to find it</li>
+              <li>How to fix it</li>
+              <li>Code examples</li>
+              <li>Potential defenses</li>
+            </ul>
+            <p>The course also features lessons on how to get started, strategy, mindset, and additional claims.</p>
+
+            <h3>Course Logic</h3>
+            <p>The ADA Compliance Course is premised upon the idea that if you remediate all of the most commonly claimed issues from the most active plaintiffs’ law firms, you will significantly reduce your risk of being sued.</p>
+            <p>Accessible.org has researched hundreds of lawsuits filed by the most active plaintiffs’ law firms and distilled those findings and recommendations into this course.</p>
+
+            <h3>Supplemental Materials</h3>
+            <p>This course includes an ADA Compliance Course checklist, Issue Roles download, Issues Summary download, Interactive Elements in a Nutshell, and actual complaints filed in court.</p>
+            <p>These supplemental materials are excellent references as your digital team works through the course.</p>
+
+            <h3>Course Design</h3>
+            <p>This course is methodical, detailed, and straightforward. The core message is that you must proactively fix accessibility issues as fast as possible.</p>
+            <p>The ADA Compliance Course is an excellent complement to the WCAG Course. As you implement the lessons and resolve issues on your website one-by-one, you will incrementally reduce your risk of being sued.</p>
+
+            <div class="proposal-training-image">
+              <img src="/images/accessibility-training.png" alt="Accessibility Training" />
             </div>
           </div>
         </section>
