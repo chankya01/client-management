@@ -2181,23 +2181,72 @@ function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
+const DEFAULT_AGREEMENT_TOTAL_COST = "$2,550";
+
+function cleanAgreementText(value) {
+  return String(value || "").trim();
+}
+
+function defaultAgreementServicesText(wcagStandard = "WCAG 2.2 AA", timeline = "2-week timeline") {
+  return `Desktop + Mobile Audit
+${wcagStandard} standard
+Manual accessibility evaluation for the digital asset named in this Agreement
+${timeline}
+Price: $1,450
+
+Technical Support
+5 hours
+$150/hour
+Issue validation and technical questions
+Price: $750
+
+VPAT Service
+WCAG Edition — Accessibility Conformance Report
+Issued after validation
+Price: $350`;
+}
+
+function defaultAgreementScopeText(projectName = "the selected digital asset", wcagStandard = "WCAG 2.2 AA") {
+  return `Digital asset / project: ${projectName}
+Accessibility standard: ${wcagStandard}
+Desktop audit environment: NVDA screen reader, Google Chrome, PC desktop, Windows 11
+Mobile audit environment: VoiceOver screen reader, Safari, iPhone, iOS
+Evaluation methods include screen reader testing, keyboard-only interaction, code inspection, visual inspection, browser zoom review, color contrast analysis, and AXE automated scan as a secondary review.
+Scope excludes documents, third-party portals, subdomains, websites, pages, screens, properties, platforms, or assets not named in this Agreement.`;
+}
+
+function defaultAgreementDeliverablesText() {
+  return `Excel audit report with issue descriptions, URL locations, element locations, testing environment, WCAG success criteria, related code, visual documentation, remediation recommendations, and notes.
+Administrative audit support so Client can understand and use the audit report.
+Technical support for audit questions, remediation questions, issue validation, and related digital accessibility questions.
+Accessibility Conformance Report (VPAT / ACR) when the VPAT service is included.`;
+}
+
+function defaultAgreementCostBreakdownText() {
+  return `Desktop + Mobile Audit: $1,450
+Technical Support: $750
+VPAT Service: $350`;
+}
+
 function agreementDefaultsForRequest(request) {
   const client = state.clients.find((item) => item.id === request?.client_id);
   const clientDisplayName = client?.name || clientName(request?.client_id) || "Client";
   const serviceName = request?.service_type || request?.title || "Accessibility Services";
   const projectName = request?.title || request?.description || "the selected digital asset";
+  const wcagStandard = "WCAG 2.2 AA";
+  const timeline = "2-week timeline";
   return {
     agreementDate: todayIsoDate(),
     clientLegalName: clientDisplayName,
     projectName,
-    wcagStandard: "WCAG 2.2 AA",
-    timeline: "2-week timeline",
-    totalCost: "",
+    wcagStandard,
+    timeline,
+    totalCost: DEFAULT_AGREEMENT_TOTAL_COST,
     projectOverview: `Accessible.org will provide ${serviceName} for ${clientDisplayName} for ${projectName}. Project completion is governed by the Project Completion section below.`,
-    servicesText: `${serviceName}\n${"WCAG 2.2 AA"} standard\nScope defined below\n2-week timeline\nPrice: `,
-    scopeText: request?.description || projectName,
-    deliverablesText: "Audit Report",
-    costBreakdownText: "",
+    servicesText: defaultAgreementServicesText(wcagStandard, timeline),
+    scopeText: defaultAgreementScopeText(projectName, wcagStandard),
+    deliverablesText: defaultAgreementDeliverablesText(),
+    costBreakdownText: defaultAgreementCostBreakdownText(),
     trackerRequirement: "required-if-validation",
     validationIncluded: "yes",
     technicalSupportIncluded: "no",
@@ -2516,12 +2565,12 @@ function parseAgreementDetailsFromSnapshot(agreement, payload) {
         clientLegalName: "Client",
         projectName: agreement?.title || payload?.document?.title || "the selected digital asset",
         projectOverview: text,
-        servicesText: "",
-        scopeText: "",
-        deliverablesText: "",
-        costBreakdownText: "",
-        totalCost: "",
-        timeline: "",
+        servicesText: defaultAgreementServicesText(),
+        scopeText: defaultAgreementScopeText(agreement?.title || payload?.document?.title || "the selected digital asset"),
+        deliverablesText: defaultAgreementDeliverablesText(),
+        costBreakdownText: defaultAgreementCostBreakdownText(),
+        totalCost: DEFAULT_AGREEMENT_TOTAL_COST,
+        timeline: "2-week timeline",
         wcagStandard: "WCAG 2.2 AA",
         trackerRequirement: "required-if-validation",
         validationIncluded: "yes"
@@ -2534,11 +2583,11 @@ function parseAgreementDetailsFromSnapshot(agreement, payload) {
     clientLegalName: "Client",
     projectName: agreement?.title || payload?.document?.title || "the selected digital asset",
     projectOverview: "Accessible.org will provide accessibility services for Client for the selected digital asset. Project completion is governed by the Project Completion section below.",
-    servicesText: "Accessibility Services\nScope defined below\nPrice: ",
-    scopeText: "Scope to be defined by the agreement administrator.",
-    deliverablesText: "Audit Report",
-    costBreakdownText: "",
-    totalCost: "",
+    servicesText: defaultAgreementServicesText(),
+    scopeText: defaultAgreementScopeText(agreement?.title || payload?.document?.title || "the selected digital asset"),
+    deliverablesText: defaultAgreementDeliverablesText(),
+    costBreakdownText: defaultAgreementCostBreakdownText(),
+    totalCost: DEFAULT_AGREEMENT_TOTAL_COST,
     timeline: "2-week timeline",
     wcagStandard: "WCAG 2.2 AA",
     trackerRequirement: "required-if-validation",
@@ -2558,10 +2607,35 @@ function multilineList(value) {
   return `<ul>${lines.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul>`;
 }
 
+function hasOnlyOldPlaceholderText(value, projectName) {
+  const text = cleanAgreementText(value).replace(/\s+/g, " ").toLowerCase();
+  const project = cleanAgreementText(projectName).replace(/\s+/g, " ").toLowerCase();
+  return !text
+    || text === "scope to be defined by the agreement administrator."
+    || text === "scope to be defined by the agreement administrator"
+    || text === "accessibility services scope defined below price:"
+    || text === "audit report"
+    || (project && text === project && /^agreement\s+\d+$/i.test(cleanAgreementText(projectName)));
+}
+
 function renderAgreementTerms(details) {
   const client = details.clientLegalName || "Client";
   const project = details.projectName || "the selected digital asset";
-  const totalCost = details.totalCost || "the amount shown in the Project Cost section";
+  const wcagStandard = cleanAgreementText(details.wcagStandard) || "WCAG 2.2 AA";
+  const timeline = cleanAgreementText(details.timeline) || "2-week timeline";
+  const totalCost = cleanAgreementText(details.totalCost) || DEFAULT_AGREEMENT_TOTAL_COST;
+  const servicesText = hasOnlyOldPlaceholderText(details.servicesText, project)
+    ? defaultAgreementServicesText(wcagStandard, timeline)
+    : details.servicesText;
+  const scopeText = hasOnlyOldPlaceholderText(details.scopeText, project)
+    ? defaultAgreementScopeText(project, wcagStandard)
+    : details.scopeText;
+  const deliverablesText = hasOnlyOldPlaceholderText(details.deliverablesText, project)
+    ? defaultAgreementDeliverablesText()
+    : details.deliverablesText;
+  const costBreakdownText = cleanAgreementText(details.costBreakdownText)
+    ? details.costBreakdownText
+    : defaultAgreementCostBreakdownText();
   const trackerText = details.trackerRequirement === "not-required"
     ? "Accessibility Tracker is not required for this agreement unless the parties later agree otherwise in writing."
     : "Accessibility Tracker is required only if Client would like Service Provider to validate fixes. Tracker is not required for the audit or other services. If validation is needed, Client may sign up month-to-month or purchase a plan upfront through this Agreement.";
@@ -2578,7 +2652,7 @@ function renderAgreementTerms(details) {
       ${multilineParagraph(details.projectOverview || `Accessible.org will provide accessibility services for ${client} for ${project}. Project completion is governed by the Project Completion section below.`)}
 
       <h3>Services and Pricing</h3>
-      ${multilineParagraph(details.servicesText)}
+      ${multilineParagraph(servicesText)}
 
       <h3>Key Terms</h3>
       <h4>Total Cost</h4>
@@ -2604,20 +2678,20 @@ function renderAgreementTerms(details) {
 
       <h3>Audit Process</h3>
       <p>Service Provider conducts formal accessibility evaluations using desktop and, when selected, mobile environments. Evaluation methodologies may include screen reader testing, keyboard-only interaction, code inspection, visual inspection, browser zoom review, color contrast analysis, and automated accessibility scan as a secondary review.</p>
-      <p>Audit work is measured against ${escapeHtml(details.wcagStandard || "WCAG 2.2 AA")} unless another standard is expressly stated in this Agreement.</p>
+      <p>Audit work is measured against ${escapeHtml(wcagStandard)} unless another standard is expressly stated in this Agreement.</p>
 
       <h3>Project Deliverables</h3>
-      ${multilineList(details.deliverablesText) || "<p>Deliverables will be those identified in this Agreement and any later Addendum.</p>"}
+      ${multilineList(deliverablesText)}
       <p>Service Provider retains ownership of its methodologies, templates, evaluation processes, and pre-existing materials. Upon receipt of full payment, Service Provider grants Client a perpetual, non-exclusive, royalty-free, worldwide license to use the deliverables identified in this Agreement for Client’s business purposes.</p>
 
       <h3>Project Scope</h3>
       <p>Audit scope includes only the content, non-document media, URLs, pages, screens, assets, or documents named below. Scope does not include documents, third-party portals, subdomains, websites, pages, screens, properties, or platforms not named below.</p>
-      ${multilineList(details.scopeText) || `<p>${escapeHtml(project)}</p>`}
+      ${multilineList(scopeText)}
 
       <h3>Project Cost</h3>
       <h4>Total Cost</h4>
       <p>${escapeHtml(totalCost)}</p>
-      ${multilineList(details.costBreakdownText)}
+      ${multilineList(costBreakdownText)}
 
       <h3>Project Completion</h3>
       <p>The project is complete when all deliverables identified in this Agreement, and any deliverables added through Addendum, have been delivered to Client. Validation activity and technical support are governed separately by their respective sections of this Agreement and do not affect the determination of project completion unless expressly stated.</p>
