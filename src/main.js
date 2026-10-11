@@ -2573,10 +2573,35 @@ function renderPublicSignature() {
 
         <section class="proposal-section" id="about">
           <h2>About</h2>
-          <div class="proposal-copy-shell">
-            <div class="proposal-line wide"></div>
-            <div class="proposal-line"></div>
-            <div class="proposal-line short"></div>
+          <div class="proposal-about-content">
+            <p>Accessible.org, LLC is a U.S. based digital accessibility company that puts clients first. Founded by Kris Rivenburgh, an attorney and author of The ADA Book and Digital Accessibility and Compliance, Accessible.org provides audit and VPAT services to clients across the world.</p>
+            <p>We help clients make their digital assets WCAG conformant and compliant while building internal accessibility knowledge.</p>
+
+            <h3>Our Approach</h3>
+            <p>We take a contrarian approach to sales and marketing. Instead of email campaigns, sales calls, forced demos, long-term contracts, and outreach, we focus on:</p>
+            <ul>
+              <li>Education and free resources</li>
+              <li>À la carte services</li>
+              <li>Complete transparency</li>
+              <li>Saving clients time</li>
+            </ul>
+            <p>This client-first model prioritizes sustainable growth and reliable service over short-term profits.</p>
+
+            <h3>Our Team</h3>
+            <p>Our accessibility specialists combine legal, technical, and practical expertise. Kris Rivenburgh has studied accessibility and compliance for years to ensure clients receive accurate, actionable information. Our auditors are certified DHS Trusted Testers.</p>
+            <p><strong>Note:</strong> The DHS Trusted Tester certification process is rigorous and often takes 1 to 2 months to complete. Participants work through an estimated 40 to 80 hours of training, incremental exams, a practice exam, and a final certification exam requiring a score of 85% or higher. The mandatory window for completing the full program is 6 months (180 days).</p>
+
+            <h3>Innovating with AI</h3>
+            <p>At Accessible.org Labs, we are pioneering the use of real AI in accessibility. We are the first company to develop AI generated VPATs built from real, fully manual audits, not automated scans. Inside Accessibility Tracker, AI powers progress reports, project insights, and an AI Consultant that helps teams understand and resolve accessibility issues in real time. We use AI to make accessibility faster and more efficient without replacing the manual expertise that accurate conformance requires.</p>
+            <p>We are researching and developing to advance AI hybrid accessibility audits by 2027.</p>
+
+            <h3>Our Products</h3>
+            <p>Accessibility Tracker is our project platform built for teams that need to track, manage, and resolve accessibility issues across audits and projects.</p>
+            <p>Accessibility Base is our directory marketplace connecting organizations with accessibility professionals, products, and services.</p>
+
+            <h3>Who We Serve</h3>
+            <p>We work with organizations of all sizes, from small businesses working on their new Shopify store to Fortune 500 companies managing complex digital assets. Our clients include governments, non-profits, corporations, solo entrepreneurs, startups, professionals, media companies, universities, and retail brands.</p>
+            <p>Reach out and we’ll reply right away.</p>
           </div>
         </section>
 

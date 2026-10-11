@@ -2109,6 +2109,29 @@ a {
   padding-top: 0;
 }
 
+.proposal-about-content {
+  color: #4f545b;
+  line-height: 1.65;
+  max-width: 860px;
+}
+
+.proposal-about-content h3 {
+  color: #111;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  margin: 34px 0 12px;
+}
+
+.proposal-about-content p {
+  margin: 0 0 16px;
+}
+
+.proposal-about-content ul {
+  margin: 0 0 16px;
+  padding-left: 22px;
+}
+
 .proposal-line {
   background: #e9eef0;
   border-radius: 999px;
