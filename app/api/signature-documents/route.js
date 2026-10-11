@@ -69,7 +69,7 @@ function cleanAgreementContent(body) {
   ].filter(Boolean).join("\n\n");
   return {
     title,
-    agreementText: agreementText || legacyText
+    agreementText: agreementText || legacyText || "Generated agreement"
   };
 }
 

@@ -2187,7 +2187,6 @@ function signatureDraftFromForm(form) {
     requestId: String(formData.get("requestId") || ""),
     title: String(formData.get("title") || ""),
     documentPurpose: String(formData.get("documentPurpose") || "signature"),
-    agreementText: String(formData.get("agreementText") || ""),
     recipients: names.map((name, index) => ({
       name,
       email: emails[index] || "",
@@ -2256,7 +2255,7 @@ function signatureDocumentsPage() {
   return `
     <section class="${isInternal() ? "admin-page" : "page"}">
       <h1>Agreements</h1>
-      <p class="subtitle">Paste or edit the complete agreement text, then send it for client signature.</p>
+      <p class="subtitle">Generate a default web agreement layout and send it for client signature.</p>
       ${isInternal() ? `
         <form class="card" id="signatureDocumentForm">
           <p class="section-label">Send Agreement</p>
@@ -2281,14 +2280,13 @@ function signatureDocumentsPage() {
               </select>
             </label>
           </div>
-          <label class="field"><span>Agreement Text</span><textarea name="agreementText" class="agreement-textarea" rows="22" placeholder="Paste the complete agreement text here. Include project overview, services, price, timeline, payment terms, legal terms, and signature wording.">${escapeHtml(draft.agreementText || "")}</textarea></label>
           <p class="section-label">Recipients</p>
           <div data-signature-recipient-list>${signatureRecipientInputs(selectedRequest)}</div>
           <div class="signature-form-actions">
             <button class="secondary" type="button" data-action="add-signature-recipient">Add Recipient</button>
             <button class="primary" type="submit">Send Agreement</button>
           </div>
-          <p class="helper">Clients see the agreement as a clean web page and sign at the bottom. Any client, scope, services, price, or timeline changes should be made directly in the full agreement text.</p>
+          <p class="helper">Clients see the default agreement layout and sign at the bottom.</p>
         </form>
       ` : ""}
       <section class="card">
@@ -2406,38 +2404,6 @@ function downloadIcon() {
   return `<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 20h14v-2H5v2Zm7-16v9.17l3.59-3.58L17 11l-6 6-6-6 1.41-1.41L10 13.17V4h2Z"/></svg>`;
 }
 
-function agreementText(value, fallback = "To be confirmed by the project team.") {
-  const text = String(value || "").trim();
-  return text || fallback;
-}
-
-function agreementFullText(agreement) {
-  return agreementText(agreement?.agreementText || agreement?.terms, [
-    "Agreement",
-    "",
-    "Overview",
-    "Agreement content will be added here.",
-    "",
-    "Terms",
-    "Detailed terms will be added here.",
-    "",
-    "Signature",
-    "The recipient can review the proposal and sign when ready."
-  ].join("\n"));
-}
-
-function agreementBodyHtml(agreement) {
-  const text = agreementFullText(agreement);
-  const headingPattern = /^(Agreement|Overview|Company|Services|Pricing|Terms|Signature|Project Summary|Next Steps)$/i;
-  return text.split(/\n/).map((line) => {
-    const trimmed = line.trim();
-    if (!trimmed) return `<br>`;
-    if (headingPattern.test(trimmed)) return `<h3>${escapeHtml(trimmed)}</h3>`;
-    if (/^[•*-]\s+/.test(trimmed)) return `<p class="agreement-bullet">${escapeHtml(trimmed.replace(/^[•*-]\s+/, ""))}</p>`;
-    return `<p>${escapeHtml(trimmed)}</p>`;
-  }).join("");
-}
-
 function renderPublicSignature() {
   const payload = state.publicSignature;
   if (!payload) {
@@ -2488,106 +2454,96 @@ function renderPublicSignature() {
   const agreementTitle = agreement.title || payload.document?.title || "Proposal";
   root.innerHTML = `
     <main class="proposal-site">
-      <header class="proposal-topbar">
+      <aside class="proposal-sidebar">
         ${brandLogo("signin")}
-        <nav aria-label="Proposal sections">
-          <a href="#company">Company</a>
-          <a href="#services">Services</a>
-          <a href="#pricing">Pricing</a>
+        <nav class="proposal-sidebar-nav" aria-label="Proposal sections">
+          <a href="#process">Our Process & Pricing Model</a>
+          <a href="#components">Campaign Components & Examples</a>
+          <a href="#why">Why Choose Us</a>
+          <a href="#proof">Client Proof</a>
+          <a href="#next">Next Steps</a>
           <a href="#terms">Terms</a>
-          <a href="#sign">Sign</a>
         </nav>
-      </header>
+      </aside>
 
-      <section class="proposal-page proposal-cover" id="company">
-        <div class="proposal-page-inner">
-          <p class="proposal-kicker">Prepared for ${escapeHtml(recipientName)}</p>
-          <h1>${escapeHtml(agreementTitle)}</h1>
-          <p class="proposal-lede">A simple proposal page with company details, services, pricing, terms, and signature in one clean flow.</p>
-          <div class="proposal-hero-actions">
-            <a class="primary" href="#terms">Review Terms</a>
-            <a class="secondary" href="#sign">Go to Signature</a>
+      <div class="proposal-document">
+        <section class="proposal-section proposal-cover" id="process">
+          <div class="proposal-shape one"></div>
+          <h1>Our Process & Pricing Model</h1>
+          <div class="proposal-copy-shell">
+            <div class="proposal-line wide"></div>
+            <div class="proposal-line"></div>
+            <div class="proposal-line short"></div>
           </div>
-        </div>
-      </section>
-
-      <section class="proposal-page" id="services">
-        <div class="proposal-page-inner">
-          <p class="proposal-kicker">Company</p>
-          <h2>Simple process, clear details.</h2>
-          <p class="proposal-lede">This section will introduce the company, explain the engagement, and keep the proposal easy for the client to review.</p>
-          <div class="proposal-feature-grid">
-            <article>
-              <span>01</span>
-              <h3>Details</h3>
-              <p>Use this area for the high-level context the client should understand before reviewing the proposal.</p>
-            </article>
-            <article>
-              <span>02</span>
-              <h3>Services</h3>
-              <p>List the services included in the engagement in a short, readable format.</p>
-            </article>
-            <article>
-              <span>03</span>
-              <h3>Approval</h3>
-              <p>Keep the final action clear so the recipient can accept and sign after reviewing everything.</p>
-            </article>
+          <div class="proposal-pricing-box">
+            <div class="proposal-pricing-heading">Service Pricing Confirmation</div>
+            <div class="proposal-pricing-row">
+              <strong>Service</strong>
+              <strong>Price</strong>
+            </div>
+            <div class="proposal-pricing-row proposal-total-row">
+              <span>Total</span>
+              <strong>Amount</strong>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section class="proposal-page proposal-muted-page" id="pricing">
-        <div class="proposal-page-inner">
-          <p class="proposal-kicker">Project summary</p>
-          <h2>Services and pricing.</h2>
-          <div class="proposal-pricing-grid">
-            <article class="proposal-price-card">
-              <span>01</span>
-              <h3>Service package</h3>
-              <p>Placeholder service details. We can replace this with admin-entered scope later.</p>
-            </article>
-            <article class="proposal-price-card">
-              <span>02</span>
-              <h3>Timeline</h3>
-              <p>Placeholder timeline details. We can connect this to request or agreement fields later.</p>
-            </article>
-            <article class="proposal-price-card">
-              <span>03</span>
-              <h3>Pricing</h3>
-              <p>Placeholder pricing details. We can replace this with the final proposal amount later.</p>
-            </article>
-          </div>
-        </div>
-      </section>
-
-      <section class="proposal-page" id="process">
-        <div class="proposal-page-inner">
-          <p class="proposal-kicker">How it works</p>
-          <h2>Simple process, expert results.</h2>
-          <div class="proposal-process-list">
-            ${["Details", "Services", "Pricing", "Terms"].map((step, index) => `
+        <section class="proposal-section" id="components">
+          <div class="proposal-shape two"></div>
+          <h2>Campaign Components & Examples</h2>
+          <div class="proposal-numbered-list">
+            ${["Details", "Services", "Timeline", "Reporting"].map((item, index) => `
               <article>
-                <span>${index + 1}</span>
-                <h3>${step}</h3>
+                <h3>${index + 1}. ${item}</h3>
+                <div class="proposal-note-box"></div>
               </article>
             `).join("")}
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section class="proposal-page proposal-terms-page" id="terms">
-        <div class="proposal-page-inner">
-          <p class="proposal-kicker">Agreement terms</p>
-          <h2>Terms for review.</h2>
-          <div class="agreement-body">${agreementBodyHtml(agreement)}</div>
-        </div>
-      </section>
+        <section class="proposal-section" id="why">
+          <div class="proposal-shape three"></div>
+          <h2>Why Choose Us</h2>
+          <div class="proposal-reason-list">
+            ${["Reason one", "Reason two", "Reason three"].map((item, index) => `
+              <article>
+                <span>${index + 1}</span>
+                <h3>${item}</h3>
+                <div class="proposal-line"></div>
+                <div class="proposal-line short"></div>
+              </article>
+            `).join("")}
+          </div>
+        </section>
 
-      <section class="proposal-page proposal-muted-page" id="sign">
-        <div class="proposal-page-inner proposal-signature-layout">
-          <section>
-            <p class="proposal-kicker">Recipients</p>
-            <h2>Signature</h2>
+        <section class="proposal-section" id="proof">
+          <h2>Client Proof</h2>
+          <div class="proposal-video-placeholder">
+            <span>▶</span>
+          </div>
+        </section>
+
+        <section class="proposal-section" id="next">
+          <div class="proposal-shape four"></div>
+          <h2>Next Steps</h2>
+          <div class="proposal-copy-shell">
+            <div class="proposal-line wide"></div>
+            <div class="proposal-line"></div>
+            <div class="proposal-note-box"></div>
+          </div>
+        </section>
+
+        <section class="proposal-section proposal-terms-section" id="terms">
+          <h2>Terms & Conditions</h2>
+          <div class="proposal-copy-shell">
+            <div class="proposal-line wide"></div>
+            <div class="proposal-line"></div>
+            <div class="proposal-line short"></div>
+          </div>
+          <div class="proposal-authorized-row">
+            <span>Duly authorized, for and on behalf of the Customer</span>
+          </div>
+          <div class="proposal-signature-area">
             <div class="proposal-recipient-list">
               ${(payload.recipients || []).map((recipient) => `
                 <div class="deliverable-row">
@@ -2596,33 +2552,32 @@ function renderPublicSignature() {
                 </div>
               `).join("")}
             </div>
-          </section>
 
-          ${!canSign ? `
-            <section class="proposal-sign-panel">
-              <h2>Agreement Shared</h2>
-              <p class="helper">This agreement is view-only. No signature is required from you.</p>
-            </section>
-          ` : alreadySigned ? `
-            <section class="proposal-sign-panel">
-              <h2>Already Signed</h2>
-              <p class="helper">This agreement has already been signed by you.</p>
-            </section>
-          ` : `
-            <form class="proposal-sign-panel" id="publicSignatureForm">
-              <p class="section-label">Accept and Sign</p>
-              <p class="helper">Enter these details yourself. They become the signing record for this agreement.</p>
-              <div class="signature-field-grid">
-                <label class="field"><span>Signature</span><input name="typedSignature" required autocomplete="off" /></label>
-                <label class="field"><span>Name</span><input name="signerName" required autocomplete="name" /></label>
-                <label class="field"><span>Title</span><input name="signerTitle" required autocomplete="organization-title" /></label>
-                <label class="field"><span>Date</span><input name="signatureDate" type="date" required /></label>
-              </div>
-              <button class="primary" type="submit">Accept and Sign</button>
-            </form>
-          `}
-        </div>
-      </section>
+            ${!canSign ? `
+              <section class="proposal-sign-panel">
+                <p class="helper">This agreement is view-only. No signature is required from you.</p>
+              </section>
+            ` : alreadySigned ? `
+              <section class="proposal-sign-panel">
+                <p class="helper">This agreement has already been signed by you.</p>
+              </section>
+            ` : `
+              <form class="proposal-sign-panel" id="publicSignatureForm">
+                <p>I, ${escapeHtml(recipientName)}, agree to the terms of this agreement and I agree that my typed name below can be used as a digital representation of my signature.</p>
+                <div class="proposal-sign-tabs">
+                  <span>▣ Sign by typing</span>
+                  <span>✎ Sign by drawing</span>
+                </div>
+                <label class="field"><span>To accept and sign, type your name below</span><input name="typedSignature" required autocomplete="off" /></label>
+                <input name="signerName" type="hidden" value="${escapeHtml(recipientName)}" />
+                <input name="signerTitle" type="hidden" value="Accepted" />
+                <input name="signatureDate" type="hidden" value="${new Date().toISOString().slice(0, 10)}" />
+                <button class="primary" type="submit">Accept and sign</button>
+              </form>
+            `}
+          </div>
+        </section>
+      </div>
       ${toastHtml()}
     </main>
   `;
@@ -3045,7 +3000,6 @@ function attachEvents() {
       const emails = formData.getAll("recipientEmail").map(String);
       const roles = formData.getAll("recipientRole").map(String);
       const requiresSignature = formData.get("documentPurpose") !== "view";
-      const agreementText = String(formData.get("agreementText") || "").trim();
       const recipients = emails.map((email, index) => ({
         name: names[index],
         email,
@@ -3054,10 +3008,6 @@ function attachEvents() {
 
       if (!request) {
         showToast("Select a request.");
-        return;
-      }
-      if (!agreementText) {
-        showToast("Add the agreement text before sending.");
         return;
       }
       if (!recipients.length) {
@@ -3071,7 +3021,7 @@ function attachEvents() {
             request,
             profile: state.profile,
             title: formData.get("title") || "Service Agreement",
-            agreementText,
+            agreementText: "",
             recipients,
             requiresSignature
           });
