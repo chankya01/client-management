@@ -2022,12 +2022,20 @@ a {
   z-index: 2;
 }
 
-.proposal-section h1,
+.proposal-section h1 {
+  font-size: 30px;
+  letter-spacing: -0.03em;
+  line-height: 1.13;
+  margin: 0 0 24px;
+  max-width: 900px;
+  text-align: left;
+}
+
 .proposal-section h2 {
-  font-size: clamp(2rem, 3vw, 3rem);
-  letter-spacing: -0.04em;
-  line-height: 1.08;
-  margin: 0 0 clamp(24px, 4vw, 42px);
+  font-size: 20px;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  margin: 0 0 18px;
   max-width: 900px;
   text-align: left;
 }
@@ -2086,8 +2094,8 @@ a {
 }
 
 .proposal-service-details article h2 {
-  font-size: clamp(1.6rem, 2.2vw, 2.2rem);
-  margin-bottom: 16px;
+  font-size: 20px;
+  margin-bottom: 12px;
 }
 
 .proposal-copy-shell {
@@ -2314,9 +2322,13 @@ a {
     padding: 56px 22px;
   }
 
-  .proposal-section h1,
-  .proposal-section h2 {
-    font-size: clamp(2rem, 9vw, 2.8rem);
+  .proposal-section h1 {
+    font-size: 28px;
+  }
+
+  .proposal-section h2,
+  .proposal-service-details article h2 {
+    font-size: 20px;
   }
 
   .proposal-copy-shell,

@@ -2516,6 +2516,30 @@ function renderPublicSignature() {
               <p>We audit your asset and complete a Voluntary Product Accessibility Template (VPAT), creating an Accessibility Conformance Report (ACR) to document your product’s accessibility status.</p>
               <p>This documentation is essential for meeting procurement requirements.</p>
             </article>
+            <article>
+              <h2>Technical Support</h2>
+              <p>Technical support can be used to validate remediation work, answer accessibility implementation questions, and help teams complete fixes with confidence.</p>
+            </article>
+            <article>
+              <h2>Certification</h2>
+              <p>Certification-related documents can help communicate accessibility progress, project completion, conformance status, and supporting evidence after required criteria are met.</p>
+            </article>
+            <article>
+              <h2>User Testing</h2>
+              <p>User testing involves people who use assistive technologies reviewing digital assets and providing practical feedback, with session documentation available for evidence.</p>
+            </article>
+            <article>
+              <h2>Document Remediation</h2>
+              <p>Document remediation improves PDFs, Word documents, PowerPoint files, and other document types so they better meet accessibility standards.</p>
+            </article>
+            <article>
+              <h2>Expedited Accessibility</h2>
+              <p>Expedited accessibility support is available for urgent timelines, including fast-turnaround requests when timing is critical.</p>
+            </article>
+            <article>
+              <h2>Custom Accessibility Statement</h2>
+              <p>A custom accessibility statement can reflect an organization’s accessibility policy, commitment, current efforts, and improvement path.</p>
+            </article>
           </div>
         </section>
 
