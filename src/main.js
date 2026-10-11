@@ -2477,84 +2477,38 @@ function renderPublicSignature() {
         <section class="${proposalSectionClass("services")}" id="services">
           <h1>Services</h1>
           <p class="proposal-service-lede">Accessible.org can help make your website, app, or other digital asset meet WCAG 2.1 AA or 2.2 AA standards and follow best practices in ADA compliance.</p>
-          <div class="proposal-service-summary">
-            <h3>All Services</h3>
-            <p>Most popular:</p>
-            <div class="proposal-service-columns">
-              <div>
-                <h4>Audits</h4>
-                <ul>
-                  <li>Audits</li>
-                  <li>VPATs / ACRs</li>
-                  <li>Technical Support</li>
-                </ul>
-              </div>
-              <div>
-                <h4>Complementary</h4>
-                <ul>
-                  <li>Certification</li>
-                  <li>User Testing</li>
-                  <li>Document Remediation</li>
-                  <li>Expedited Accessibility</li>
-                  <li>Custom Accessibility Statement</li>
-                </ul>
-              </div>
-            </div>
-          </div>
           <div class="proposal-service-details">
             <article>
               <h2>Audits</h2>
-              <p>We evaluate the accessibility of your digital asset, such as a website, to identify all accessibility issues using WCAG 2.1 AA or WCAG 2.2 AA as our baseline standard.</p>
-              <h3>Includes:</h3>
-              <ul>
-                <li>Screen Reader Testing</li>
-                <li>Keyboard Testing</li>
-                <li>Touch and Gesture Testing</li>
-                <li>Visual Inspection</li>
-                <li>Audible Inspection</li>
-                <li>Code Inspection</li>
-                <li>Color Contrast Analyzer</li>
-                <li>AXE Scan as secondary review</li>
-                <li>Browser Testing: Chrome and Safari</li>
-                <li>Device Testing: Desktop, with optional mobile testing</li>
-              </ul>
-              <p class="proposal-service-price"><strong>Price:</strong> $100–$250 per page or screen; $25–$100 for light pages/screens.</p>
+              <p>We evaluate the accessibility of your digital asset, such as a website, to identify accessibility issues using WCAG 2.1 AA or WCAG 2.2 AA as the baseline standard. Audit work may include screen reader testing, keyboard testing, touch and gesture testing, visual and audible inspection, code inspection, color contrast review, AXE scan as secondary review, Chrome and Safari browser testing, and desktop testing with optional mobile testing. Cost: $100–$250 per page or screen; $25–$100 for light pages or screens.</p>
             </article>
             <article>
               <h2>VPATs / ACRs</h2>
-              <p>We audit your asset and complete a Voluntary Product Accessibility Template (VPAT), creating an Accessibility Conformance Report (ACR) to document your product’s accessibility status.</p>
-              <p>This documentation is essential for meeting procurement requirements.</p>
-              <p class="proposal-service-price"><strong>Price:</strong> $350 for WCAG edition in addition to audit cost; $550 for Section 508 edition; $650 for EU edition; $950 for INT edition.</p>
+              <p>We audit your asset and complete a Voluntary Product Accessibility Template (VPAT), creating an Accessibility Conformance Report (ACR) to document your product’s accessibility status. This documentation is essential for meeting procurement requirements. Cost: $350 for WCAG edition in addition to the audit cost; $550 for Section 508 edition; $650 for EU edition; $950 for INT edition.</p>
             </article>
             <article>
               <h2>Technical Support</h2>
-              <p>Technical support can be used to validate remediation work, answer accessibility implementation questions, and help teams complete fixes with confidence.</p>
-              <p class="proposal-service-price"><strong>Price:</strong> $195/hour, minimum 3 hours.</p>
+              <p>Technical support hours can be used to validate that your team’s fixes have resolved audit issues, assist your digital team during remediation, answer implementation questions, and help your team complete the project successfully. Cost: $195/hour, minimum 3 hours.</p>
             </article>
             <article>
               <h2>Certification</h2>
-              <p>Certification-related documents can help communicate accessibility progress, project completion, conformance status, and supporting evidence after required criteria are met.</p>
-              <p class="proposal-service-price"><strong>Price:</strong> Not sold separately; issued when requirements for certification are met.</p>
+              <p>Certification documents can speak to the accessibility of your website or digital asset, including a statement of conformance, statement of partial conformance, Accessible.org certification, or a user testing recorded session. These documents can help mark project completion, support settlement requirements, strengthen an accessibility statement, and support accessibility marketing. Cost: certification documents cannot be purchased separately and are issued only when the necessary requirements have been met.</p>
             </article>
             <article>
               <h2>User Testing</h2>
-              <p>User testing involves people who use assistive technologies reviewing digital assets and providing practical feedback, with session documentation available for evidence.</p>
-              <p class="proposal-service-price"><strong>Price:</strong> $550 per session; $450 per session with audit service.</p>
+              <p>User testing involves professionals with disabilities using assistive technologies to evaluate your digital assets. The testing session is documented with a recording, providing concrete evidence of accessibility. Sessions take place after remediation, include up to 10 pages or screens, and are capped at 30 minutes. Cost: $550 per session; $450 per session with audit service.</p>
             </article>
             <article>
               <h2>Document Remediation</h2>
-              <p>Document remediation improves PDFs, Word documents, PowerPoint files, and other document types so they better meet accessibility standards.</p>
-              <p class="proposal-service-price"><strong>Price:</strong> Starts at $7/page.</p>
+              <p>Document remediation improves PDFs, Microsoft Word documents, Microsoft PowerPoint documents, Canva-generated documents, and other document types so they meet accessibility standards including WCAG 2.2 AA and PDF/UA standards. Cost: starts at $7/page.</p>
             </article>
             <article>
               <h2>Expedited Accessibility</h2>
-              <p>Expedited accessibility support is available for urgent timelines, including fast-turnaround requests when timing is critical.</p>
-              <p class="proposal-service-price"><strong>Price:</strong> $250–$750 depending on document size/content.</p>
+              <p>Expedited accessibility services are available for clients who must meet an urgent deadline. Quick turnaround timelines and pricing depend on the service ordered, and some document or PDF remediation requests can be completed same-day or overnight. Cost: $250–$750 depending on document size and content.</p>
             </article>
             <article>
               <h2>Custom Accessibility Statement</h2>
-              <p>A custom accessibility statement can reflect an organization’s accessibility policy, commitment, current efforts, and improvement path.</p>
-              <p class="proposal-service-price"><strong>Price:</strong> $250 to start; varies based on project request.</p>
+              <p>Kris Rivenburgh can create a custom accessibility statement for your organization. The statement can align with your organization’s policy and commitment while positively reflecting your current investments and accessibility efforts. Cost: $250 to start; varies based on project request.</p>
             </article>
           </div>
         </section>
