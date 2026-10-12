@@ -2678,8 +2678,7 @@ function renderAgreementTerms(details) {
 
   return `
     <div class="proposal-terms-content">
-      <h3>Accessibility Services Agreement</h3>
-      <p>This Services Agreement is made on ${escapeHtml(details.agreementDate || todayIsoDate())} between Accessible.org, LLC, a Texas company with its principal place of business at 770 Broadway Street Ste 104 #1126, San Antonio, Texas 78209 (“Service Provider”), and ${escapeHtml(client)} (“Client”).</p>
+      <p class="agreement-intro">This Services Agreement is made on ${escapeHtml(details.agreementDate || todayIsoDate())} between Accessible.org, LLC, a Texas company with its principal place of business at 770 Broadway Street Ste 104 #1126, San Antonio, Texas 78209 (“Service Provider”), and ${escapeHtml(client)} (“Client”).</p>
 
       <h3>Project Overview</h3>
       ${multilineParagraph(projectOverviewText)}

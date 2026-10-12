@@ -2129,14 +2129,42 @@ a {
   max-width: 860px;
 }
 
+.proposal-terms-content {
+  counter-reset: agreement-section;
+  font-size: 1.04rem;
+}
+
+.proposal-terms-content .agreement-intro {
+  color: #4f545b;
+  font-size: 1.12rem;
+  line-height: 1.75;
+  margin: 0 0 42px;
+}
+
 .proposal-about-content h3,
-.proposal-training-content h3,
-.proposal-terms-content h3 {
+.proposal-training-content h3 {
   color: #111;
   font-size: 20px;
   letter-spacing: -0.02em;
   line-height: 1.25;
   margin: 34px 0 12px;
+}
+
+.proposal-terms-content h3 {
+  border-top: 1px solid #e0e7ef;
+  color: #111;
+  counter-increment: agreement-section;
+  font-size: 24px;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+  margin: 48px 0 16px;
+  padding-top: 24px;
+}
+
+.proposal-terms-content h3::before {
+  color: #5b197f;
+  content: counter(agreement-section) ". ";
+  font-weight: 800;
 }
 
 .proposal-terms-content h4 {
@@ -2268,10 +2296,42 @@ a {
 }
 
 .proposal-terms-section {
+  overflow: hidden;
   padding-bottom: 90px;
 }
 
+.proposal-terms-section::before {
+  background: linear-gradient(135deg, #5949ff 0%, #21b5f2 100%);
+  border-radius: 0 0 120px 0;
+  content: "";
+  height: 170px;
+  left: -48px;
+  opacity: 0.95;
+  position: absolute;
+  top: -70px;
+  transform: rotate(15deg);
+  width: 230px;
+  z-index: 0;
+}
+
+.proposal-terms-section::after {
+  background: linear-gradient(135deg, #21b5f2 0%, #5949ff 100%);
+  border-radius: 999px;
+  content: "";
+  height: 88px;
+  left: clamp(130px, 13vw, 230px);
+  opacity: 0.95;
+  position: absolute;
+  top: 135px;
+  width: 88px;
+  z-index: 0;
+}
+
 .proposal-terms-section > h2 {
+  font-size: clamp(34px, 4.2vw, 58px);
+  letter-spacing: -0.045em;
+  line-height: 1.05;
+  margin-bottom: clamp(70px, 10vw, 140px);
   margin-left: auto;
   margin-right: auto;
   max-width: 860px;
