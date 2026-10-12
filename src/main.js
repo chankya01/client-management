@@ -2189,20 +2189,21 @@ function cleanAgreementText(value) {
 
 function defaultAgreementServicesText(wcagStandard = "WCAG 2.2 AA", timeline = "2-week timeline") {
   return `Desktop + Mobile Audit
-${wcagStandard} standard
-Manual accessibility evaluation for the digital asset named in this Agreement
-${timeline}
+• ${wcagStandard} standard
+• Scope defined below
+• ${timeline}
 Price: $1,450
 
 Technical Support
-5 hours
-$150/hour
-Issue validation and technical questions
+• 5 hours
+• $150/hour
+• Issue Validation
+• Technical Questions
 Price: $750
 
 VPAT Service
-WCAG Edition — Accessibility Conformance Report
-Issued after validation
+• WCAG Edition — Accessibility Conformance Report
+• Issued after validation
 Price: $350`;
 }
 
@@ -2362,8 +2363,7 @@ function agreementParameterInputs(request) {
         </select>
       </label>
     </div>
-    <label class="field"><span>Project Overview</span><textarea name="projectOverview" rows="4">${escapeHtml(agreementDraftValue("projectOverview", request))}</textarea></label>
-    <label class="field"><span>Services and Pricing</span><textarea name="servicesText" rows="6">${escapeHtml(agreementDraftValue("servicesText", request))}</textarea></label>
+    <label class="field"><span>Services block shown under Project Overview</span><textarea name="servicesText" rows="10">${escapeHtml(agreementDraftValue("servicesText", request))}</textarea></label>
     <label class="field"><span>Project Scope</span><textarea name="scopeText" rows="6">${escapeHtml(agreementDraftValue("scopeText", request))}</textarea></label>
     <label class="field"><span>Deliverables</span><textarea name="deliverablesText" rows="4">${escapeHtml(agreementDraftValue("deliverablesText", request))}</textarea></label>
     <label class="field"><span>Cost Breakdown</span><textarea name="costBreakdownText" rows="4">${escapeHtml(agreementDraftValue("costBreakdownText", request))}</textarea></label>
@@ -2642,6 +2642,7 @@ function renderAgreementTerms(details) {
   const validationText = details.validationIncluded === "no"
     ? "Validation is not included unless later added by written Addendum."
     : "Remediation must begin within 21 days of audit report delivery, no gap in project activity may exceed 14 days, and remediation and validation must be completed within 4 months of audit report delivery. Outside these windows, a new audit is required.";
+  const projectOverviewText = `Accessible.org will provide the following accessibility services for ${client} for ${project}. Project completion is governed by the Project Completion section below.`;
 
   return `
     <div class="proposal-terms-content">
@@ -2649,9 +2650,7 @@ function renderAgreementTerms(details) {
       <p>This Services Agreement is made on ${escapeHtml(details.agreementDate || todayIsoDate())} between Accessible.org, LLC, a Texas company with its principal place of business at 770 Broadway Street Ste 104 #1126, San Antonio, Texas 78209 (“Service Provider”), and ${escapeHtml(client)} (“Client”).</p>
 
       <h3>Project Overview</h3>
-      ${multilineParagraph(details.projectOverview || `Accessible.org will provide accessibility services for ${client} for ${project}. Project completion is governed by the Project Completion section below.`)}
-
-      <h3>Services and Pricing</h3>
+      ${multilineParagraph(projectOverviewText)}
       ${multilineParagraph(servicesText)}
 
       <h3>Key Terms</h3>
@@ -3001,7 +3000,7 @@ function renderPublicSignature() {
         </section>
 
         <section class="${proposalSectionClass("terms")} proposal-terms-section" id="terms">
-          <h2>Terms & Conditions</h2>
+          <h2>Accessibility Services Agreement</h2>
           ${renderAgreementTerms(agreementDetails)}
           <div class="proposal-authorized-row">
             <span>Duly authorized, for and on behalf of the Customer</span>
