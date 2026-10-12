@@ -2607,6 +2607,38 @@ function multilineList(value) {
   return `<ul>${lines.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul>`;
 }
 
+function agreementBulletList(items) {
+  return `<ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
+}
+
+function agreementServiceBlockHtml(value) {
+  const lines = String(value || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const html = [];
+  let bullets = [];
+  const flushBullets = () => {
+    if (!bullets.length) return;
+    html.push(agreementBulletList(bullets));
+    bullets = [];
+  };
+
+  lines.forEach((line) => {
+    const bulletMatch = line.match(/^[•*-]\s*(.+)$/);
+    if (bulletMatch) {
+      bullets.push(bulletMatch[1]);
+      return;
+    }
+    flushBullets();
+    if (/^price\s*:/i.test(line)) {
+      html.push(`<p>${escapeHtml(line)}</p>`);
+    } else {
+      html.push(`<h4>${escapeHtml(line)}</h4>`);
+    }
+  });
+
+  flushBullets();
+  return html.join("");
+}
+
 function hasOnlyOldPlaceholderText(value, projectName) {
   const text = cleanAgreementText(value).replace(/\s+/g, " ").toLowerCase();
   const project = cleanAgreementText(projectName).replace(/\s+/g, " ").toLowerCase();
@@ -2651,13 +2683,14 @@ function renderAgreementTerms(details) {
 
       <h3>Project Overview</h3>
       ${multilineParagraph(projectOverviewText)}
-      ${multilineParagraph(servicesText)}
+      ${agreementServiceBlockHtml(servicesText)}
 
       <h3>Key Terms</h3>
+      <p>Below are key provisions of this Agreement. The full terms govern.</p>
       <h4>Total Cost</h4>
       <p>${escapeHtml(totalCost)}. Payment terms are set forth in the Payment Terms section.</p>
       <h4>Electronic Payment Only</h4>
-      <p>All payments must be made electronically. Physical checks and third-party payment platforms are not accepted unless specifically agreed upon in advance.</p>
+      <p>All payments must be made electronically. Physical checks and third-party payment platforms are not accepted. Wire transfer or ACH is preferred for agreements with a Total Cost over $10,000.</p>
       <h4>Accessibility Tracker</h4>
       <p>${escapeHtml(trackerText)}</p>
       <h4>Scope</h4>
@@ -2669,68 +2702,194 @@ function renderAgreementTerms(details) {
 
       <h3>Project Timeline</h3>
       <p>Project start date is one day after payment is received by Service Provider. If access to content within scope is required and has not been provided when payment is received, the project start date is one day after Service Provider receives working access.</p>
-      <p>Service Provider will deliver applicable deliverables according to the following timeline: ${escapeHtml(details.timeline || "timeline stated in the selected services")}.</p>
+      <p>Service Provider will deliver applicable deliverables according to the following timeline: ${escapeHtml(timeline)}.</p>
 
       <h3>Communication and Project Management</h3>
-      <p>Service Provider utilizes Accessibility Tracker for validation and related technical questions, email for non-technical project-related correspondence, and video calls for scheduled consultation and support.</p>
-      <p>Routine status questions and check-ins prior to established deadlines are not included in the scope of services. Additional project management or communication platforms such as Basecamp, Slack, or custom project email addresses require prior negotiation and may incur additional fees.</p>
+      <h4>Platforms and Tools</h4>
+      <p>Service Provider utilizes the following platforms for project delivery, tracking, and communication:</p>
+      ${agreementBulletList([
+        "Technical Support: Accessibility Tracker platform for validation and related technical questions; email and video calls for all other technical support.",
+        "Virtual Meetings: Video calls for all scheduled consultation and support.",
+        "Communication: Email for all non-technical project-related correspondence."
+      ])}
+      <h4>Accessibility Tracker</h4>
+      <p>Accessibility Tracker is our accessibility project platform that enables clients to easily track and manage their project. Tracker saves time and lowers project cost by making remediation more efficient and reducing technical support hours needed for questions and validation.</p>
+      <p>Tracker is required only for clients who would like Service Provider to validate fixes. Clients who do not need validation do not need Tracker. Most single digital asset projects can be completed using a Small Business Plan ($19/month, cancel anytime).</p>
+      <p>Client may purchase a 1-year Accessibility Tracker plan upfront through this Agreement: $250 for 1 project, $500 for 4 projects, or $1,100 for 10 projects. If selected, the plan amount is added to the Total Cost under Project Cost.</p>
+      <h4>Communication Guidelines</h4>
+      <p>To ensure efficient project management across multiple clients, routine status questions and check-ins prior to established deadlines are not included in the scope of services.</p>
+      <h4>Alternative Platforms</h4>
+      <p>The use of additional project management or communication platforms such as Basecamp, Slack, or custom project email addresses is not included in the standard service agreement. Implementation of custom communication and platforms requires prior negotiation and may incur additional fees.</p>
 
       <h3>Audit Process</h3>
-      <p>Service Provider conducts formal accessibility evaluations using desktop and, when selected, mobile environments. Evaluation methodologies may include screen reader testing, keyboard-only interaction, code inspection, visual inspection, browser zoom review, color contrast analysis, and automated accessibility scan as a secondary review.</p>
+      <p>Service Provider conducts thorough, formal accessibility evaluations using a robust combination of environments and methodologies. Choosing the desktop + mobile option means the audit includes additional mobile environments. Additional environments can be added for a fee upon request.</p>
       <p>Audit work is measured against ${escapeHtml(wcagStandard)} unless another standard is expressly stated in this Agreement.</p>
+      <h4>Desktop Environments</h4>
+      ${agreementBulletList(["Assistive Technology: NVDA screen reader", "Browser: Google Chrome", "Device: PC Desktop", "Operating System: Windows 11"])}
+      <h4>Mobile Environments</h4>
+      ${agreementBulletList(["Assistive Technology: VoiceOver screen reader", "Browser: Safari", "Device: iPhone", "Operating System: iOS"])}
+      <h4>Evaluation Methodologies</h4>
+      ${agreementBulletList(["Screen reader testing", "Keyboard-only interaction", "Code inspection", "Visual inspection", "Browser zoom 200% and 400%", "Color contrast analyzer tool", "Automated accessibility scan (AXE)"])}
+      <h4>Audit Report</h4>
+      <p>Upon audit completion, Client will receive a detailed Excel spreadsheet report that includes the following information:</p>
+      ${agreementBulletList(["Issue description", "URL location", "Specific element location", "Testing environment", "Applicable WCAG success criterion", "Related code", "Visual documentation (screenshots/clips)", "Remediation recommendations", "Additional notes"])}
+      <h4>Audit Support</h4>
+      <p>All audit packages include administrative support to ensure Client is able to understand and use the audit report.</p>
+      <h4>Technical Support</h4>
+      <p>Technical support is provided by an accessibility expert who will answer questions related to the audit, remediation, and digital accessibility. Technical support hours are billed in 15-minute increments, are non-refundable, and expire when the validation windows close.</p>
+      ${agreementBulletList(["Email communication", "Video calls", "Direct access to accessibility experts"])}
+
+      <h3>Validation</h3>
+      <p>Validation is available for issues identified in Service Provider’s audit report. Validation is performed using technical support hours and tracked in Accessibility Tracker. So that audit findings remain current, the following windows apply:</p>
+      ${agreementBulletList([
+        "Remediation must begin within 21 days of audit report delivery, with status logged in Accessibility Tracker.",
+        "No gap in project activity may exceed 14 days.",
+        "Remediation and validation must be completed within 4 months of audit report delivery."
+      ])}
+      <p>If any window is not met, a new audit is required before Service Provider validates fixes or issues any documentation, including Accessibility Conformance Reports, certifications, conformance statements, or validation reports.</p>
+      <h4>Validation Turnaround</h4>
+      <p>Service Provider will complete the initial validation round within five (5) business days of Client’s submission for validation, and each subsequent validation round within three (3) business days of resubmission.</p>
+      <h4>Validation Hours</h4>
+      <p>Validation activity draws against the technical support hours included in this Agreement. Service Provider will provide advance written notice before the included technical support hours are used up. Continued validation beyond the included hours requires the purchase of additional technical support hours at the rate of $150/hour, payable in advance.</p>
+      <h4>Pre-Remediation Static State</h4>
+      <p>From the project start date until remediation is initiated, no changes whatsoever may be made to the digital asset. This includes content updates, code changes, design adjustments, third-party integration changes, and platform or framework modifications. Any change during this period invalidates the audit and triggers the Re-Audit Requirements below.</p>
+      <p>If a change is unavoidable, Client must notify Service Provider in writing at least 5 days in advance. Service Provider will determine in its sole judgment whether the audit can proceed as planned, must be re-scoped, or must be re-audited at Client’s cost.</p>
+      <h4>Permitted Changes During Validation</h4>
+      <p>The only changes permitted to the audited asset during validation are remediation actions directly responsive to issues identified in the audit report. Any non-responsive change during validation invalidates the audit and triggers the Re-Audit Requirements below.</p>
+      <h4>Re-Audit Requirements</h4>
+      <p>Where a new audit is required under this Agreement, including when a validation window is not met, when the audit has been invalidated, or where Client otherwise requires Service Provider to re-evaluate previously audited content, the following terms apply:</p>
+      ${agreementBulletList([
+        "Within four (4) months of original audit report delivery, and provided no significant changes have been made to the audited asset, a re-audit covering the same scope may be conducted at seventy percent (70%) of the original agreement total.",
+        "After four (4) months from original audit report delivery, or where Service Provider determines in its reasonable judgment that significant changes have been made to the audited asset, a re-audit will be priced as a new engagement at then-current rates.",
+        "“Significant changes” includes modifications to navigation structure, page templates, design systems, frameworks, platforms, or any changes substantially altering the layout, functionality, or content of the audited asset."
+      ])}
+      <h4>Completion Window Extension</h4>
+      <p>Client may purchase up to two extension months: $100 per month if purchased at signing, or $250 per month if purchased after the project is underway. Extension months extend only the four-month completion window; the 21-day initiation window and the 14-day activity requirement are unaffected.</p>
+      <h4>Audit Details</h4>
+      ${agreementBulletList([
+        "Audit services and prices named herein are for named scope. Any pages, domains, subdomains, portals, documents, and other screens or content not specifically named are excluded from scope.",
+        "Client can increase or decrease the number of pages in scope before this Agreement is executed. Changes after execution are addressed through Addendum.",
+        "Client can add additional pages/screens to audit scope at a cost of $25 to $100 per light page/screen or $100 to $250 per primary page/screen.",
+        "Client’s digital assets must remain static while the audit is being conducted. If edits are necessary, Client must let Service Provider know so the evaluation can be timed appropriately.",
+        "If any login is required to access content within scope, Client must provide a test account and login details.",
+        "The formal evaluation may require submitting forms, creating records, and interacting with features as an end user would. Client is responsible for providing an environment and accounts suitable for this activity."
+      ])}
+
+      <h3>VPAT Service</h3>
+      <p>A Voluntary Product Accessibility Template (VPAT) is used to generate an Accessibility Conformance Report (ACR). The ACR documents the conformance level of a product against the specified accessibility standard.</p>
+      <h4>Certification Details</h4>
+      <p>Service Provider certification and conformance statements are contingent upon full WCAG conformance, without exception. Certification is only possible upon either 1) an audit returning 0 accessibility issues or 2) validation of fixes.</p>
+      <h4>Documentation</h4>
+      <p>When all issues within the defined scope have been properly fixed and validated, Service Provider can issue certification and conformance documentation. Certification is only issued when there is full conformance with the technical standard for the entire defined scope.</p>
+      <h4>VPAT / Accessibility Conformance Report (ACR)</h4>
+      <p>The ACR documents the conformance level of a product against the specified accessibility standard.</p>
+      <h4>Accessible.org Certification</h4>
+      <p>Accessible.org Certification confirms full conformance with the specified WCAG standard and includes the scope of certification, date of issuance, evaluation methodologies, and Service Provider’s qualifications as accessibility experts.</p>
+      <h4>Statement of Conformance</h4>
+      <p>A Statement of Conformance follows the W3C’s conformance requirements and states that the listed assets, pages, and screens are fully WCAG conformant.</p>
+      <h4>Statement of Partial Conformance</h4>
+      <p>If parts of Client’s digital asset are not under Client’s control and are non-conformant, a Statement of Partial Conformance can be issued stating that all controllable elements are WCAG conformant.</p>
 
       <h3>Project Deliverables</h3>
+      <p>Service Provider will email all document deliverables including reports and documentation.</p>
       ${multilineList(deliverablesText)}
-      <p>Service Provider retains ownership of its methodologies, templates, evaluation processes, and pre-existing materials. Upon receipt of full payment, Service Provider grants Client a perpetual, non-exclusive, royalty-free, worldwide license to use the deliverables identified in this Agreement for Client’s business purposes.</p>
+      <h4>Deliverables License</h4>
+      <p>Service Provider retains ownership of its methodologies, templates, evaluation processes, and pre-existing materials used to produce the deliverables. Upon receipt of full payment, Service Provider grants Client a perpetual, non-exclusive, royalty-free, worldwide license to use, reproduce, distribute, and publish the deliverables identified in this Agreement for Client’s business purposes, including in RFP responses and procurement processes. Deliverables must be presented without alteration and together with the scope, standard, environment, and date of issuance stated within them.</p>
 
       <h3>Project Scope</h3>
-      <p>Audit scope includes only the content, non-document media, URLs, pages, screens, assets, or documents named below. Scope does not include documents, third-party portals, subdomains, websites, pages, screens, properties, or platforms not named below.</p>
+      <p>Audit scope includes all content and non-document media on the URLs and screens named below. Scope does not include any documents, third-party portals, subdomains, websites, pages, screens, properties, or platforms not named below.</p>
       ${multilineList(scopeText)}
+      <h4>Scope Acceptance</h4>
+      <p>Client has reviewed and agrees to the scope of services described in this Agreement, including all deliverables and pricing. The scope is final upon execution. Any changes Client wishes to make to the scope must be requested and incorporated into this Agreement before it is executed by both parties.</p>
+      <p>Changes requested after execution may be addressed through a separate addendum at Service Provider’s discretion and may involve additional fees.</p>
+      <h4>Defined Scope</h4>
+      <p>The scope of services is limited to the specific pages, screens, documents, and components expressly identified in this Agreement as of the Effective Date (“Defined Scope”). The Defined Scope is fixed and does not extend to Client’s entire website, application, or other digital assets.</p>
+      <h4>Ordinary Content Additions</h4>
+      <p>Client’s addition of new content that does not alter the Defined Scope does not constitute a scope change and does not obligate Service Provider to evaluate such content, nor does it void or modify the services provided under this Agreement.</p>
+      <h4>Representative Sampling Methodology</h4>
+      <p>The Defined Scope is assembled to be representative of Client’s digital asset, selecting pages, screens, and views that reflect the layouts, templates, and components in use across the asset. Because most accessibility issues originate at the template or component level, remediating the issues identified in the audit will, in most cases, resolve the same issues wherever those templates and components appear.</p>
+      <p>Where issues arise from unique content rather than templates, the findings serve as a guide for Client to review similar content types on pages outside the Defined Scope for the same issue patterns.</p>
+      <h4>Documentation Scope</h4>
+      <p>Any documentation issued by Service Provider in connection with this Agreement, including Accessibility Conformance Reports, certification, conformance statements, audit reports, and validation reports, will reflect the exact scope, environment, standard, and version stated in this Agreement.</p>
+      <p>If the scope includes a staging environment, all documentation will reference the staging environment and will not represent any other environment, including production. Documentation reflecting a different environment, scope, standard, or version requires a separate audit and engagement.</p>
 
       <h3>Project Cost</h3>
       <h4>Total Cost</h4>
       <p>${escapeHtml(totalCost)}</p>
+      <h4>Cost Breakdown</h4>
       ${multilineList(costBreakdownText)}
+      <p>Cost does not include any services not named under cost breakdown.</p>
 
       <h3>Project Completion</h3>
       <p>The project is complete when all deliverables identified in this Agreement, and any deliverables added through Addendum, have been delivered to Client. Validation activity and technical support are governed separately by their respective sections of this Agreement and do not affect the determination of project completion unless expressly stated.</p>
+
+      <h3>Termination</h3>
+      <p>This Agreement may be terminated only by Service Provider, upon written notice to Client. If Service Provider terminates this Agreement, Service Provider will refund all fees paid, less fees for services performed, deliverables delivered, and technical support hours used as of the termination date. Except as provided under Force Majeure, Client may not terminate this Agreement. Except as provided in this section, fees paid are non-refundable.</p>
 
       <h3>No Vendor Onboarding</h3>
       <p>Service Provider does not participate in vendor onboarding, registration, approval, or qualification processes. Service Provider does not complete vendor portals, security questionnaires, supplier registration forms, background check workflows, insurance verification systems, or similar third-party platforms.</p>
 
       <h3>Payment Terms</h3>
-      <p>Payment is due prior to project start. Payment options include wire transfer, crypto, and payment methods available through Stripe, including credit card, Amazon Pay, and ACH Direct Debit. Service Provider does not accept payment through third-party accounts payable or payment platforms unless specifically agreed upon in advance.</p>
+      <p>Payment is due prior to project start. Payment options include wire transfer, crypto, and all payment methods available through Stripe, including credit card, Amazon Pay, and ACH Direct Debit. Payment is processed securely through Stripe. Service Provider does not accept checks or alternative payment methods unless specifically agreed upon in advance.</p>
+      <p>For agreements with a Total Cost over $10,000, wire transfer or ACH is the preferred payment method. Service Provider does not accept payment through third-party accounts payable or payment platforms. Any purchase order issued by Client is for Client’s internal administrative purposes only, and its terms do not apply to this Agreement.</p>
+      <h4>Additional Services and Addendums</h4>
       <p>Additional services pertinent to this project may be added without a new agreement through written Addendum signed by both parties. Each Addendum will identify the additional services and associated cost.</p>
 
       <h3>Governing Law</h3>
       <p>This Agreement shall be governed by and construed in accordance with the laws of the State of Texas without giving effect to any choice or conflict of law provision or rule.</p>
 
       <h3>Dispute Resolution</h3>
-      <p>Any dispute arising out of or relating to this Agreement shall be resolved in Bexar County, Texas. For claims exceeding $20,000, the parties agree to first attempt resolution through non-binding mediation in San Antonio, Texas, with costs split equally. Client consents to jurisdiction and venue in Bexar County, Texas and waives any right to a jury trial in any proceeding arising out of or related to this Agreement.</p>
+      <p>Any dispute arising out of or relating to this Agreement shall be resolved as follows: for claims of $20,000 or less, either party may elect to pursue the matter in small claims court or state court in Bexar County, Texas. For claims exceeding $20,000, the parties agree to first attempt resolution through non-binding mediation in San Antonio, Texas, with costs split equally. If mediation fails to resolve the dispute within 30 days, either party may pursue the matter in state or federal court located in Bexar County, Texas.</p>
+      <p>Client consents to the exclusive jurisdiction and venue of these courts and waives any objection based on forum non conveniens or any other basis. Client further waives any right to a jury trial in any proceeding arising out of or related to this Agreement.</p>
 
       <h3>Confidentiality</h3>
-      <p>Each party agrees to hold in confidence all confidential information disclosed by the other party in connection with this Agreement. Confidentiality obligations continue for two years from the date of this Agreement and do not apply to information that is publicly available, independently developed, or rightfully received from a third party.</p>
+      <p>Each party agrees to hold in confidence all Confidential Information disclosed by the other party in connection with this Agreement. “Confidential Information” means any non-public information, technical data, or know-how disclosed by either party, whether orally or in writing, that is designated as confidential or reasonably should be understood to be confidential given the nature of the information.</p>
+      <p>The receiving party shall not disclose Confidential Information to any third party without the disclosing party’s prior written consent, except to employees or contractors who need to know such information to perform obligations under this Agreement and who are bound by confidentiality obligations at least as protective as those herein.</p>
+      <p>These confidentiality obligations continue for two (2) years from the date of this Agreement. Confidential Information does not include information that becomes publicly available through no fault of the receiving party, was rightfully known prior to disclosure, is independently developed without use of Confidential Information, or is required to be disclosed by law.</p>
+      <p>If the parties have executed a mutual non-disclosure agreement, it remains in effect and governs Confidential Information together with this section. Service Provider does not publicly identify its clients. Client is free to share that it has worked with Service Provider.</p>
 
       <h3>No Third-Party Beneficiaries</h3>
-      <p>This Agreement is for the sole benefit of the parties and does not create rights in any third party.</p>
+      <p>This Agreement is between Service Provider and Client only. No other person or entity, including end users, website visitors, or plaintiffs in accessibility lawsuits, has any rights under this Agreement or may make any claims against Service Provider based on the services provided. Client shall not represent to any third party that Service Provider’s audit creates any warranties or obligations to anyone other than Client.</p>
+
+      <h3>Limitation of Liability</h3>
+      <p>Notwithstanding anything to the contrary contained in this Agreement, the aggregate liability of either party for any claim, loss, damage, or expense of any kind arising out of or related to this Agreement shall not exceed the total amount paid by Client to Service Provider under this Agreement. Under no circumstances shall either party be liable for any consequential, incidental, indirect, special, punitive, or exemplary damages arising from or related to this Agreement or the services provided.</p>
+      <p>Client acknowledges that Service Provider’s fees reflect this allocation of risk and that Service Provider would not enter into this Agreement without these limitations. The remedies stated in this Agreement are Client’s sole and exclusive remedies.</p>
+
+      <h3>Assumption of Risk and No Warranty</h3>
+      <p>Client acknowledges that accessibility compliance is subject to varying interpretations by courts, regulatory agencies, and other entities. Service Provider’s audit represents a technical evaluation based on the above named WCAG standard at a specific point in time and does not constitute a warranty or guarantee of legal compliance with the ADA, Section 508, any other digital accessibility laws or regulations, or protection from lawsuits.</p>
+      <p>Client assumes all risk associated with the implementation, non-implementation, or modification of Service Provider’s recommendations. Service Provider expressly disclaims all warranties, express or implied. Client acknowledges that Service Provider’s role is limited to technical evaluation and that WCAG conformance and legal compliance remains Client’s sole responsibility.</p>
 
       <h3>Indemnification</h3>
-      <p>Each party is responsible for its own acts and omissions. Client agrees that Service Provider’s services and deliverables do not guarantee legal compliance, prevent claims, or eliminate all accessibility risk.</p>
+      <p>Client agrees to indemnify, defend, and hold harmless Service Provider, its officers, employees, agents, and subcontractors from and against all claims, demands, losses, costs, damages, actions, suits, or proceedings brought by third parties arising out of or related to Client’s website, application, or digital properties, including accessibility-related lawsuits, regulatory actions, or user complaints.</p>
 
       <h3>Force Majeure</h3>
-      <p>Neither party will be liable for delay or failure to perform caused by circumstances beyond its reasonable control, including acts of God, natural disasters, war, terrorism, labor disputes, government action, internet or hosting outages, and other events outside the affected party’s control.</p>
+      <p>Neither party shall be liable for any failure or delay in performing its obligations under this Agreement to the extent such failure or delay results from circumstances beyond the reasonable control of the affected party, including acts of God, natural disasters, pandemics, government actions, war, terrorism, labor disputes, or internet or infrastructure failures. If a force majeure event continues for more than 60 days, either party may terminate this Agreement upon written notice.</p>
+
+      <h3>Statute of Limitations</h3>
+      <p>Any claim or cause of action arising out of or related to this Agreement must be brought within one (1) year after the cause of action accrues, regardless of any longer statute of limitations period that might otherwise apply. A cause of action accrues when Service Provider delivers the audit report or when services are terminated, whichever occurs first.</p>
+
+      <h3>Survival of Terms</h3>
+      <p>The following provisions shall survive termination or expiration of this Agreement: Limitation of Liability, Assumption of Risk and No Warranty, Indemnification, Statute of Limitations, No Third-Party Beneficiaries, Governing Law, Confidentiality, Deliverables License, Dispute Resolution, and any payment obligations.</p>
+
+      <h3>Modification and Waiver</h3>
+      <p>No modification of this Agreement shall be valid unless in writing and signed by both parties. No waiver of any provision of this Agreement shall be deemed or shall constitute a waiver of any other provision, nor shall any waiver constitute a continuing waiver.</p>
 
       <h3>Assignment</h3>
-      <p>Client may not assign this Agreement without Service Provider’s prior written consent. Service Provider may assign this Agreement in connection with a merger, acquisition, corporate reorganization, or sale of substantially all assets.</p>
+      <p>Neither party may assign this Agreement without the prior written consent of the other party; provided, however, that either party may assign this Agreement without such consent to an affiliate or to a successor in interest in connection with a merger, reorganization, or sale of all or substantially all of its assets.</p>
 
       <h3>Notices</h3>
-      <p>Notices under this Agreement must be provided in writing to the parties using the contact information associated with this engagement.</p>
+      <p>All notices required under this Agreement must be sent by email to the addresses on file for each party. A notice is deemed received on the first business day after it is sent unless the sending party receives a delivery failure message. Each party is responsible for keeping its email address current and providing written notice of any change.</p>
 
       <h3>Severability</h3>
-      <p>If any provision of this Agreement is held invalid or unenforceable, the remaining provisions remain in full force and effect.</p>
+      <p>If any provision of this Agreement is held by a court of competent jurisdiction to be invalid, illegal, or unenforceable, such provision shall be modified to the minimum extent necessary to make it valid, legal, and enforceable, or if such modification is not possible, such provision shall be severed from this Agreement. The remaining provisions remain in full force and effect.</p>
 
       <h3>Entire Agreement</h3>
       <p>This Agreement contains the entire agreement between the parties and supersedes all prior agreements and understandings, both written and oral, with respect to the subject matter hereof, except that any mutual non-disclosure agreement between the parties remains in effect.</p>
+
+      <h3>Execution</h3>
+      <p>In Witness Whereof, the parties have executed this Agreement as of the date first above written.</p>
+      <h4>Accessible.org, LLC</h4>
+      <p>Signature: Kris Rivenburgh<br />Name: Kris Rivenburgh<br />Title: Founder, Accessible.org<br />Date: ${escapeHtml(details.agreementDate || todayIsoDate())}</p>
     </div>
   `;
 }
