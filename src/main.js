@@ -2229,6 +2229,106 @@ Technical Support: $750
 VPAT Service: $350`;
 }
 
+function formatAgreementCurrency(value) {
+  const digits = String(value || "").replace(/[^\d]/g, "");
+  if (!digits) return "";
+  return `$${Number(digits).toLocaleString("en-US")}`;
+}
+
+function moneyFromText(value) {
+  const match = String(value || "").match(/\$?\s*([\d,]+)(?:\.\d{2})?/);
+  return match ? formatAgreementCurrency(match[1]) : "";
+}
+
+function lastMoneyFromText(value) {
+  const matches = [...String(value || "").matchAll(/\$?\s*([\d,]+)(?:\.\d{2})?/g)];
+  return matches.length ? formatAgreementCurrency(matches[matches.length - 1][1]) : "";
+}
+
+function parseAgreementNotes(notes, request) {
+  const raw = cleanAgreementText(notes);
+  if (!raw) return null;
+
+  const defaults = agreementDefaultsForRequest(request);
+  const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const normalized = raw.replace(/\s+/g, " ");
+  const urls = [...new Set((raw.match(/https?:\/\/[^\s)]+/g) || []).map((url) => url.replace(/[.,;]+$/, "")))];
+  const wcagStandard = normalized.match(/WCAG\s*2\.[12]\s*AA/i)?.[0].replace(/\s+/g, " ").toUpperCase().replace("WCAG 2.", "WCAG 2.") || defaults.wcagStandard;
+  const totalCost = formatAgreementCurrency(normalized.match(/total\s+cost\s*:?\s*\$?\s*([\d,]+)/i)?.[1]) || defaults.totalCost;
+
+  const auditLine = lines.find((line) => /audit/i.test(line) && /\$?\s*[\d,]+/.test(line)) || "";
+  const auditCost = moneyFromText(auditLine) || "$1,450";
+  const auditName = /mobile/i.test(auditLine) ? "Desktop + Mobile Audit" : "Accessibility Audit";
+  const timelineMatch = normalized.match(/(\d+)\s*[- ]?(?:day|business day|week|month)s?/i);
+  const expeditedLine = lines.find((line) => /expedited/i.test(line)) || "";
+  const expeditedCost = lastMoneyFromText(expeditedLine);
+  const expeditedDays = expeditedLine.match(/(\d+)\s*[- ]?(?:day|business day)s?/i)?.[1] || "";
+  const timeline = expeditedDays ? `${expeditedDays} days expedited service` : (timelineMatch?.[0] || defaults.timeline);
+
+  const supportLine = lines.find((line) => /technical\s+support|support\s+horus|support\s+hours/i.test(line)) || "";
+  const supportHours = supportLine.match(/(\d+)\s*(?:hours?|hrs?|horus)/i)?.[1] || "";
+  const supportCost = formatAgreementCurrency(
+    supportLine.match(/(?:total\s+cost|cost|price)\s*:?\s*\$?\s*([\d,]+)/i)?.[1]
+    || supportLine.match(/(\d[\d,]*)\s*$/)?.[1]
+  );
+
+  const vpatLine = lines.find((line) => /vpat/i.test(line)) || "";
+  const vpatCost = moneyFromText(vpatLine);
+  const vpatEdition = vpatLine.match(/\b([A-Za-z]+)\s+Edition\b/i)?.[1];
+  const vpatEditionLabel = vpatEdition ? `${vpatEdition.toUpperCase()} Edition` : "WCAG Edition";
+
+  const services = [];
+  const costBreakdown = [];
+
+  services.push(auditName);
+  services.push(`• ${wcagStandard} standard`);
+  services.push("• Scope defined below");
+  if (timeline) services.push(`• ${timeline}`);
+  services.push(`Price: ${auditCost}`);
+  costBreakdown.push(`${wcagStandard} ${auditName}: ${auditCost}`);
+
+  if (supportLine || supportHours || supportCost) {
+    services.push("");
+    services.push("Technical Support");
+    if (supportHours) services.push(`• ${supportHours} hours`);
+    services.push("• Issue Validation");
+    services.push("• Technical Questions");
+    if (supportCost) services.push(`Price: ${supportCost}`);
+    if (supportCost) costBreakdown.push(`Technical Support${supportHours ? ` (${supportHours} hours)` : ""}: ${supportCost}`);
+  }
+
+  if (expeditedLine || expeditedCost) {
+    services.push("");
+    services.push("Expedited Service");
+    if (expeditedDays) services.push(`• ${expeditedDays} days`);
+    if (expeditedCost) services.push(`Price: ${expeditedCost}`);
+    if (expeditedCost) costBreakdown.push(`Expedited Service${expeditedDays ? ` (${expeditedDays} days)` : ""}: ${expeditedCost}`);
+  }
+
+  if (vpatLine || vpatCost) {
+    services.push("");
+    services.push("VPAT Service");
+    services.push(`• ${vpatEditionLabel} — Accessibility Conformance Report`);
+    services.push("• Issued after validation");
+    if (vpatCost) services.push(`Price: ${vpatCost}`);
+    if (vpatCost) costBreakdown.push(`VPAT Service (${vpatEditionLabel}): ${vpatCost}`);
+  }
+
+  return {
+    wcagStandard,
+    timeline,
+    totalCost,
+    servicesText: services.join("\n"),
+    scopeText: urls.length ? urls.join("\n") : defaults.scopeText,
+    deliverablesText: [
+      "Audit Report",
+      ...(vpatLine || vpatCost ? [`Accessibility Conformance Report (${vpatEditionLabel})`] : []),
+      ...(expeditedLine || expeditedCost ? ["Expedited service delivery"] : [])
+    ].join("\n"),
+    costBreakdownText: costBreakdown.join("\n")
+  };
+}
+
 function agreementDefaultsForRequest(request) {
   const client = state.clients.find((item) => item.id === request?.client_id);
   const clientDisplayName = client?.name || clientName(request?.client_id) || "Client";
@@ -2298,6 +2398,7 @@ function signatureDraftFromForm(form) {
     requestId,
     title: String(formData.get("title") || ""),
     documentPurpose: String(formData.get("documentPurpose") || "signature"),
+    agreementPrompt: String(formData.get("agreementPrompt") || ""),
     ...agreementDetails,
     recipients: names.map((name, index) => ({
       name,
@@ -2339,6 +2440,11 @@ function agreementParameterInputs(request) {
   return `
     <p class="section-label">Terms Parameters</p>
     <p class="helper">These fields generate the Terms page. The legal boilerplate stays common; these values are injected into the agreement.</p>
+    <section class="agreement-ai-box">
+      <label class="field"><span>Paste agreement notes</span><textarea name="agreementPrompt" rows="8" placeholder="$1,450 for a WCAG 2.1 AA desktop + mobile audit&#10;Technical support hours: 5 total cost 750&#10;Expedited service: 3 days 350&#10;VPAT service: 950 INT Edition&#10;total cost: 3600&#10;&#10;scope&#10;https://example.com/page">${escapeHtml(state.signatureDraft?.agreementPrompt || "")}</textarea></label>
+      <button class="secondary" type="button" data-generate-agreement-terms>Generate Terms from Notes</button>
+      <p class="helper">This fills the editable fields below. You can review and change anything before sending.</p>
+    </section>
     <div class="form-grid">
       <label class="field"><span>Agreement Date</span><input name="agreementDate" type="date" value="${escapeHtml(agreementDraftValue("agreementDate", request))}" /></label>
       <label class="field"><span>Client Legal Name</span><input name="clientLegalName" value="${escapeHtml(agreementDraftValue("clientLegalName", request))}" /></label>
@@ -3619,6 +3725,22 @@ function attachEvents() {
 
   const signatureDocumentForm = document.getElementById("signatureDocumentForm");
   if (signatureDocumentForm) {
+    signatureDocumentForm.querySelector("[data-generate-agreement-terms]")?.addEventListener("click", () => {
+      const formData = new FormData(signatureDocumentForm);
+      const request = state.requests.find((item) => item.id === formData.get("requestId"));
+      const generated = parseAgreementNotes(formData.get("agreementPrompt"), request);
+      if (!generated) {
+        showToast("Paste agreement notes first.");
+        return;
+      }
+      Object.entries(generated).forEach(([name, value]) => {
+        const field = signatureDocumentForm.elements.namedItem(name);
+        if (field) field.value = value;
+      });
+      signatureDraftFromForm(signatureDocumentForm);
+      showToast("Terms fields generated from notes. Review before sending.");
+    });
+
     signatureDocumentForm.addEventListener("input", () => {
       signatureDraftFromForm(signatureDocumentForm);
     });

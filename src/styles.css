@@ -2382,6 +2382,31 @@ a {
   min-height: 420px;
 }
 
+.agreement-ai-box {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(33, 181, 242, 0.13), transparent 32%),
+    #f8fafc;
+  border: 2px solid #d7e1ef;
+  border-radius: 18px;
+  margin: 20px 0 28px;
+  padding: 22px;
+}
+
+.agreement-ai-box .field {
+  margin-top: 0;
+}
+
+.agreement-ai-box textarea {
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  min-height: 180px;
+  padding: 12px;
+}
+
+.agreement-ai-box .secondary {
+  margin-bottom: 10px;
+}
+
 .agreement-body {
   color: var(--ink);
   background: transparent;
