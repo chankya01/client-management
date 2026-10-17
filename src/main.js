@@ -2404,7 +2404,9 @@ function signatureDraftFromForm(form) {
   const requestId = String(formData.get("requestId") || "");
   const request = state.requests.find((item) => item.id === requestId);
   const agreementDetails = agreementDetailsFromFormData(formData, request);
-  const promptValue = String(formData.get("proposalPrompt") || formData.get("agreementPrompt") || "").trim();
+  const hasComposer = formData.has("proposalPrompt");
+  const composerValue = hasComposer ? String(formData.get("proposalPrompt") || "") : "";
+  const promptValue = composerValue.trim() || String(formData.get("agreementPrompt") || "").trim();
 
   state.signatureDraft = {
     clientId: String(formData.get("clientId") || ""),
@@ -2412,6 +2414,7 @@ function signatureDraftFromForm(form) {
     title: String(formData.get("title") || ""),
     documentPurpose: String(formData.get("documentPurpose") || "signature"),
     agreementPrompt: promptValue || state.signatureDraft?.agreementPrompt || "",
+    proposalComposerDraft: hasComposer ? composerValue : (state.signatureDraft?.proposalComposerDraft || ""),
     proposalGenerated: Boolean(state.signatureDraft?.proposalGenerated),
     proposalMessages: Array.isArray(state.signatureDraft?.proposalMessages) ? state.signatureDraft.proposalMessages : [],
     ...agreementDetails,
@@ -2609,6 +2612,7 @@ function proposalBuilderPreview(request) {
 function proposalBuilderChat(request) {
   const draft = state.signatureDraft || {};
   const messages = Array.isArray(draft.proposalMessages) ? draft.proposalMessages : [];
+  const composerDraft = draft.proposalComposerDraft || "";
   return `
     <section class="proposal-builder-chat">
       <div class="proposal-chat-header">
@@ -2624,7 +2628,7 @@ function proposalBuilderChat(request) {
       </div>
       <label class="field proposal-chat-input">
         <span>Message the proposal assistant</span>
-        <textarea name="proposalPrompt" rows="10" placeholder="Example:\n$1,700 for a WCAG 2.1 AA desktop + mobile audit\nUser Testing: $450\nVPAT Service: $350\nTechnical Support: $450 (3 hours)\nTotal Cost: $2,950\n\nScope:\nhttps://example.com/signin\nhttps://example.com/assistant"></textarea>
+        <textarea name="proposalPrompt" rows="10" placeholder="Example:\n$1,700 for a WCAG 2.1 AA desktop + mobile audit\nUser Testing: $450\nVPAT Service: $350\nTechnical Support: $450 (3 hours)\nTotal Cost: $2,950\n\nScope:\nhttps://example.com/signin\nhttps://example.com/assistant">${escapeHtml(composerDraft)}</textarea>
       </label>
       <button class="secondary" type="button" data-send-proposal-message>Send message</button>
       <p class="helper">Send details or a correction such as “change the total cost to $900”. The assistant updates the preview after each message.</p>
@@ -3864,6 +3868,7 @@ function attachEvents() {
         requestId: "",
         proposalGenerated: false,
         agreementPrompt: "",
+        proposalComposerDraft: "",
         proposalMessages: [],
         recipients: [{ name: "", email: "", role: "signer" }]
       };
@@ -3884,6 +3889,7 @@ function attachEvents() {
           ...agreementDefaultsForRequest(state.activeRequest),
           proposalGenerated: false,
           agreementPrompt: "",
+          proposalComposerDraft: "",
           proposalMessages: []
         };
         setSignatureDraftRecipientsForRequest(state.activeRequest);
@@ -3934,6 +3940,7 @@ function attachEvents() {
         title: "Accessibility Services Proposal",
         documentPurpose: "signature",
         agreementPrompt: notes,
+        proposalComposerDraft: "",
         proposalGenerated: true,
         ...updatedDetails,
         proposalMessages: [
