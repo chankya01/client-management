@@ -3504,8 +3504,12 @@ function renderPublicSignature() {
                 <span class="proposal-eyebrow">Video library</span>
                 <h3>Keep learning with Accessible.org</h3>
                 <p>Browse practical accessibility and compliance videos from Kris Rivenburgh and the Accessible.org team.</p>
+                <a class="primary proposal-media-link" href="https://www.youtube.com/@adabook" target="_blank" rel="noopener">Watch on YouTube</a>
               </div>
-              <a class="primary proposal-media-link" href="https://www.youtube.com/@adabook" target="_blank" rel="noopener">Watch on YouTube</a>
+              <a class="proposal-video-card-media" href="https://www.youtube.com/@adabook" target="_blank" rel="noopener" aria-label="Open the Accessible.org video library on YouTube">
+                <img src="/images/accessibility-training.png" alt="Accessible.org accessibility training video thumbnail" />
+                <span aria-hidden="true">▶</span>
+              </a>
             </div>
           </div>
         </section>
