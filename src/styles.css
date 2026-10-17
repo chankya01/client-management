@@ -2298,8 +2298,7 @@ a {
 }
 
 .proposal-about-content ul,
-.proposal-training-content ul,
-.proposal-terms-content ul {
+.proposal-training-content ul {
   background: #f5f7f8;
   border: 1px solid #dfe6ef;
   border-radius: 12px;
@@ -2307,16 +2306,36 @@ a {
   padding: 18px 22px 18px 44px;
 }
 
-.agreement-bullet-box {
-  background: #eef2f3;
-  border: 1px solid #cbd6dc;
-  border-radius: 12px;
-  margin: 10px 0 22px;
-  padding: 18px 24px 18px 42px;
+.proposal-terms-content ul {
+  margin: 0 0 16px;
+  padding-left: 22px;
 }
 
-.agreement-bullet-box ul {
-  margin: 0;
+.proposal-content-box {
+  background: #f5f7f8;
+  border: 1px solid #dfe6ef;
+  border-radius: 12px;
+  margin: 0 0 24px;
+  padding: 18px 22px;
+}
+
+.proposal-content-box p {
+  background: transparent;
+  border: 0;
+  margin: 0 0 16px;
+  padding: 0;
+}
+
+.proposal-content-box p:last-child,
+.proposal-content-box ul:last-child {
+  margin-bottom: 0;
+}
+
+.proposal-content-box ul {
+  background: transparent;
+  border: 0;
+  margin: 0 0 16px;
+  padding: 0 0 0 22px;
 }
 
 .proposal-line {
@@ -2396,7 +2415,7 @@ a {
 
 .proposal-training-image {
   margin-top: 34px;
-  max-width: 760px;
+  max-width: 860px;
 }
 
 .proposal-training-image img {
@@ -2414,7 +2433,7 @@ a {
   gap: 24px;
   justify-content: space-between;
   margin-top: 34px;
-  max-width: 760px;
+  max-width: 860px;
   padding: 24px 28px;
 }
 
@@ -2432,14 +2451,15 @@ a {
 }
 
 .proposal-video-card .primary {
+  color: #fff;
   display: inline-flex;
   margin-top: 14px;
 }
 
 .proposal-video-card-media {
   border-radius: 12px;
-  flex: 0 0 240px;
-  min-height: 150px;
+  flex: 0 0 320px;
+  min-height: 220px;
   overflow: hidden;
   position: relative;
 }
@@ -3193,10 +3213,6 @@ button:disabled {
     font-size: 21px;
     margin-top: 34px;
     padding-top: 18px;
-  }
-
-  .agreement-bullet-box {
-    padding: 16px 18px 16px 34px;
   }
 
   .proposal-video-card {

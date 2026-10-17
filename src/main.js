@@ -2945,7 +2945,7 @@ function multilineList(value) {
 }
 
 function agreementBulletList(items) {
-  return `<div class="agreement-bullet-box"><ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>`;
+  return `<ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
 }
 
 function agreementServiceBlockHtml(value) {
@@ -3529,14 +3529,16 @@ function renderPublicSignature() {
             <p>We help clients make their digital assets WCAG conformant and compliant while building internal accessibility knowledge.</p>
 
             <h3>Our Approach</h3>
-            <p>We take a contrarian approach to sales and marketing. Instead of email campaigns, sales calls, forced demos, long-term contracts, and outreach, we focus on:</p>
-            <ul>
-              <li>Education and free resources</li>
-              <li>À la carte services</li>
-              <li>Complete transparency</li>
-              <li>Saving clients time</li>
-            </ul>
-            <p>This client-first model prioritizes sustainable growth and reliable service over short-term profits.</p>
+            <div class="proposal-content-box">
+              <p>We take a contrarian approach to sales and marketing. Instead of email campaigns, sales calls, forced demos, long-term contracts, and outreach, we focus on:</p>
+              <ul>
+                <li>Education and free resources</li>
+                <li>À la carte services</li>
+                <li>Complete transparency</li>
+                <li>Saving clients time</li>
+              </ul>
+              <p>This client-first model prioritizes sustainable growth and reliable service over short-term profits.</p>
+            </div>
 
             <h3>Our Team</h3>
             <p>Our accessibility specialists combine legal, technical, and practical expertise. Kris Rivenburgh has studied accessibility and compliance for years to ensure clients receive accurate, actionable information. Our auditors are certified DHS Trusted Testers.</p>
