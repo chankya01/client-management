@@ -2135,7 +2135,12 @@ function signedSignatureDetails(payload) {
 }
 
 function proposalApprovalLabel(document) {
-  return document?.proposal_approved ? "Approved · Agreement unlocked" : "Awaiting client approval";
+  const events = Array.isArray(document?.events) ? document.events : [];
+  const latestEvent = [...events].reverse().find((event) => event?.event_type);
+  if (document?.status === "completed" || latestEvent?.event_type === "signed") return "Agreement Signed";
+  if (document?.proposal_approved || latestEvent?.event_type === "proposal_approved") return "Agreement Unlocked";
+  if (latestEvent?.event_type === "viewed" || document?.status === "viewed") return "Proposal Viewed";
+  return "Proposal Sent";
 }
 
 function proposalViewerModal() {
@@ -2190,11 +2195,11 @@ function signatureDocumentCard(document) {
         <span>
           <strong>${escapeHtml(document.title || "Agreement")}</strong>
           <small>${escapeHtml(request ? `${displayRequestNumber(request)} · ${request.title}` : "Request agreement")}</small>
-          <small>Proposal · ${escapeHtml(proposalApprovalLabel(document))}</small>
+          <small>Proposal</small>
         </span>
         <span class="signature-document-actions">
-          <span class="status-pill">${escapeHtml(signatureStatusLabel(document.status))}</span>
-          ${(proposalUrl || document.agreement) ? `<button class="secondary signature-document-link" type="button" data-open-proposal-view="${escapeHtml(document.id)}">${proposalApproved ? "View agreement" : "View proposal"}</button>` : ""}
+            <span class="status-pill proposal-status-text">${escapeHtml(proposalApprovalLabel(document))}</span>
+            ${(proposalUrl || document.agreement) ? `<button class="secondary signature-document-link proposal-status-text" type="button" data-open-proposal-view="${escapeHtml(document.id)}">Open</button>` : ""}
         </span>
       </div>
       <div class="signature-document-detail-grid">
@@ -2226,8 +2231,8 @@ function sentProposalFileRow(document) {
         <small class="sent-proposal-file-date">Last modified: ${escapeHtml(formatDate(lastModified))}</small>
       </span>
       <span class="sent-proposal-file-meta">
-        <span class="status-pill">${escapeHtml(proposalApprovalLabel(document))}</span>
-        <span class="sent-proposal-file-view">${document.proposal_approved ? "View agreement" : "View proposal"}</span>
+        <span class="status-pill proposal-status-text">${escapeHtml(proposalApprovalLabel(document))}</span>
+        <span class="sent-proposal-file-view proposal-status-text">Open</span>
       </span>
     </button>
   `;
@@ -2259,11 +2264,11 @@ function requestSignatureDocumentsCard(request) {
           <button class="signature-document-row" type="button" data-open-proposal-view="${document.id}">
             <span>
               <strong>${escapeHtml(document.title || "Agreement")}</strong>
-              <small>Proposal · ${escapeHtml(proposalApprovalLabel(document))}</small>
+              <small>Proposal</small>
             </span>
             <span class="signature-document-row-actions">
-              <span class="status-pill">${escapeHtml(signatureStatusLabel(document.status))}</span>
-              <span class="signature-document-row-view">${document.proposal_approved ? "View agreement" : "View proposal"}</span>
+              <span class="status-pill proposal-status-text">${escapeHtml(proposalApprovalLabel(document))}</span>
+              <span class="signature-document-row-view proposal-status-text">Open</span>
             </span>
           </button>
         `).join("") || `<p class="helper">No proposals have been sent for this request yet.</p>`}
@@ -2279,7 +2284,7 @@ function signatureRecipientDefaults(request) {
     : [];
   const ccContacts = clientContactsForRequest(request?.id)
     .map((contact) => ({ name: contact.name || contact.email, email: contact.email, role: "signer" }));
-  return [...primary, ...ccContacts].filter((recipient) => recipient.email);
+  return [...primary, ...ccContacts].filter((recipient) => recipient.email).slice(0, 1);
 }
 
 function todayIsoDate() {
@@ -2505,7 +2510,6 @@ function signatureDraftFromForm(form) {
   const formData = new FormData(form);
   const names = formData.getAll("recipientName").map(String);
   const emails = formData.getAll("recipientEmail").map(String);
-  const roles = formData.getAll("recipientRole").map(String);
   const requestId = String(formData.get("requestId") || "");
   const request = state.requests.find((item) => item.id === requestId);
   const agreementDetails = agreementDetailsFromFormData(formData, request);
@@ -2526,7 +2530,7 @@ function signatureDraftFromForm(form) {
     recipients: names.map((name, index) => ({
       name,
       email: emails[index] || "",
-      role: roles[index] || "signer"
+      role: "signer"
     }))
   };
 }
@@ -2574,18 +2578,12 @@ function setSignatureDraftRecipientsForRequest(request) {
 function signatureRecipientInputs(request) {
   const draftRecipients = Array.isArray(state.signatureDraft.recipients) ? state.signatureDraft.recipients : [];
   const defaults = draftRecipients.length ? draftRecipients : signatureRecipientDefaults(request);
-  const rows = defaults.length ? defaults : [{ name: "", email: "", role: "signer" }];
+  const rows = (defaults.length ? defaults : [{ name: "", email: "", role: "signer" }]).slice(0, 1);
   return rows.map((recipient) => `
     <div class="signature-recipient-row">
       <label class="field"><span>Recipient Name</span><input name="recipientName" value="${escapeHtml(recipient.name || "")}" /></label>
       <label class="field"><span>Email</span><input name="recipientEmail" type="email" value="${escapeHtml(recipient.email || "")}" /></label>
-      <label class="field"><span>Role</span>
-        <select name="recipientRole">
-          <option value="signer" ${recipient.role !== "viewer" ? "selected" : ""}>Signer</option>
-          <option value="viewer" ${recipient.role === "viewer" ? "selected" : ""}>Viewer</option>
-        </select>
-      </label>
-      <button class="link-button recipient-remove-button" type="button" data-remove-signature-recipient>Remove Recipient</button>
+      <button class="secondary recipient-remove-button" type="button" data-remove-signature-recipient>Remove Recipient</button>
     </div>
   `).join("");
 }
@@ -2774,7 +2772,6 @@ function signatureDocumentsPage() {
             <div data-signature-recipient-list>${signatureRecipientInputs(selectedRequest)}</div>
           </section>
           <div class="signature-form-actions">
-            <button class="secondary" type="button" data-action="add-signature-recipient">Add Recipient</button>
             <button class="primary" type="submit" ${draft.proposalGenerated ? "" : "disabled"}>Send proposal</button>
           </div>
           <p class="helper">Signing is locked for the client until they approve the proposal.</p>
@@ -2948,7 +2945,7 @@ function multilineList(value) {
 }
 
 function agreementBulletList(items) {
-  return `<ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
+  return `<div class="agreement-bullet-box"><ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>`;
 }
 
 function agreementServiceBlockHtml(value) {
@@ -3321,38 +3318,55 @@ function renderPublicSignature() {
         <section class="${proposalSectionClass("services")}" id="services">
           <h1>Services</h1>
           <p class="proposal-service-lede">Accessible.org can help make your website, app, or other digital asset meet WCAG 2.1 AA or 2.2 AA standards and follow best practices in ADA compliance.</p>
+          <div class="proposal-service-hero">
+            <div>
+              <span class="proposal-eyebrow">Accessibility + compliance</span>
+              <h3>Expert work, clear scope, no surprises.</h3>
+              <p>Our services are built around detailed manual evaluations, practical remediation guidance, and documentation your team can use.</p>
+              <a class="proposal-media-link" href="https://accessible.org/services/" target="_blank" rel="noopener">Explore all services at Accessible.org</a>
+            </div>
+            <img src="https://i0.wp.com/accessible.org/wp-content/uploads/2024/09/Phone-Tilted.png?resize=567%2C659&amp;ssl=1" alt="A phone showing an accessibility review" />
+          </div>
           <div class="proposal-service-details">
             <article>
               <h2>Audits</h2>
-              <p>We evaluate the accessibility of your digital asset, such as a website, to identify accessibility issues using WCAG 2.1 AA or WCAG 2.2 AA as the baseline standard. Audit work may include screen reader testing, keyboard testing, touch and gesture testing, visual and audible inspection, code inspection, color contrast review, AXE scan as secondary review, Chrome and Safari browser testing, and desktop testing with optional mobile testing. Cost: $100–$250 per page or screen; $25–$100 for light pages or screens.</p>
+              <p>We evaluate your digital asset against WCAG 2.1 AA or 2.2 AA using manual screen reader, keyboard, touch, visual, code, contrast, browser, and device testing.</p>
+              <p class="proposal-service-price">Cost: $100–$250 per page or screen; $25–$100 for light pages or screens.</p>
             </article>
             <article>
               <h2>VPATs / ACRs</h2>
-              <p>We audit your asset and complete a Voluntary Product Accessibility Template (VPAT), creating an Accessibility Conformance Report (ACR) to document your product’s accessibility status. This documentation is essential for meeting procurement requirements. Cost: $350 for WCAG edition in addition to the audit cost; $550 for Section 508 edition; $650 for EU edition; $950 for INT edition.</p>
+              <p>We complete a VPAT and issue an Accessibility Conformance Report (ACR) that documents your product’s accessibility status for procurement and compliance conversations.</p>
+              <p class="proposal-service-price">Cost: $350 WCAG edition; $550 Section 508; $650 EU; $950 INT, in addition to audit cost.</p>
             </article>
             <article>
               <h2>Technical Support</h2>
-              <p>Technical support hours can be used to validate that your team’s fixes have resolved audit issues, assist your digital team during remediation, answer implementation questions, and help your team complete the project successfully. Cost: $195/hour, minimum 3 hours.</p>
+              <p>Technical experts validate fixes, support remediation, answer implementation questions, and help your team complete the project successfully.</p>
+              <p class="proposal-service-price">Cost: $195/hour, minimum 3 hours.</p>
             </article>
             <article>
               <h2>Certification</h2>
-              <p>Certification documents can speak to the accessibility of your website or digital asset, including a statement of conformance, statement of partial conformance, Accessible.org certification, or a user testing recorded session. These documents can help mark project completion, support settlement requirements, strengthen an accessibility statement, and support accessibility marketing. Cost: certification documents cannot be purchased separately and are issued only when the necessary requirements have been met.</p>
+              <p>Certification documents can include statements of conformance, partial conformance, Accessible.org certification, or a recorded user-testing session to document project progress.</p>
+              <p class="proposal-service-price">Cost: Issued when the required conformance conditions are met; not sold separately.</p>
             </article>
             <article>
               <h2>User Testing</h2>
-              <p>User testing involves professionals with disabilities using assistive technologies to evaluate your digital assets. The testing session is documented with a recording, providing concrete evidence of accessibility. Sessions take place after remediation, include up to 10 pages or screens, and are capped at 30 minutes. Cost: $550 per session; $450 per session with audit service.</p>
+              <p>Professionals with disabilities use assistive technologies to evaluate your digital assets. Sessions are recorded and include up to 10 pages or screens, capped at 30 minutes after remediation.</p>
+              <p class="proposal-service-price">Cost: $550 per session; $450 per session with an audit.</p>
             </article>
             <article>
               <h2>Document Remediation</h2>
-              <p>Document remediation improves PDFs, Microsoft Word documents, Microsoft PowerPoint documents, Canva-generated documents, and other document types so they meet accessibility standards including WCAG 2.2 AA and PDF/UA standards. Cost: starts at $7/page.</p>
+              <p>We remediate PDFs, Word, PowerPoint, Canva-generated files, and other documents to meet WCAG 2.2 AA and PDF/UA standards.</p>
+              <p class="proposal-service-price">Cost: Starts at $7/page.</p>
             </article>
             <article>
               <h2>Expedited Accessibility</h2>
-              <p>Expedited accessibility services are available for clients who must meet an urgent deadline. Quick turnaround timelines and pricing depend on the service ordered, and some document or PDF remediation requests can be completed same-day or overnight. Cost: $250–$750 depending on document size and content.</p>
+              <p>Rush accessibility services support urgent deadlines. Some document or PDF remediation requests can be completed the same day or overnight.</p>
+              <p class="proposal-service-price">Cost: $250–$750 depending on document size and content.</p>
             </article>
             <article>
               <h2>Custom Accessibility Statement</h2>
-              <p>Kris Rivenburgh can create a custom accessibility statement for your organization. The statement can align with your organization’s policy and commitment while positively reflecting your current investments and accessibility efforts. Cost: $250 to start; varies based on project request.</p>
+              <p>Kris Rivenburgh creates a custom accessibility statement aligned with your organization’s policy, commitment, and current accessibility efforts.</p>
+              <p class="proposal-service-price">Cost: $250 to start; varies by project request.</p>
             </article>
           </div>
         </section>
@@ -3360,6 +3374,15 @@ function renderPublicSignature() {
         <section class="${proposalSectionClass("training")}" id="training">
           <h2>Training</h2>
           <div class="proposal-training-content">
+            <div class="proposal-training-hero">
+              <img src="https://i0.wp.com/accessible.org/wp-content/uploads/2025/08/Web-Accessibility-Training.jpg?resize=1200%2C675&amp;ssl=1" alt="Accessibility training with Kris Rivenburgh" />
+              <div>
+                <span class="proposal-eyebrow">Learn at your pace</span>
+                <h3>Practical accessibility training for real teams.</h3>
+                <p>Live workshops and on-demand courses make WCAG easier to understand for designers, developers, content editors, and non-technical teams.</p>
+                <a class="proposal-media-link" href="https://adacompliance.net/course/wcag-course" target="_blank" rel="noopener">Start the WCAG course</a>
+              </div>
+            </div>
             <div class="proposal-training-table-wrap">
               <table class="proposal-training-table">
                 <thead>
@@ -3476,12 +3499,28 @@ function renderPublicSignature() {
             <div class="proposal-training-image">
               <img src="/images/accessibility-training.png" alt="Accessibility Training" />
             </div>
+            <div class="proposal-video-card">
+              <div>
+                <span class="proposal-eyebrow">Video library</span>
+                <h3>Keep learning with Accessible.org</h3>
+                <p>Browse practical accessibility and compliance videos from Kris Rivenburgh and the Accessible.org team.</p>
+              </div>
+              <a class="primary proposal-media-link" href="https://www.youtube.com/@adabook" target="_blank" rel="noopener">Watch on YouTube</a>
+            </div>
           </div>
         </section>
 
         <section class="${proposalSectionClass("about")}" id="about">
           <h2>About</h2>
           <div class="proposal-about-content">
+            <div class="proposal-about-hero">
+              <div>
+                <span class="proposal-eyebrow">Client-first accessibility</span>
+                <h3>Clear guidance. Practical expertise. Better outcomes.</h3>
+                <p>Accessible.org helps organizations make digital assets WCAG conformant and compliant while building internal accessibility knowledge.</p>
+              </div>
+              <img src="https://i0.wp.com/accessible.org/wp-content/uploads/2025/06/author-image-Kris.jpg?ssl=1&amp;w=1200" alt="Kris Rivenburgh, founder of Accessible.org" />
+            </div>
             <p>Accessible.org, LLC is a U.S. based digital accessibility company that puts clients first. Founded by Kris Rivenburgh, an attorney and author of The ADA Book and Digital Accessibility and Compliance, Accessible.org provides audit and VPAT services to clients across the world.</p>
             <p>We help clients make their digital assets WCAG conformant and compliant while building internal accessibility knowledge.</p>
 
@@ -3520,18 +3559,9 @@ function renderPublicSignature() {
             <span>Duly authorized, for and on behalf of the Customer</span>
           </div>
           <div class="proposal-signature-area">
-            <div class="proposal-recipient-list">
-              ${(payload.recipients || []).map((recipient) => `
-                <div class="deliverable-row">
-                  <span>${escapeHtml(recipient.name || recipient.email)}<small>${escapeHtml(recipient.email || "")}</small></span>
-                  <span class="status-pill">${escapeHtml(signatureStatusLabel(recipient.status))}</span>
-                </div>
-              `).join("")}
-            </div>
-
             ${!canSign ? `
               <section class="proposal-sign-panel">
-                <p class="helper">This agreement is view-only. No signature is required from you.</p>
+                <p class="helper">This document is view-only.</p>
               </section>
             ` : alreadySigned ? `
               <section class="proposal-sign-panel proposal-signed-panel">
@@ -4108,30 +4138,6 @@ function attachEvents() {
     });
   }
 
-  document.querySelectorAll("[data-action='add-signature-recipient']").forEach((button) => {
-    button.addEventListener("click", () => {
-      const form = button.closest("form");
-      if (form) signatureDraftFromForm(form);
-      const list = form?.querySelector("[data-signature-recipient-list]");
-      if (!list) return;
-      const row = document.createElement("div");
-      row.className = "signature-recipient-row";
-      row.innerHTML = `
-        <label class="field"><span>Recipient Name</span><input name="recipientName" /></label>
-        <label class="field"><span>Email</span><input name="recipientEmail" type="email" /></label>
-        <label class="field"><span>Role</span>
-          <select name="recipientRole">
-            <option value="signer">Signer</option>
-            <option value="viewer">Viewer</option>
-          </select>
-        </label>
-        <button class="link-button recipient-remove-button" type="button" data-remove-signature-recipient>Remove Recipient</button>
-      `;
-      list.appendChild(row);
-      signatureDraftFromForm(form);
-    });
-  });
-
   document.querySelectorAll("[data-remove-signature-recipient]").forEach((button) => {
     button.addEventListener("click", () => {
       const form = button.closest("form");
@@ -4203,13 +4209,12 @@ function attachEvents() {
       const request = state.requests.find((item) => item.id === formData.get("requestId"));
       const names = formData.getAll("recipientName").map(String);
       const emails = formData.getAll("recipientEmail").map(String);
-      const roles = formData.getAll("recipientRole").map(String);
       const requiresSignature = formData.get("documentPurpose") !== "view";
       const recipients = emails.map((email, index) => ({
         name: names[index],
         email,
-        role: requiresSignature ? (roles[index] || "signer") : "viewer"
-      })).filter((recipient) => recipient.name && recipient.email);
+        role: requiresSignature ? "signer" : "viewer"
+      })).filter((recipient) => recipient.name && recipient.email).slice(0, 1);
 
       if (!request) {
         showToast("Select a request.");

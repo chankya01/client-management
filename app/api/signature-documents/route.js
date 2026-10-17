@@ -182,12 +182,15 @@ export async function POST(request) {
       .map((recipient) => ({
         name: String(recipient.name || "").trim(),
         email: normalizeEmail(recipient.email),
-        role: requiresSignature ? (recipient.role === "viewer" ? "viewer" : "signer") : "viewer"
+        role: requiresSignature ? "signer" : "viewer"
       }))
       .filter((recipient) => recipient.name && recipient.email);
 
     if (!recipients.length) {
       return apiJson({ error: "Add at least one recipient." }, 400);
+    }
+    if (requiresSignature && recipients.length > 1) {
+      return apiJson({ error: "Only one recipient can sign an agreement." }, 400);
     }
     const agreement = cleanAgreementContent(body);
     if (!agreement.agreementText) {

@@ -1588,13 +1588,13 @@ export async function createSignatureDocument({
       created_at: new Date().toISOString(),
       agreement: { title, agreementText },
       proposal_approved: false,
-      recipients: recipients.map((recipient) => {
+      recipients: recipients.slice(0, 1).map((recipient) => {
         const signingToken = `demo-${crypto.randomUUID()}`;
         return {
           id: crypto.randomUUID(),
           name: recipient.name,
           email: recipient.email,
-          role: requiresSignature ? (recipient.role || "signer") : "viewer",
+          role: requiresSignature ? "signer" : "viewer",
           status: "sent",
           signing_token: signingToken,
           signing_url: `${window.location.origin}/?sign=${signingToken}`
