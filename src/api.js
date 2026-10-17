@@ -1588,14 +1588,18 @@ export async function createSignatureDocument({
       created_at: new Date().toISOString(),
       agreement: { title, agreementText },
       proposal_approved: false,
-      recipients: recipients.map((recipient) => ({
-        id: crypto.randomUUID(),
-        name: recipient.name,
-        email: recipient.email,
-        role: requiresSignature ? (recipient.role || "signer") : "viewer",
-        status: "sent",
-        signing_url: `${window.location.origin}/?sign=demo-${crypto.randomUUID()}`
-      }))
+      recipients: recipients.map((recipient) => {
+        const signingToken = `demo-${crypto.randomUUID()}`;
+        return {
+          id: crypto.randomUUID(),
+          name: recipient.name,
+          email: recipient.email,
+          role: requiresSignature ? (recipient.role || "signer") : "viewer",
+          status: "sent",
+          signing_token: signingToken,
+          signing_url: `${window.location.origin}/?sign=${signingToken}`
+        };
+      })
     };
     demoSignatureDocuments.unshift(document);
     return document;
@@ -1646,6 +1650,11 @@ export async function signSignatureRecipient(token, signatureFields) {
   if (useDemo()) {
     if (signatureFields && typeof signatureFields === "object" && signatureFields.action === "approve") {
       demoProposalApprovals.add(token);
+      demoSignatureDocuments.forEach((document) => {
+        if ((document.recipients || []).some((recipient) => recipient.signing_token === token)) {
+          document.proposal_approved = true;
+        }
+      });
       return { approved: true };
     }
     if (!demoProposalApprovals.has(token)) throw new Error("Approve the proposal before signing.");

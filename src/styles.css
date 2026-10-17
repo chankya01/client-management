@@ -2019,7 +2019,7 @@ a {
 }
 
 .proposal-section {
-  border-bottom: 1px solid #edf0f2;
+  border-bottom: 1px solid #d2dae3;
   min-height: 100vh;
   padding: clamp(56px, 6vw, 86px) clamp(32px, 6vw, 96px);
   position: relative;
@@ -2062,7 +2062,7 @@ a {
 
 .proposal-service-summary,
 .proposal-service-details article {
-  border-top: 1px solid #dfe6ea;
+  border-top: 1px solid #b7c3d2;
   max-width: 860px;
   padding-top: 24px;
 }
@@ -2151,7 +2151,7 @@ a {
 }
 
 .proposal-terms-content h3 {
-  border-top: 1px solid #e0e7ef;
+  border-top: 1px solid #b7c3d2;
   color: #111;
   counter-increment: agreement-section;
   font-size: 24px;
@@ -2205,7 +2205,7 @@ a {
 }
 
 .proposal-pricing-box {
-  border: 1px solid #dfe6ea;
+  border: 1px solid #b7c3d2;
   border-radius: 3px;
   margin: 0;
   max-width: 620px;
@@ -2221,7 +2221,7 @@ a {
 
 .proposal-pricing-row {
   align-items: center;
-  border-top: 1px solid #dfe6ea;
+  border-top: 1px solid #b7c3d2;
   display: flex;
   justify-content: space-between;
   padding: 24px 28px;
@@ -2247,7 +2247,7 @@ a {
 
 .proposal-training-table th,
 .proposal-training-table td {
-  border: 1px solid #dfe6ea;
+  border: 1px solid #b7c3d2;
   padding: 14px 16px;
   text-align: left;
   vertical-align: top;
@@ -2291,6 +2291,7 @@ a {
 
 .proposal-note-box {
   background: #e9eef0;
+  border: 1px solid #b7c3d2;
   min-height: 96px;
   max-width: 820px;
 }
@@ -2338,13 +2339,13 @@ a {
 }
 
 .proposal-sign-panel {
-  border: 1px solid #e0e0e0;
+  border: 1px solid #b7c3d2;
   border-radius: 6px;
   padding: 32px;
 }
 
 .proposal-sign-tabs {
-  border-bottom: 1px solid #d6d6d6;
+  border-bottom: 1px solid #b7c3d2;
   display: flex;
   gap: 36px;
   margin: 28px 0 24px;
@@ -2632,8 +2633,81 @@ button:disabled {
 }
 
 .signature-document-link {
+  align-items: center;
   display: inline-flex;
   text-decoration: none;
+}
+
+.sent-proposals-card {
+  margin-top: 28px;
+}
+
+.sent-proposals-dropdown {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.sent-proposal-file-row {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 14px 16px;
+  text-align: left;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+  width: 100%;
+}
+
+.sent-proposal-file-row:hover,
+.sent-proposal-file-row.active {
+  background: var(--panel);
+  border-color: var(--green);
+  box-shadow: 0 4px 14px rgba(23, 34, 53, 0.08);
+}
+
+.sent-proposal-file-name {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.sent-proposal-file-name strong,
+.sent-proposal-file-name small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sent-proposal-file-meta {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 12px;
+}
+
+.sent-proposal-file-chevron {
+  color: var(--green);
+  font-size: 1.1rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.sent-proposal-detail {
+  margin-top: 18px;
+}
+
+.sent-proposal-detail .signature-document-detail-card {
+  margin-top: 0;
 }
 
 @media (max-width: 900px) {
@@ -2655,6 +2729,16 @@ button:disabled {
 
   .signature-document-detail-grid {
     grid-template-columns: 1fr;
+  }
+
+  .sent-proposal-file-row {
+    align-items: flex-start;
+  }
+
+  .sent-proposal-file-meta {
+    align-items: flex-end;
+    flex-direction: column;
+    gap: 6px;
   }
 
   .proposal-site {

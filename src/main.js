@@ -2112,19 +2112,25 @@ function signatureEventRows(document) {
   `).join("") || `<p class="helper">No activity yet.</p>`;
 }
 
+function proposalApprovalLabel(document) {
+  return document?.proposal_approved ? "Approved · Agreement unlocked" : "Awaiting client approval";
+}
+
 function signatureDocumentCard(document) {
   const request = state.requests.find((item) => item.id === document.request_id);
   const proposalApproved = Boolean(document.proposal_approved);
+  const proposalUrl = (document.recipients || []).find((recipient) => recipient.signing_url)?.signing_url || "";
   return `
     <article class="signature-document-item signature-document-detail-card">
       <div class="signature-document-header">
         <span>
           <strong>${escapeHtml(document.title || "Agreement")}</strong>
           <small>${escapeHtml(request ? `${displayRequestNumber(request)} · ${request.title}` : "Request agreement")}</small>
-          <small>Proposal · ${proposalApproved ? "Approved for signing" : "Awaiting client approval"}</small>
+          <small>Proposal · ${escapeHtml(proposalApprovalLabel(document))}</small>
         </span>
         <span class="signature-document-actions">
           <span class="status-pill">${escapeHtml(signatureStatusLabel(document.status))}</span>
+          ${proposalUrl ? `<a class="secondary signature-document-link" href="${escapeHtml(proposalUrl)}" target="_blank" rel="noopener noreferrer">${proposalApproved ? "View agreement" : "View proposal"}</a>` : ""}
         </span>
       </div>
       <div class="signature-document-detail-grid">
@@ -2141,6 +2147,44 @@ function signatureDocumentCard(document) {
   `;
 }
 
+function sentProposalFileRow(document, selectedDocumentId) {
+  const request = state.requests.find((item) => item.id === document.request_id);
+  const isSelected = selectedDocumentId === document.id;
+  return `
+    <button
+      class="sent-proposal-file-row ${isSelected ? "active" : ""}"
+      type="button"
+      aria-expanded="${isSelected ? "true" : "false"}"
+      data-select-sent-proposal="${document.id}"
+    >
+      <span class="sent-proposal-file-name">
+        <strong>${escapeHtml(document.title || "Accessibility Services Proposal")}</strong>
+        ${request ? `<small>${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(request.title)}</small>` : ""}
+      </span>
+      <span class="sent-proposal-file-meta">
+        <span class="status-pill">${escapeHtml(proposalApprovalLabel(document))}</span>
+        <span class="sent-proposal-file-chevron" aria-hidden="true">${isSelected ? "⌃" : "⌄"}</span>
+      </span>
+    </button>
+  `;
+}
+
+function sentProposalsCard(documents) {
+  const selectedDocument = documents.find((document) => document.id === state.selectedSignatureDocumentId) || documents[0] || null;
+  return `
+    <section class="card sent-proposals-card">
+      <div class="section-heading-row">
+        <p class="section-label">Sent proposals</p>
+      </div>
+      <p class="helper">Select a proposal file name to view its recipients, approval status, and activity.</p>
+      <div class="sent-proposals-dropdown" role="list">
+        ${documents.map((document) => sentProposalFileRow(document, selectedDocument?.id)).join("") || `<p class="helper">No proposals have been sent yet.</p>`}
+      </div>
+      ${selectedDocument ? `<div class="sent-proposal-detail">${signatureDocumentCard(selectedDocument)}</div>` : ""}
+    </section>
+  `;
+}
+
 function requestSignatureDocumentsCard(request) {
   const documents = documentsForRequest(request?.id);
   const selectedDocument = documents.find((document) => document.id === state.selectedSignatureDocumentId);
@@ -2154,7 +2198,7 @@ function requestSignatureDocumentsCard(request) {
           <button class="signature-document-row ${selectedDocument?.id === document.id ? "active" : ""}" type="button" data-select-signature-document="${document.id}">
             <span>
               <strong>${escapeHtml(document.title || "Agreement")}</strong>
-              <small>Proposal · ${document.proposal_approved ? "Approved for signing" : "Awaiting client approval"}</small>
+              <small>Proposal · ${escapeHtml(proposalApprovalLabel(document))}</small>
             </span>
             <span class="signature-document-row-actions">
               <span class="status-pill">${escapeHtml(signatureStatusLabel(document.status))}</span>
@@ -2672,13 +2716,7 @@ function signatureDocumentsPage() {
           <p class="helper">Signing is locked for the client until they approve the proposal.</p>
         </form>
       ` : ""}
-      <section class="card">
-        <p class="section-label">Sent proposals</p>
-        <p class="helper">Proposals are shown inside their related request. Open a request to view approval, signing links, and activity.</p>
-        <div class="proposal-sent-list">
-          ${state.signatureDocuments.slice(0, 8).map(signatureDocumentCard).join("") || `<p class="helper">No proposals have been sent yet.</p>`}
-        </div>
-      </section>
+      ${sentProposalsCard(state.signatureDocuments)}
     </section>
   `;
 }
@@ -3823,6 +3861,13 @@ function attachEvents() {
       state.selectedSignatureDocumentId = state.selectedSignatureDocumentId === button.dataset.selectSignatureDocument
         ? null
         : button.dataset.selectSignatureDocument;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-select-sent-proposal]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.selectedSignatureDocumentId = button.dataset.selectSentProposal;
       render();
     });
   });

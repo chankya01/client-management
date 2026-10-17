@@ -200,6 +200,22 @@ export async function POST(request, { params }) {
         })
       });
 
+      if (payload.document.uploaded_by) {
+        try {
+          await supabaseAdminFetch(tablePath("request_messages"), {
+            method: "POST",
+            body: JSON.stringify({
+              request_id: payload.document.request_id,
+              sender_id: payload.document.uploaded_by,
+              message: `Proposal approved by ${payload.recipient.name || payload.recipient.email}: ${payload.document.title || "Accessibility Services Proposal"}. Agreement signing is now unlocked.`,
+              is_internal: false
+            })
+          });
+        } catch (messageError) {
+          console.warn("[Clients] Proposal approval message entry failed", messageError);
+        }
+      }
+
       return apiJson({ approved: true });
     }
 
