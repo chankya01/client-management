@@ -73,6 +73,23 @@ function cleanAgreementContent(body) {
   };
 }
 
+function parseAgreementSnapshot(events, document) {
+  const snapshot = (events || []).find((event) => event.event_type === "agreement_snapshot");
+  if (!snapshot?.event_note) {
+    return { title: document?.title || "Service Agreement", agreementText: "" };
+  }
+
+  try {
+    const parsed = JSON.parse(snapshot.event_note);
+    return {
+      title: document?.title || "Service Agreement",
+      ...(parsed && typeof parsed === "object" ? parsed : {})
+    };
+  } catch {
+    return { title: document?.title || "Service Agreement", agreementText: "" };
+  }
+}
+
 function agreementFileName(title) {
   const safeTitle = String(title || "Service Agreement")
     .replace(/[^a-zA-Z0-9._-]/g, "-")
@@ -131,6 +148,7 @@ async function documentsForProfile(profile, origin) {
         publicRecipient(recipient, profile, document.title, origin)
       )),
       events: documentEvents,
+      agreement: parseAgreementSnapshot(documentEvents, document),
       proposal_approved: documentEvents.some((event) => event.event_type === "proposal_approved")
     };
   }));

@@ -83,6 +83,7 @@ const state = {
   requestClientSelection: null,
   signatureClientSelection: null,
   selectedSignatureDocumentId: null,
+  proposalViewer: null,
   editingClientId: null,
   editingRequestId: null,
   editingTeamId: null,
@@ -2116,6 +2117,48 @@ function proposalApprovalLabel(document) {
   return document?.proposal_approved ? "Approved · Agreement unlocked" : "Awaiting client approval";
 }
 
+function proposalViewerModal() {
+  const viewer = state.proposalViewer;
+  if (!viewer) return "";
+  const isDraft = viewer === "draft" || viewer?.type === "draft";
+  const documentId = isDraft ? "" : (viewer?.documentId || viewer);
+  const proposalDocument = isDraft
+    ? null
+    : state.signatureDocuments.find((document) => document.id === documentId);
+  if (!isDraft && !proposalDocument) return "";
+
+  const details = isDraft
+    ? state.signatureDraft || {}
+    : parseAgreementDetailsFromSnapshot(proposalDocument.agreement || {}, { document: proposalDocument });
+  const title = isDraft
+    ? "Proposal preview"
+    : (proposalDocument.title || "Accessibility Services Proposal");
+  const proposalUrl = proposalDocument
+    ? (proposalDocument.recipients || []).find((recipient) => recipient.signing_url)?.signing_url || ""
+    : "";
+
+  return `
+    <div class="proposal-viewer-backdrop" data-proposal-viewer-backdrop>
+      <section class="proposal-viewer-modal" role="dialog" aria-modal="true" aria-labelledby="proposal-viewer-title">
+        <header class="proposal-viewer-header">
+          <div>
+            <p class="section-label">${isDraft ? "Generated proposal" : "Sent proposal"}</p>
+            <h2 id="proposal-viewer-title">${escapeHtml(title)}</h2>
+            ${proposalDocument ? `<p class="helper">${escapeHtml(proposalApprovalLabel(proposalDocument))}</p>` : ""}
+          </div>
+          <div class="proposal-viewer-actions">
+            ${proposalUrl ? `<a class="secondary signature-document-link" href="${escapeHtml(proposalUrl)}" target="_blank" rel="noopener noreferrer">Open client view</a>` : ""}
+            <button class="proposal-viewer-close" type="button" aria-label="Close proposal preview" data-close-proposal-view>×</button>
+          </div>
+        </header>
+        <div class="proposal-viewer-document">
+          ${renderAgreementTerms(details)}
+        </div>
+      </section>
+    </div>
+  `;
+}
+
 function signatureDocumentCard(document) {
   const request = state.requests.find((item) => item.id === document.request_id);
   const proposalApproved = Boolean(document.proposal_approved);
@@ -2130,7 +2173,7 @@ function signatureDocumentCard(document) {
         </span>
         <span class="signature-document-actions">
           <span class="status-pill">${escapeHtml(signatureStatusLabel(document.status))}</span>
-          ${proposalUrl ? `<a class="secondary signature-document-link" href="${escapeHtml(proposalUrl)}" target="_blank" rel="noopener noreferrer">${proposalApproved ? "View agreement" : "View proposal"}</a>` : ""}
+          ${(proposalUrl || document.agreement) ? `<button class="secondary signature-document-link" type="button" data-open-proposal-view="${escapeHtml(document.id)}">${proposalApproved ? "View agreement" : "View proposal"}</button>` : ""}
         </span>
       </div>
       <div class="signature-document-detail-grid">
@@ -2150,6 +2193,7 @@ function signatureDocumentCard(document) {
 function sentProposalFileRow(document, selectedDocumentId) {
   const request = state.requests.find((item) => item.id === document.request_id);
   const isSelected = selectedDocumentId === document.id;
+  const lastModified = document.updated_at || document.sent_at || document.created_at;
   return `
     <button
       class="sent-proposal-file-row ${isSelected ? "active" : ""}"
@@ -2160,6 +2204,7 @@ function sentProposalFileRow(document, selectedDocumentId) {
       <span class="sent-proposal-file-name">
         <strong>${escapeHtml(document.title || "Accessibility Services Proposal")}</strong>
         ${request ? `<small>${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(request.title)}</small>` : ""}
+        <small class="sent-proposal-file-date">Last modified: ${escapeHtml(formatDate(lastModified))}</small>
       </span>
       <span class="sent-proposal-file-meta">
         <span class="status-pill">${escapeHtml(proposalApprovalLabel(document))}</span>
@@ -2174,7 +2219,7 @@ function sentProposalsCard(documents) {
   return `
     <section class="card sent-proposals-card">
       <div class="section-heading-row">
-        <p class="section-label">Sent proposals</p>
+        <p class="section-label sent-proposals-title">Sent Proposals</p>
       </div>
       <p class="helper">Select a proposal file name to view its recipients, approval status, and activity.</p>
       <div class="sent-proposals-dropdown" role="list">
@@ -2612,7 +2657,10 @@ function proposalBuilderPreview(request) {
           <p class="section-label">Generated proposal</p>
           <h2>Accessibility Services Agreement</h2>
         </div>
-        <span class="status-pill success">Ready to send</span>
+        <div class="proposal-builder-preview-actions">
+          <span class="status-pill success">Ready to send</span>
+          <button class="secondary" type="button" data-open-proposal-view="draft">View proposal</button>
+        </div>
       </div>
       <div class="proposal-builder-preview-document" data-proposal-preview-document>
         <div data-proposal-preview-output>${renderAgreementTerms(draft, { editable: true })}</div>
@@ -3584,7 +3632,7 @@ function render() {
     "admin-settings": adminSettingsPage
   }[state.page]();
 
-  root.innerHTML = `${navHtml()}<main>${pageHtml}</main>${toastHtml()}`;
+  root.innerHTML = `${navHtml()}<main>${pageHtml}</main>${toastHtml()}${proposalViewerModal()}`;
   attachEvents();
   keepActiveNavVisible();
   window.requestAnimationFrame(() => {
@@ -3868,8 +3916,30 @@ function attachEvents() {
   document.querySelectorAll("[data-select-sent-proposal]").forEach((button) => {
     button.addEventListener("click", () => {
       state.selectedSignatureDocumentId = button.dataset.selectSentProposal;
+      state.proposalViewer = { documentId: button.dataset.selectSentProposal };
       render();
     });
+  });
+
+  document.querySelectorAll("[data-open-proposal-view]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const value = button.dataset.openProposalView;
+      state.proposalViewer = value === "draft" ? "draft" : { documentId: value };
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-close-proposal-view]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.proposalViewer = null;
+      render();
+    });
+  });
+
+  document.querySelector("[data-proposal-viewer-backdrop]")?.addEventListener("click", (event) => {
+    if (event.target !== event.currentTarget) return;
+    state.proposalViewer = null;
+    render();
   });
 
   document.querySelectorAll("[data-open-active-messages]").forEach((button) => {
