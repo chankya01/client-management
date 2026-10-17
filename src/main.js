@@ -2404,14 +2404,16 @@ function signatureDraftFromForm(form) {
   const requestId = String(formData.get("requestId") || "");
   const request = state.requests.find((item) => item.id === requestId);
   const agreementDetails = agreementDetailsFromFormData(formData, request);
+  const promptValue = String(formData.get("proposalPrompt") || formData.get("agreementPrompt") || "").trim();
 
   state.signatureDraft = {
     clientId: String(formData.get("clientId") || ""),
     requestId,
     title: String(formData.get("title") || ""),
     documentPurpose: String(formData.get("documentPurpose") || "signature"),
-    agreementPrompt: String(formData.get("proposalPrompt") || formData.get("agreementPrompt") || ""),
+    agreementPrompt: promptValue || state.signatureDraft?.agreementPrompt || "",
     proposalGenerated: Boolean(state.signatureDraft?.proposalGenerated),
+    proposalMessages: Array.isArray(state.signatureDraft?.proposalMessages) ? state.signatureDraft.proposalMessages : [],
     ...agreementDetails,
     recipients: names.map((name, index) => ({
       name,
@@ -2419,6 +2421,36 @@ function signatureDraftFromForm(form) {
       role: roles[index] || "signer"
     }))
   };
+}
+
+function mergeProposalMessage(currentDraft, parsedDetails, notes, request) {
+  if (!currentDraft?.proposalGenerated) return parsedDetails;
+
+  const normalized = cleanAgreementText(notes);
+  const next = { ...currentDraft };
+  const mentions = (pattern) => pattern.test(normalized);
+
+  if (mentions(/total\s+cost|total\s+price|overall\s+(?:cost|price)/i)) next.totalCost = parsedDetails.totalCost;
+  if (mentions(/timeline|turnaround|\b(?:day|days|week|weeks|month|months)\b/i)) next.timeline = parsedDetails.timeline;
+  if (mentions(/wcag\s*2\.[12]/i)) next.wcagStandard = parsedDetails.wcagStandard;
+  if (mentions(/scope|url|https?:\/\//i)) next.scopeText = parsedDetails.scopeText;
+  if (mentions(/deliverable/i)) next.deliverablesText = parsedDetails.deliverablesText;
+
+  // A message that contains service/pricing details is treated as a replacement
+  // for the editable services block. A cost-only message changes only Total Cost.
+  if (mentions(/audit|technical\s+support|support\s+hours?|vpat|expedited|price\s*:/i)) {
+    next.servicesText = parsedDetails.servicesText;
+    next.costBreakdownText = parsedDetails.costBreakdownText || next.costBreakdownText;
+  }
+
+  if (mentions(/client\s+(?:name|is)|project\s+(?:name|is)|asset\s+(?:name|is)/i)) {
+    const clientMatch = normalized.match(/client\s+(?:name|is)\s*[:=-]?\s*([^,.;\n]+)/i);
+    const projectMatch = normalized.match(/(?:project|asset)\s+(?:name|is)\s*[:=-]?\s*([^,.;\n]+)/i);
+    if (clientMatch?.[1]) next.clientLegalName = clientMatch[1].trim();
+    if (projectMatch?.[1]) next.projectName = projectMatch[1].trim();
+  }
+
+  return next;
 }
 
 function setSignatureDraftRecipientsForRequest(request) {
@@ -2524,13 +2556,9 @@ function proposalEditableFields(request) {
     </label>
   `;
   return `
-    <section class="proposal-builder-edit">
-      <div class="proposal-builder-edit-header">
-        <div>
-          <p class="section-label">Edit before sending</p>
-          <p class="helper">Make any final changes here. The preview updates as you type, and the edited values are sent to the client.</p>
-        </div>
-      </div>
+    <details class="proposal-builder-edit">
+      <summary>Edit preview</summary>
+      <p class="helper">Make final changes here. The preview updates as you type, and the edited values are sent to the client.</p>
       <div class="form-grid proposal-edit-grid">
         ${editInput("agreementDate", "Agreement date", "date")}
         ${editInput("clientLegalName", "Client name")}
@@ -2543,7 +2571,7 @@ function proposalEditableFields(request) {
         ${editArea("deliverablesText", "Deliverables", 5)}
         ${editArea("costBreakdownText", "Cost breakdown", 5)}
       </div>
-    </section>
+    </details>
   `;
 }
 
@@ -2580,7 +2608,7 @@ function proposalBuilderPreview(request) {
 
 function proposalBuilderChat(request) {
   const draft = state.signatureDraft || {};
-  const prompt = draft.agreementPrompt || "";
+  const messages = Array.isArray(draft.proposalMessages) ? draft.proposalMessages : [];
   return `
     <section class="proposal-builder-chat">
       <div class="proposal-chat-header">
@@ -2592,15 +2620,14 @@ function proposalBuilderChat(request) {
       </div>
       <div class="proposal-chat-messages" aria-live="polite">
         <div class="proposal-chat-message assistant">Tell me the client, scope, services, prices, timeline, and any URLs that should appear in the proposal.</div>
-        ${prompt ? `<div class="proposal-chat-message user">${formatMessageText(prompt)}</div>` : ""}
-        ${draft.proposalGenerated ? `<div class="proposal-chat-message assistant">I created a proposal preview below. Review it, then send it to the client for approval.</div>` : ""}
+        ${messages.map((message) => `<div class="proposal-chat-message ${message.role === "user" ? "user" : "assistant"}">${formatMessageText(message.text || "")}</div>`).join("")}
       </div>
       <label class="field proposal-chat-input">
-        <span>Proposal details</span>
-        <textarea name="proposalPrompt" rows="10" placeholder="Example:\n$1,700 for a WCAG 2.1 AA desktop + mobile audit\nUser Testing: $450\nVPAT Service: $350\nTechnical Support: $450 (3 hours)\nTotal Cost: $2,950\n\nScope:\nhttps://example.com/signin\nhttps://example.com/assistant">${escapeHtml(prompt)}</textarea>
+        <span>Message the proposal assistant</span>
+        <textarea name="proposalPrompt" rows="10" placeholder="Example:\n$1,700 for a WCAG 2.1 AA desktop + mobile audit\nUser Testing: $450\nVPAT Service: $350\nTechnical Support: $450 (3 hours)\nTotal Cost: $2,950\n\nScope:\nhttps://example.com/signin\nhttps://example.com/assistant"></textarea>
       </label>
-      <button class="secondary" type="button" data-generate-proposal>Generate proposal preview</button>
-      <p class="helper">This creates a draft preview only. Nothing is sent until you choose “Send proposal”.</p>
+      <button class="secondary" type="button" data-send-proposal-message>Send message</button>
+      <p class="helper">Send details or a correction such as “change the total cost to $900”. The assistant updates the preview after each message.</p>
     </section>
   `;
 }
@@ -3837,6 +3864,7 @@ function attachEvents() {
         requestId: "",
         proposalGenerated: false,
         agreementPrompt: "",
+        proposalMessages: [],
         recipients: [{ name: "", email: "", role: "signer" }]
       };
       render();
@@ -3855,7 +3883,8 @@ function attachEvents() {
           ...state.signatureDraft,
           ...agreementDefaultsForRequest(state.activeRequest),
           proposalGenerated: false,
-          agreementPrompt: ""
+          agreementPrompt: "",
+          proposalMessages: []
         };
         setSignatureDraftRecipientsForRequest(state.activeRequest);
       }
@@ -3888,31 +3917,36 @@ function attachEvents() {
 
   const signatureDocumentForm = document.getElementById("signatureDocumentForm");
   if (signatureDocumentForm) {
-    signatureDocumentForm.querySelector("[data-generate-proposal]")?.addEventListener("click", () => {
+    signatureDocumentForm.querySelector("[data-send-proposal-message]")?.addEventListener("click", () => {
       const formData = new FormData(signatureDocumentForm);
       const request = state.requests.find((item) => item.id === formData.get("requestId"));
       const notes = String(formData.get("proposalPrompt") || "").trim();
       const generated = parseAgreementNotes(notes, request);
-      if (!generated) {
+      if (!generated || !notes) {
         showToast("Add the proposal details first.");
         return;
       }
+      signatureDraftFromForm(signatureDocumentForm);
+      const updatedDetails = mergeProposalMessage(state.signatureDraft, generated, notes, request);
+      const previousMessages = Array.isArray(state.signatureDraft?.proposalMessages) ? state.signatureDraft.proposalMessages : [];
       state.signatureDraft = {
         ...state.signatureDraft,
-        clientId: String(formData.get("clientId") || ""),
-        requestId: String(formData.get("requestId") || ""),
         title: "Accessibility Services Proposal",
         documentPurpose: "signature",
         agreementPrompt: notes,
         proposalGenerated: true,
-        ...agreementDefaultsForRequest(request),
-        ...generated,
+        ...updatedDetails,
+        proposalMessages: [
+          ...previousMessages,
+          { role: "user", text: notes },
+          { role: "assistant", text: "I updated the proposal preview with those details. Review the document and use Edit preview for any final changes." }
+        ],
         recipients: state.signatureDraft?.recipients?.length
           ? state.signatureDraft.recipients
           : signatureRecipientDefaults(request)
       };
       render();
-      showToast("Proposal preview generated. Review it before sending.");
+      showToast(state.signatureDraft.proposalMessages.length > 2 ? "Proposal updated." : "Proposal preview generated.");
     });
 
     signatureDocumentForm.addEventListener("input", (event) => {

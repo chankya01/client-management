@@ -2512,9 +2512,16 @@ a {
 }
 
 .proposal-builder-preview-document {
+  background: #fff;
+  border: 1px solid #dfe6ef;
+  border-radius: 14px;
   border-top: 1px solid #e3e8ef;
+  height: min(720px, 72vh);
   margin-top: 22px;
-  padding-top: 22px;
+  min-height: 360px;
+  overflow-y: auto;
+  padding: 28px clamp(20px, 3vw, 44px);
+  scroll-behavior: smooth;
 }
 
 .proposal-builder-preview-document .proposal-terms-content {
@@ -2522,19 +2529,33 @@ a {
 }
 
 .proposal-builder-edit {
+  margin-top: 18px;
+}
+
+.proposal-builder-edit summary {
+  background: #eee6f5;
+  border-radius: 10px;
+  color: #3d1755;
+  cursor: pointer;
+  display: inline-flex;
+  font-weight: 800;
+  padding: 10px 14px;
+}
+
+.proposal-builder-edit summary:hover,
+.proposal-builder-edit summary:focus-visible {
+  background: #e4d5ef;
+}
+
+.proposal-builder-edit > .helper {
+  margin: 12px 0 14px;
+}
+
+.proposal-builder-edit[open] .proposal-edit-grid {
   background: #f8fafc;
   border: 1px solid #dfe6ef;
-  border-radius: 14px;
-  margin-top: 22px;
-  padding: 20px;
-}
-
-.proposal-builder-edit-header {
-  margin-bottom: 14px;
-}
-
-.proposal-builder-edit-header .helper {
-  margin: 3px 0 0;
+  border-radius: 12px;
+  padding: 18px;
 }
 
 .proposal-edit-grid {
@@ -2692,6 +2713,11 @@ button:disabled {
 
   .proposal-edit-wide {
     grid-column: auto;
+  }
+
+  .proposal-builder-preview-document {
+    height: min(620px, 70vh);
+    padding: 22px 18px;
   }
 
   .proposal-section h1 {
