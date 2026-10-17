@@ -123,13 +123,15 @@ async function documentsForProfile(profile, origin) {
       documentUrl = null;
     }
 
+    const documentEvents = eventsByDocument.get(document.id) || [];
     return {
       ...document,
       document_url: documentUrl,
       recipients: (recipientsByDocument.get(document.id) || []).map((recipient) => (
         publicRecipient(recipient, profile, document.title, origin)
       )),
-      events: eventsByDocument.get(document.id) || []
+      events: documentEvents,
+      proposal_approved: documentEvents.some((event) => event.event_type === "proposal_approved")
     };
   }));
 }
@@ -239,7 +241,7 @@ export async function POST(request) {
         body: JSON.stringify({
           request_id: requestId,
           sender_id: profile.id,
-          message: `${requiresSignature ? "Agreement sent for signature" : "Agreement shared"}: ${document.title || "Service Agreement"}. Recipients received their private link by email.`,
+          message: `${requiresSignature ? "Proposal sent for review" : "Proposal shared"}: ${document.title || "Accessibility Services Proposal"}. Recipients received their private link by email.`,
           is_internal: false
         })
       });

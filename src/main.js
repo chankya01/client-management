@@ -1235,7 +1235,7 @@ function adminNavHtml() {
           ${canManage ? navButton("admin-clients", "Clients") : ""}
           ${navButton("admin-requests", "Requests")}
           ${navButton("admin-messages", `Messages ${totalUnreadCount() ? `<span class="count">${totalUnreadCount()}</span>` : ""}`)}
-          ${navButton("admin-documents", "Agreements")}
+          ${navButton("admin-documents", "Proposals")}
           ${navButton("admin-team", "Team")}
           ${navButton("admin-settings", "Settings")}
           <button class="nav-logout" data-action="logout">Logout</button>
@@ -2114,13 +2114,14 @@ function signatureEventRows(document) {
 
 function signatureDocumentCard(document) {
   const request = state.requests.find((item) => item.id === document.request_id);
+  const proposalApproved = Boolean(document.proposal_approved);
   return `
     <article class="signature-document-item signature-document-detail-card">
       <div class="signature-document-header">
         <span>
           <strong>${escapeHtml(document.title || "Agreement")}</strong>
           <small>${escapeHtml(request ? `${displayRequestNumber(request)} · ${request.title}` : "Request agreement")}</small>
-          <small>Web agreement</small>
+          <small>Proposal · ${proposalApproved ? "Approved for signing" : "Awaiting client approval"}</small>
         </span>
         <span class="signature-document-actions">
           <span class="status-pill">${escapeHtml(signatureStatusLabel(document.status))}</span>
@@ -2146,21 +2147,21 @@ function requestSignatureDocumentsCard(request) {
   return `
     <section class="card request-documents-card">
       <div class="section-heading-row">
-        <p class="section-label">Agreements</p>
+        <p class="section-label">Proposals</p>
       </div>
       <div class="request-documents-scroll">
         ${documents.map((document) => `
           <button class="signature-document-row ${selectedDocument?.id === document.id ? "active" : ""}" type="button" data-select-signature-document="${document.id}">
             <span>
               <strong>${escapeHtml(document.title || "Agreement")}</strong>
-              <small>Web agreement</small>
+              <small>Proposal · ${document.proposal_approved ? "Approved for signing" : "Awaiting client approval"}</small>
             </span>
             <span class="signature-document-row-actions">
               <span class="status-pill">${escapeHtml(signatureStatusLabel(document.status))}</span>
               ${selectedDocument?.id === document.id ? `<span class="collapse-document-detail" aria-hidden="true">⌃</span>` : ""}
             </span>
           </button>
-        `).join("") || `<p class="helper">No agreements have been sent for this request yet.</p>`}
+        `).join("") || `<p class="helper">No proposals have been sent for this request yet.</p>`}
       </div>
       ${selectedDocument ? signatureDocumentCard(selectedDocument) : documents.length ? `<p class="helper">Select an agreement to view recipients, links, and activity.</p>` : ""}
     </section>
@@ -2398,7 +2399,8 @@ function signatureDraftFromForm(form) {
     requestId,
     title: String(formData.get("title") || ""),
     documentPurpose: String(formData.get("documentPurpose") || "signature"),
-    agreementPrompt: String(formData.get("agreementPrompt") || ""),
+    agreementPrompt: String(formData.get("proposalPrompt") || formData.get("agreementPrompt") || ""),
+    proposalGenerated: Boolean(state.signatureDraft?.proposalGenerated),
     ...agreementDetails,
     recipients: names.map((name, index) => ({
       name,
@@ -2476,6 +2478,84 @@ function agreementParameterInputs(request) {
   `;
 }
 
+function proposalHiddenFields(request) {
+  const names = [
+    "agreementDate",
+    "clientLegalName",
+    "projectName",
+    "wcagStandard",
+    "timeline",
+    "totalCost",
+    "projectOverview",
+    "servicesText",
+    "scopeText",
+    "deliverablesText",
+    "costBreakdownText",
+    "trackerRequirement",
+    "validationIncluded",
+    "technicalSupportIncluded",
+    "vpatIncluded"
+  ];
+  return names.map((name) => `<input type="hidden" name="${name}" value="${escapeHtml(agreementDraftValue(name, request))}" />`).join("");
+}
+
+function proposalBuilderPreview(request) {
+  const draft = state.signatureDraft || {};
+  if (!draft.proposalGenerated) {
+    return `
+      <section class="proposal-builder-empty">
+        <span class="proposal-builder-empty-icon" aria-hidden="true">✦</span>
+        <div>
+          <strong>Your proposal preview will appear here</strong>
+          <p>Paste the scope, services, pricing, and URLs in the conversation. The builder will turn it into the client-facing proposal format.</p>
+        </div>
+      </section>
+    `;
+  }
+
+  return `
+    <section class="proposal-builder-preview">
+      <div class="proposal-builder-preview-header">
+        <div>
+          <p class="section-label">Generated proposal</p>
+          <h2>Accessibility Services Agreement</h2>
+        </div>
+        <span class="status-pill success">Ready to send</span>
+      </div>
+      <div class="proposal-builder-preview-document">
+        ${renderAgreementTerms(draft)}
+      </div>
+    </section>
+  `;
+}
+
+function proposalBuilderChat(request) {
+  const draft = state.signatureDraft || {};
+  const prompt = draft.agreementPrompt || "";
+  return `
+    <section class="proposal-builder-chat">
+      <div class="proposal-chat-header">
+        <div class="proposal-chat-avatar" aria-hidden="true">✦</div>
+        <div>
+          <strong>Proposal assistant</strong>
+          <p>Describe the work in plain language. I’ll organize it into the proposal layout.</p>
+        </div>
+      </div>
+      <div class="proposal-chat-messages" aria-live="polite">
+        <div class="proposal-chat-message assistant">Tell me the client, scope, services, prices, timeline, and any URLs that should appear in the proposal.</div>
+        ${prompt ? `<div class="proposal-chat-message user">${formatMessageText(prompt)}</div>` : ""}
+        ${draft.proposalGenerated ? `<div class="proposal-chat-message assistant">I created a proposal preview below. Review it, then send it to the client for approval.</div>` : ""}
+      </div>
+      <label class="field proposal-chat-input">
+        <span>Proposal details</span>
+        <textarea name="proposalPrompt" rows="10" placeholder="Example:\n$1,700 for a WCAG 2.1 AA desktop + mobile audit\nUser Testing: $450\nVPAT Service: $350\nTechnical Support: $450 (3 hours)\nTotal Cost: $2,950\n\nScope:\nhttps://example.com/signin\nhttps://example.com/assistant">${escapeHtml(prompt)}</textarea>
+      </label>
+      <button class="secondary" type="button" data-generate-proposal>Generate proposal preview</button>
+      <p class="helper">This creates a draft preview only. Nothing is sent until you choose “Send proposal”.</p>
+    </section>
+  `;
+}
+
 function clientOptionsForDocuments() {
   const clientIds = [...new Set(state.requests.map((request) => request.client_id).filter(Boolean))];
   const clients = state.clients.filter((client) => clientIds.includes(client.id));
@@ -2492,8 +2572,8 @@ function signatureDocumentsPage() {
   if (!isInternal()) {
     return `
       <section class="page">
-        <h1>Agreements</h1>
-        <p class="subtitle">Agreements are attached to each request. Open a request to view its agreement and signing status.</p>
+        <h1>Proposals</h1>
+        <p class="subtitle">Proposals are attached to each request. Open a request to view proposal approval and signing status.</p>
         ${clientRequestCards(state.requests)}
       </section>
     `;
@@ -2507,11 +2587,11 @@ function signatureDocumentsPage() {
 
   return `
     <section class="${isInternal() ? "admin-page" : "page"}">
-      <h1>Agreements</h1>
-      <p class="subtitle">Generate a default web agreement layout and send it for client signature.</p>
+      <h1>Proposals</h1>
+      <p class="subtitle">Build a client-facing proposal from a short conversation. The client approves it before signing is unlocked.</p>
       ${isInternal() ? `
-        <form class="card" id="signatureDocumentForm">
-          <p class="section-label">Send Agreement</p>
+        <form class="proposal-builder" id="signatureDocumentForm">
+          <div class="proposal-builder-selection">
           <div class="form-grid">
             <label class="field"><span>Client</span>
               <select name="clientId" data-signature-client-select required>
@@ -2525,27 +2605,31 @@ function signatureDocumentsPage() {
                 ${clientRequests.map((request) => `<option value="${request.id}" ${request.id === selectedRequest?.id ? "selected" : ""}>${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(request.title)}</option>`).join("")}
               </select>
             </label>
-            <label class="field"><span>Agreement Title</span><input name="title" placeholder="Service Agreement" value="${escapeHtml(draft.title || "")}" /></label>
-            <label class="field"><span>Purpose</span>
-              <select name="documentPurpose">
-                <option value="signature" ${(draft.documentPurpose || "signature") !== "view" ? "selected" : ""}>Needs Signature</option>
-                <option value="view" ${draft.documentPurpose === "view" ? "selected" : ""}>View Only / No Signature</option>
-              </select>
-            </label>
           </div>
-          ${agreementParameterInputs(selectedRequest)}
-          <p class="section-label">Recipients</p>
-          <div data-signature-recipient-list>${signatureRecipientInputs(selectedRequest)}</div>
+          <input type="hidden" name="title" value="${escapeHtml(draft.title || "Accessibility Services Proposal")}" />
+          <input type="hidden" name="documentPurpose" value="signature" />
+          ${proposalHiddenFields(selectedRequest)}
+          </div>
+          ${proposalBuilderChat(selectedRequest)}
+          ${proposalBuilderPreview(selectedRequest)}
+          <section class="proposal-recipient-box">
+            <p class="section-label">Send to</p>
+            <p class="helper">The client contact below will receive a private proposal link.</p>
+            <div data-signature-recipient-list>${signatureRecipientInputs(selectedRequest)}</div>
+          </section>
           <div class="signature-form-actions">
             <button class="secondary" type="button" data-action="add-signature-recipient">Add Recipient</button>
-            <button class="primary" type="submit">Send Agreement</button>
+            <button class="primary" type="submit" ${draft.proposalGenerated ? "" : "disabled"}>Send proposal</button>
           </div>
-          <p class="helper">Clients see the default agreement layout and sign at the bottom.</p>
+          <p class="helper">Signing is locked for the client until they approve the proposal.</p>
         </form>
       ` : ""}
       <section class="card">
-        <p class="section-label">Request Agreements</p>
-        <p class="helper">Agreements are shown inside their related request. Open a request to view recipients, signing links, and activity trail.</p>
+        <p class="section-label">Sent proposals</p>
+        <p class="helper">Proposals are shown inside their related request. Open a request to view approval, signing links, and activity.</p>
+        <div class="proposal-sent-list">
+          ${state.signatureDocuments.slice(0, 8).map(signatureDocumentCard).join("") || `<p class="helper">No proposals have been sent yet.</p>`}
+        </div>
       </section>
     </section>
   `;
@@ -3008,7 +3092,7 @@ function renderPublicSignature() {
       <main class="signin-shell">
         <form class="signin-card" id="signinForm">
           ${brandLogo("signin")}
-          <h1>Sign in to open agreement</h1>
+          <h1>Sign in to open proposal</h1>
           <p class="helper">${escapeHtml(errorMessage)}</p>
           <label class="field">
             <span>Email Address</span>
@@ -3022,7 +3106,7 @@ function renderPublicSignature() {
             <input type="checkbox" data-toggle-password="password" />
             <span>Show Password</span>
           </label>
-          <button class="primary" type="submit">Sign In and Open Agreement</button>
+          <button class="primary" type="submit">Sign In and Open Proposal</button>
           <div class="signin-actions">
             <button class="link-button" type="button" data-action="forgot-password">Forgot Password?</button>
           </div>
@@ -3033,7 +3117,7 @@ function renderPublicSignature() {
       <main class="signin-shell">
         <section class="signin-card">
           ${brandLogo("signin")}
-          <h1>Signing link unavailable</h1>
+          <h1>Proposal link unavailable</h1>
           <p class="helper">${escapeHtml(errorMessage)}</p>
           ${toastHtml()}
         </section>
@@ -3044,6 +3128,7 @@ function renderPublicSignature() {
   }
   const alreadySigned = payload.recipient?.status === "signed";
   const canSign = payload.recipient?.role === "signer";
+  const proposalApproved = Boolean(payload.proposalApproved || (payload.events || []).some((event) => event.event_type === "proposal_approved"));
   const agreement = payload.agreement || {};
   const recipientName = payload.recipient?.name || payload.recipient?.email || "recipient";
   const agreementTitle = agreement.title || payload.document?.title || "Proposal";
@@ -3287,6 +3372,15 @@ function renderPublicSignature() {
               <section class="proposal-sign-panel">
                 <p class="helper">This agreement has already been signed by you.</p>
               </section>
+            ` : !proposalApproved ? `
+              <section class="proposal-sign-panel proposal-sign-locked">
+                <div class="proposal-lock-icon" aria-hidden="true">🔒</div>
+                <div>
+                  <strong>Signing is locked</strong>
+                  <p class="helper">Review the proposal above. When everything looks correct, approve it to unlock the signature field.</p>
+                </div>
+                <button class="primary" type="button" data-approve-proposal>Approve proposal and unlock signing</button>
+              </section>
             ` : `
               <form class="proposal-sign-panel" id="publicSignatureForm">
                 <p>I, ${escapeHtml(recipientName)}, agree to the terms of this agreement and I agree that my typed name below can be used as a digital representation of my signature.</p>
@@ -3412,6 +3506,22 @@ function attachPublicSignatureEvents() {
   });
 
   const form = document.getElementById("publicSignatureForm");
+  const approveButton = document.querySelector("[data-approve-proposal]");
+  if (approveButton) {
+    approveButton.addEventListener("click", async () => {
+      await withActionLock("approve-proposal", approveButton, async () => {
+        try {
+          await signSignatureRecipient(state.publicSignatureToken, { action: "approve" });
+          state.publicSignature = await loadSignatureByToken(state.publicSignatureToken);
+          showToast("Proposal approved. Signing is now unlocked.");
+          renderPublicSignature();
+        } catch (error) {
+          showAppError(error, "Approve proposal");
+        }
+      });
+    });
+  }
+
   if (!form) return;
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -3425,7 +3535,7 @@ function attachPublicSignatureEvents() {
           signatureDate: values.signatureDate
         });
         state.publicSignature = await loadSignatureByToken(state.publicSignatureToken);
-        showToast("Agreement signed.");
+        showToast("Proposal signed.");
         renderPublicSignature();
       } catch (error) {
         showAppError(error, "Sign agreement");
@@ -3676,6 +3786,8 @@ function attachEvents() {
         ...state.signatureDraft,
         clientId: state.signatureClientSelection,
         requestId: "",
+        proposalGenerated: false,
+        agreementPrompt: "",
         recipients: [{ name: "", email: "", role: "signer" }]
       };
       render();
@@ -3692,7 +3804,9 @@ function attachEvents() {
       if (event.currentTarget.value) {
         state.signatureDraft = {
           ...state.signatureDraft,
-          ...agreementDefaultsForRequest(state.activeRequest)
+          ...agreementDefaultsForRequest(state.activeRequest),
+          proposalGenerated: false,
+          agreementPrompt: ""
         };
         setSignatureDraftRecipientsForRequest(state.activeRequest);
       }
@@ -3725,20 +3839,31 @@ function attachEvents() {
 
   const signatureDocumentForm = document.getElementById("signatureDocumentForm");
   if (signatureDocumentForm) {
-    signatureDocumentForm.querySelector("[data-generate-agreement-terms]")?.addEventListener("click", () => {
+    signatureDocumentForm.querySelector("[data-generate-proposal]")?.addEventListener("click", () => {
       const formData = new FormData(signatureDocumentForm);
       const request = state.requests.find((item) => item.id === formData.get("requestId"));
-      const generated = parseAgreementNotes(formData.get("agreementPrompt"), request);
+      const notes = String(formData.get("proposalPrompt") || "").trim();
+      const generated = parseAgreementNotes(notes, request);
       if (!generated) {
-        showToast("Paste agreement notes first.");
+        showToast("Add the proposal details first.");
         return;
       }
-      Object.entries(generated).forEach(([name, value]) => {
-        const field = signatureDocumentForm.elements.namedItem(name);
-        if (field) field.value = value;
-      });
-      signatureDraftFromForm(signatureDocumentForm);
-      showToast("Terms fields generated from notes. Review before sending.");
+      state.signatureDraft = {
+        ...state.signatureDraft,
+        clientId: String(formData.get("clientId") || ""),
+        requestId: String(formData.get("requestId") || ""),
+        title: "Accessibility Services Proposal",
+        documentPurpose: "signature",
+        agreementPrompt: notes,
+        proposalGenerated: true,
+        ...agreementDefaultsForRequest(request),
+        ...generated,
+        recipients: state.signatureDraft?.recipients?.length
+          ? state.signatureDraft.recipients
+          : signatureRecipientDefaults(request)
+      };
+      render();
+      showToast("Proposal preview generated. Review it before sending.");
     });
 
     signatureDocumentForm.addEventListener("input", () => {
@@ -3768,6 +3893,10 @@ function attachEvents() {
         showToast("Select a request.");
         return;
       }
+      if (!state.signatureDraft?.proposalGenerated) {
+        showToast("Generate the proposal preview before sending.");
+        return;
+      }
       if (!recipients.length) {
         showToast("Add at least one recipient.");
         return;
@@ -3779,7 +3908,7 @@ function attachEvents() {
           const createdDocument = await createSignatureDocument({
             request,
             profile: state.profile,
-            title: formData.get("title") || "Service Agreement",
+            title: formData.get("title") || "Accessibility Services Proposal",
             agreementText: JSON.stringify(agreementDetails),
             recipients,
             requiresSignature
@@ -3792,8 +3921,8 @@ function attachEvents() {
           const failedEmail = (createdDocument.email_results || []).find((result) => result && result.sent === false);
           const messageWarning = createdDocument.message_result?.created === false ? " Message entry was not created." : "";
           showToast(failedEmail
-            ? `Agreement saved, but email was not sent: ${failedEmail.reason || "email service failed."}${messageWarning}`
-            : `${requiresSignature ? "Agreement sent for signature." : "Agreement sent for viewing."}${messageWarning}`
+            ? `Proposal saved, but email was not sent: ${failedEmail.reason || "email service failed."}${messageWarning}`
+            : `${requiresSignature ? "Proposal sent for review." : "Proposal sent for viewing."}${messageWarning}`
           );
           render();
         } catch (error) {

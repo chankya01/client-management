@@ -407,9 +407,9 @@ export async function sendSignatureRequestEmail({ email, name, documentTitle, si
 
   const greeting = name ? `Hi ${name},` : "Hi,";
   const actionText = requiresSignature
-    ? "You have a document to review and sign in Clients"
-    : "A document has been shared with you in Clients";
-  const linkText = requiresSignature ? "Open your secure signing link" : "Open your secure document link";
+    ? "You have a proposal to review in Clients. Approve it to unlock signing."
+    : "A proposal has been shared with you in Clients";
+  const linkText = requiresSignature ? "Open your secure proposal link" : "Open your secure proposal link";
   const text = `${greeting}\n\n${actionText}: ${documentTitle || "Document"}.\n\n${linkText}:\n${signingUrl}\n\nIf you were not expecting this, you can ignore this email.`;
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -420,7 +420,7 @@ export async function sendSignatureRequestEmail({ email, name, documentTitle, si
     body: JSON.stringify({
       from: notificationFrom,
       to: [normalizedEmail],
-      subject: requiresSignature ? `Signature requested: ${documentTitle || "Document"}` : `Document shared: ${documentTitle || "Document"}`,
+      subject: requiresSignature ? `Proposal ready for review: ${documentTitle || "Proposal"}` : `Proposal shared: ${documentTitle || "Proposal"}`,
       text
     })
   });

@@ -242,6 +242,7 @@ let demoMessages = [
 ];
 
 let demoSignatureDocuments = [];
+let demoProposalApprovals = new Set();
 
 const demoRequests = [
   {
@@ -1586,6 +1587,7 @@ export async function createSignatureDocument({
       sent_at: new Date().toISOString(),
       created_at: new Date().toISOString(),
       agreement: { title, agreementText },
+      proposal_approved: false,
       recipients: recipients.map((recipient) => ({
         id: crypto.randomUUID(),
         name: recipient.name,
@@ -1621,7 +1623,8 @@ export async function loadSignatureByToken(token) {
       },
       recipient: { name: "Demo Signer", email: "demo@example.com", status: "viewed" },
       recipients: [{ name: "Demo Signer", email: "demo@example.com", status: "viewed" }],
-      events: []
+      events: [],
+      proposalApproved: demoProposalApprovals.has(token)
     };
   }
   const { data } = await supabase.auth.getSession();
@@ -1640,7 +1643,14 @@ export async function loadSignatureByToken(token) {
 }
 
 export async function signSignatureRecipient(token, signatureFields) {
-  if (useDemo()) return { signed: true, completed: true };
+  if (useDemo()) {
+    if (signatureFields && typeof signatureFields === "object" && signatureFields.action === "approve") {
+      demoProposalApprovals.add(token);
+      return { approved: true };
+    }
+    if (!demoProposalApprovals.has(token)) throw new Error("Approve the proposal before signing.");
+    return { signed: true, completed: true };
+  }
   const body = typeof signatureFields === "string"
     ? { typedSignature: signatureFields }
     : { ...(signatureFields || {}) };

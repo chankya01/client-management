@@ -30,6 +30,10 @@ function parseAgreementSnapshot(events, document) {
   }
 }
 
+function proposalApproved(events) {
+  return (events || []).some((event) => event.event_type === "proposal_approved");
+}
+
 async function loadSignature(token) {
   const recipients = await supabaseAdminFetch(
     tablePath("signature_recipients", `?select=*&signing_token=eq.${encodeValue(token)}&limit=1`)
@@ -65,7 +69,8 @@ async function loadSignature(token) {
     recipient,
     recipients: allRecipients || [],
     events: events || [],
-    agreement: parseAgreementSnapshot(events, document)
+    agreement: parseAgreementSnapshot(events, document),
+    proposalApproved: proposalApproved(events)
   };
 }
 
@@ -104,6 +109,7 @@ export async function GET(request, { params }) {
     return apiJson({
       document: payload.document,
       agreement: payload.agreement,
+      proposalApproved: payload.proposalApproved,
       recipient: {
         id: payload.recipient.id,
         name: payload.recipient.name,
@@ -174,13 +180,39 @@ function validateSignatureFields(signatureFields) {
 export async function POST(request, { params }) {
   try {
     const body = await request.json();
+    const payload = await loadSignature(params.token);
+
+    if (body.action === "approve") {
+      if (payload.recipient.role !== "signer") {
+        return apiJson({ error: "Only a signer can approve this proposal." }, 403);
+      }
+
+      await requireMatchingPortalSessionIfNeeded(request, payload.recipient);
+      if (payload.proposalApproved) return apiJson({ approved: true });
+
+      await supabaseAdminFetch(tablePath("signature_events"), {
+        method: "POST",
+        body: JSON.stringify({
+          document_id: payload.document.id,
+          recipient_id: payload.recipient.id,
+          event_type: "proposal_approved",
+          event_note: `${payload.recipient.name || payload.recipient.email} approved the proposal and unlocked signing.`
+        })
+      });
+
+      return apiJson({ approved: true });
+    }
+
     const signatureFields = cleanSignatureFields(body);
     const validationError = validateSignatureFields(signatureFields);
     if (validationError) return apiJson({ error: validationError }, 400);
 
-    const payload = await loadSignature(params.token);
     if (payload.recipient.status === "signed") {
       return apiJson({ error: "This agreement has already been signed by this recipient." }, 400);
+    }
+
+    if (!payload.proposalApproved) {
+      return apiJson({ error: "Approve the proposal before signing." }, 409);
     }
 
     await requireMatchingPortalSessionIfNeeded(request, payload.recipient);
@@ -242,8 +274,8 @@ export async function POST(request, { params }) {
             request_id: payload.document.request_id,
             sender_id: payload.document.uploaded_by,
             message: allSigned
-              ? `Agreement completed: ${payload.document.title || "Service Agreement"}`
-              : `Agreement signed by ${payload.recipient.name || payload.recipient.email}: ${payload.document.title || "Service Agreement"}`,
+              ? `Proposal completed: ${payload.document.title || "Accessibility Services Proposal"}`
+              : `Proposal signed by ${payload.recipient.name || payload.recipient.email}: ${payload.document.title || "Accessibility Services Proposal"}`,
             is_internal: false
           })
         });
