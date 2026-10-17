@@ -2384,6 +2384,7 @@ function agreementDetailsFromFormData(formData, request) {
     wcagStandard: textValue("wcagStandard"),
     timeline: textValue("timeline"),
     totalCost: textValue("totalCost"),
+    agreementIntro: textValue("agreementIntro"),
     projectOverview: textValue("projectOverview"),
     servicesText: textValue("servicesText"),
     scopeText: textValue("scopeText"),
@@ -2532,6 +2533,7 @@ function proposalHiddenFields(request) {
     "wcagStandard",
     "timeline",
     "totalCost",
+    "agreementIntro",
     "projectOverview",
     "servicesText",
     "scopeText",
@@ -2543,39 +2545,6 @@ function proposalHiddenFields(request) {
     "vpatIncluded"
   ];
   return names.map((name) => `<input type="hidden" name="${name}" value="${escapeHtml(agreementDraftValue(name, request))}" />`).join("");
-}
-
-function proposalEditableFields(request) {
-  const editInput = (field, label, type = "text") => `
-    <label class="field">
-      <span>${label}</span>
-      <input name="proposalEdit${field[0].toUpperCase()}${field.slice(1)}" data-proposal-edit="${field}" type="${type}" value="${escapeHtml(agreementDraftValue(field, request))}" />
-    </label>
-  `;
-  const editArea = (field, label, rows) => `
-    <label class="field proposal-edit-wide">
-      <span>${label}</span>
-      <textarea name="proposalEdit${field[0].toUpperCase()}${field.slice(1)}" data-proposal-edit="${field}" rows="${rows}">${escapeHtml(agreementDraftValue(field, request))}</textarea>
-    </label>
-  `;
-  return `
-    <details class="proposal-builder-edit">
-      <summary>Edit preview</summary>
-      <p class="helper">Make final changes here. The preview updates as you type, and the edited values are sent to the client.</p>
-      <div class="form-grid proposal-edit-grid">
-        ${editInput("agreementDate", "Agreement date", "date")}
-        ${editInput("clientLegalName", "Client name")}
-        ${editInput("projectName", "Project / asset name")}
-        ${editInput("wcagStandard", "WCAG standard")}
-        ${editInput("timeline", "Timeline")}
-        ${editInput("totalCost", "Total cost")}
-        ${editArea("servicesText", "Services and prices", 10)}
-        ${editArea("scopeText", "Project scope", 7)}
-        ${editArea("deliverablesText", "Deliverables", 5)}
-        ${editArea("costBreakdownText", "Cost breakdown", 5)}
-      </div>
-    </details>
-  `;
 }
 
 function proposalBuilderPreview(request) {
@@ -2601,9 +2570,8 @@ function proposalBuilderPreview(request) {
         </div>
         <span class="status-pill success">Ready to send</span>
       </div>
-      ${proposalEditableFields(request)}
-      <div class="proposal-builder-preview-document">
-        <div data-proposal-preview-output>${renderAgreementTerms(draft)}</div>
+      <div class="proposal-builder-preview-document" data-proposal-preview-document>
+        <div data-proposal-preview-output>${renderAgreementTerms(draft, { editable: true })}</div>
       </div>
     </section>
   `;
@@ -2909,6 +2877,19 @@ function agreementServiceBlockHtml(value) {
   return html.join("");
 }
 
+function proposalInlineText(value, field, editable) {
+  const text = escapeHtml(value || "");
+  return editable
+    ? `<span class="proposal-inline-editable" contenteditable="true" data-proposal-inline-edit="${field}" role="textbox" spellcheck="true">${text}</span>`
+    : text;
+}
+
+function proposalInlineBlock(html, field, editable) {
+  return editable
+    ? `<div class="proposal-inline-editable proposal-inline-block" contenteditable="true" data-proposal-inline-edit="${field}" role="textbox" spellcheck="true">${html}</div>`
+    : html;
+}
+
 function hasOnlyOldPlaceholderText(value, projectName) {
   const text = cleanAgreementText(value).replace(/\s+/g, " ").toLowerCase();
   const project = cleanAgreementText(projectName).replace(/\s+/g, " ").toLowerCase();
@@ -2920,7 +2901,7 @@ function hasOnlyOldPlaceholderText(value, projectName) {
     || (project && text === project && /^agreement\s+\d+$/i.test(cleanAgreementText(projectName)));
 }
 
-function renderAgreementTerms(details) {
+function renderAgreementTerms(details, { editable = false } = {}) {
   const client = details.clientLegalName || "Client";
   const project = details.projectName || "the selected digital asset";
   const wcagStandard = cleanAgreementText(details.wcagStandard) || "WCAG 2.2 AA";
@@ -2944,20 +2925,21 @@ function renderAgreementTerms(details) {
   const validationText = details.validationIncluded === "no"
     ? "Validation is not included unless later added by written Addendum."
     : "Remediation must begin within 21 days of audit report delivery, no gap in project activity may exceed 14 days, and remediation and validation must be completed within 4 months of audit report delivery. Outside these windows, a new audit is required.";
-  const projectOverviewText = `Accessible.org will provide the following accessibility services for ${client} for ${project}. Project completion is governed by the Project Completion section below.`;
+  const agreementIntroText = details.agreementIntro || `This Services Agreement is made on ${details.agreementDate || todayIsoDate()} between Accessible.org, LLC, a Texas company with its principal place of business at 770 Broadway Street Ste 104 #1126, San Antonio, Texas 78209 (“Service Provider”), and ${client} (“Client”).`;
+  const projectOverviewText = details.projectOverview || `Accessible.org will provide the following accessibility services for ${client} for ${project}. Project completion is governed by the Project Completion section below.`;
 
   return `
     <div class="proposal-terms-content">
-      <p class="agreement-intro">This Services Agreement is made on ${escapeHtml(details.agreementDate || todayIsoDate())} between Accessible.org, LLC, a Texas company with its principal place of business at 770 Broadway Street Ste 104 #1126, San Antonio, Texas 78209 (“Service Provider”), and ${escapeHtml(client)} (“Client”).</p>
+      <p class="agreement-intro ${editable ? "proposal-inline-editable" : ""}" ${editable ? 'contenteditable="true" data-proposal-inline-edit="agreementIntro" role="textbox" spellcheck="true"' : ""}>${escapeHtml(agreementIntroText)}</p>
 
       <h3>Project Overview</h3>
-      ${multilineParagraph(projectOverviewText)}
-      ${agreementServiceBlockHtml(servicesText)}
+      ${proposalInlineBlock(multilineParagraph(projectOverviewText), "projectOverview", editable)}
+      ${proposalInlineBlock(agreementServiceBlockHtml(servicesText), "servicesText", editable)}
 
       <h3>Key Terms</h3>
       <p>Below are key provisions of this Agreement. The full terms govern.</p>
       <h4>Total Cost</h4>
-      <p>${escapeHtml(totalCost)}. Payment terms are set forth in the Payment Terms section.</p>
+      <p>${proposalInlineText(totalCost, "totalCost", editable)}. Payment terms are set forth in the Payment Terms section.</p>
       <h4>Electronic Payment Only</h4>
       <p>All payments must be made electronically. Physical checks and third-party payment platforms are not accepted. Wire transfer or ACH is preferred for agreements with a Total Cost over $10,000.</p>
       <h4>Accessibility Tracker</h4>
@@ -2971,7 +2953,7 @@ function renderAgreementTerms(details) {
 
       <h3>Project Timeline</h3>
       <p>Project start date is one day after payment is received by Service Provider. If access to content within scope is required and has not been provided when payment is received, the project start date is one day after Service Provider receives working access.</p>
-      <p>Service Provider will deliver applicable deliverables according to the following timeline: ${escapeHtml(timeline)}.</p>
+      <p>Service Provider will deliver applicable deliverables according to the following timeline: ${proposalInlineText(timeline, "timeline", editable)}.</p>
 
       <h3>Communication and Project Management</h3>
       <h4>Platforms and Tools</h4>
@@ -3061,13 +3043,13 @@ function renderAgreementTerms(details) {
 
       <h3>Project Deliverables</h3>
       <p>Service Provider will email all document deliverables including reports and documentation.</p>
-      ${multilineList(deliverablesText)}
+      ${proposalInlineBlock(multilineList(deliverablesText), "deliverablesText", editable)}
       <h4>Deliverables License</h4>
       <p>Service Provider retains ownership of its methodologies, templates, evaluation processes, and pre-existing materials used to produce the deliverables. Upon receipt of full payment, Service Provider grants Client a perpetual, non-exclusive, royalty-free, worldwide license to use, reproduce, distribute, and publish the deliverables identified in this Agreement for Client’s business purposes, including in RFP responses and procurement processes. Deliverables must be presented without alteration and together with the scope, standard, environment, and date of issuance stated within them.</p>
 
       <h3>Project Scope</h3>
       <p>Audit scope includes all content and non-document media on the URLs and screens named below. Scope does not include any documents, third-party portals, subdomains, websites, pages, screens, properties, or platforms not named below.</p>
-      ${multilineList(scopeText)}
+      ${proposalInlineBlock(multilineList(scopeText), "scopeText", editable)}
       <h4>Scope Acceptance</h4>
       <p>Client has reviewed and agrees to the scope of services described in this Agreement, including all deliverables and pricing. The scope is final upon execution. Any changes Client wishes to make to the scope must be requested and incorporated into this Agreement before it is executed by both parties.</p>
       <p>Changes requested after execution may be addressed through a separate addendum at Service Provider’s discretion and may involve additional fees.</p>
@@ -3084,9 +3066,9 @@ function renderAgreementTerms(details) {
 
       <h3>Project Cost</h3>
       <h4>Total Cost</h4>
-      <p>${escapeHtml(totalCost)}</p>
+      <p>${proposalInlineText(totalCost, "totalCost", editable)}</p>
       <h4>Cost Breakdown</h4>
-      ${multilineList(costBreakdownText)}
+      ${proposalInlineBlock(multilineList(costBreakdownText), "costBreakdownText", editable)}
       <p>Cost does not include any services not named under cost breakdown.</p>
 
       <h3>Project Completion</h3>
@@ -3494,6 +3476,9 @@ function escapeHtml(value) {
 }
 
 function render() {
+  const previousWindowScroll = window.scrollY;
+  const previousPreviewScroll = document.querySelector("[data-proposal-preview-document]")?.scrollTop || 0;
+
   if (state.loading) {
     root.innerHTML = `<main class="signin-shell"><section class="signin-card">${brandLogo("signin")}<p class="helper center-text">Loading ${APP_NAME}...</p></section>${toastHtml()}</main>`;
     return;
@@ -3564,6 +3549,11 @@ function render() {
   root.innerHTML = `${navHtml()}<main>${pageHtml}</main>${toastHtml()}`;
   attachEvents();
   keepActiveNavVisible();
+  window.requestAnimationFrame(() => {
+    window.scrollTo({ top: previousWindowScroll, behavior: "auto" });
+    const preview = document.querySelector("[data-proposal-preview-document]");
+    if (preview) preview.scrollTop = previousPreviewScroll;
+  });
 }
 
 function keepActiveNavVisible() {
@@ -3957,14 +3947,17 @@ function attachEvents() {
     });
 
     signatureDocumentForm.addEventListener("input", (event) => {
-      const editField = event.target?.closest?.("[data-proposal-edit]");
-      if (editField) {
-        const fieldName = editField.dataset.proposalEdit;
+      const inlineField = event.target?.closest?.("[data-proposal-inline-edit]");
+      if (inlineField) {
+        const fieldName = inlineField.dataset.proposalInlineEdit;
+        const value = inlineField.innerText || "";
         const hiddenField = signatureDocumentForm.querySelector(`input[type="hidden"][name="${fieldName}"]`);
-        if (hiddenField) hiddenField.value = editField.value;
-        state.signatureDraft = { ...state.signatureDraft, [fieldName]: editField.value };
-        const previewOutput = signatureDocumentForm.querySelector("[data-proposal-preview-output]");
-        if (previewOutput) previewOutput.innerHTML = renderAgreementTerms(state.signatureDraft);
+        if (hiddenField) hiddenField.value = value;
+        state.signatureDraft = { ...state.signatureDraft, [fieldName]: value };
+        document.querySelectorAll(`[data-proposal-inline-edit="${fieldName}"]`).forEach((element) => {
+          if (element !== inlineField && element.innerText !== value) element.innerText = value;
+        });
+        return;
       }
       signatureDraftFromForm(signatureDocumentForm);
     });

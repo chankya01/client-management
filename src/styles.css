@@ -2466,7 +2466,7 @@ a {
 }
 
 .proposal-chat-input {
-  margin: 0 0 14px;
+  margin: 28px 0 14px;
 }
 
 .proposal-chat-input textarea {
@@ -2528,50 +2528,29 @@ a {
   max-width: none;
 }
 
-.proposal-builder-edit {
-  margin-top: 18px;
-}
-
-.proposal-builder-edit summary {
-  background: #eee6f5;
-  border-radius: 10px;
-  color: #3d1755;
-  cursor: pointer;
-  display: inline-flex;
-  font-weight: 800;
-  padding: 10px 14px;
-}
-
-.proposal-builder-edit summary:hover,
-.proposal-builder-edit summary:focus-visible {
-  background: #e4d5ef;
-}
-
-.proposal-builder-edit > .helper {
-  margin: 12px 0 14px;
-}
-
-.proposal-builder-edit[open] .proposal-edit-grid {
-  background: #f8fafc;
-  border: 1px solid #dfe6ef;
-  border-radius: 12px;
-  padding: 18px;
-}
-
-.proposal-edit-grid {
-  margin: 0;
-}
-
-.proposal-edit-wide {
-  grid-column: 1 / -1;
-}
-
-.proposal-builder-edit textarea {
-  min-height: 110px;
-}
-
 .proposal-builder-preview-document {
   overflow-wrap: anywhere;
+}
+
+.proposal-inline-editable {
+  cursor: text;
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.proposal-inline-editable:hover {
+  background: rgba(238, 230, 245, 0.7);
+}
+
+.proposal-inline-editable:focus {
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(91, 25, 127, 0.18);
+  outline: 0;
+}
+
+.proposal-inline-block {
+  border-radius: 8px;
+  margin: 4px -8px;
+  padding: 4px 8px;
 }
 
 .proposal-recipient-box .signature-recipient-row {
@@ -2709,10 +2688,6 @@ button:disabled {
   .proposal-section {
     min-height: auto;
     padding: 56px 22px;
-  }
-
-  .proposal-edit-wide {
-    grid-column: auto;
   }
 
   .proposal-builder-preview-document {
