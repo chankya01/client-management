@@ -2237,12 +2237,23 @@ function formatAgreementCurrency(value) {
 }
 
 function moneyFromText(value) {
-  const match = String(value || "").match(/\$?\s*([\d,]+)(?:\.\d{2})?/);
-  return match ? formatAgreementCurrency(match[1]) : "";
+  const text = String(value || "");
+  const currencyMatches = [...text.matchAll(/[$£€]\s*([\d,]+(?:\.\d+)?)/g)];
+  if (currencyMatches.length) return formatAgreementCurrency(currencyMatches[currencyMatches.length - 1][1]);
+
+  // A plain amount is valid input too, but WCAG versions and durations are not prices.
+  const numbers = [...text.matchAll(/\b(\d[\d,]*(?:\.\d+)?)\b/g)]
+    .map((match) => ({ value: match[1], index: match.index || 0 }))
+    .filter(({ value, index }) => {
+      const before = text.slice(Math.max(0, index - 10), index);
+      const after = text.slice(index + value.length, index + value.length + 12);
+      return !/^2\.[12]$/.test(value) && !/wcag\s*$/i.test(before) && !/^\s*(?:days?|weeks?|months?|hours?|hrs?|horus)\b/i.test(after);
+    });
+  return numbers.length ? formatAgreementCurrency(numbers[numbers.length - 1].value) : "";
 }
 
 function lastMoneyFromText(value) {
-  const matches = [...String(value || "").matchAll(/\$?\s*([\d,]+)(?:\.\d{2})?/g)];
+  const matches = [...String(value || "").matchAll(/\$?\s*([\d,]+(?:\.\d+)?)/g)];
   return matches.length ? formatAgreementCurrency(matches[matches.length - 1][1]) : "";
 }
 
@@ -2269,8 +2280,8 @@ function parseAgreementNotes(notes, request) {
   const supportLine = lines.find((line) => /technical\s+support|support\s+horus|support\s+hours/i.test(line)) || "";
   const supportHours = supportLine.match(/(\d+)\s*(?:hours?|hrs?|horus)/i)?.[1] || "";
   const supportCost = formatAgreementCurrency(
-    supportLine.match(/(?:total\s+cost|cost|price)\s*:?\s*\$?\s*([\d,]+)/i)?.[1]
-    || supportLine.match(/(\d[\d,]*)\s*$/)?.[1]
+    supportLine.match(/(?:total\s+cost|cost|price)\s*:?\s*\$?\s*([\d,]+(?:\.\d{2})?)/i)?.[1]
+    || moneyFromText(supportLine)
   );
 
   const vpatLine = lines.find((line) => /vpat/i.test(line)) || "";
@@ -2499,6 +2510,43 @@ function proposalHiddenFields(request) {
   return names.map((name) => `<input type="hidden" name="${name}" value="${escapeHtml(agreementDraftValue(name, request))}" />`).join("");
 }
 
+function proposalEditableFields(request) {
+  const editInput = (field, label, type = "text") => `
+    <label class="field">
+      <span>${label}</span>
+      <input name="proposalEdit${field[0].toUpperCase()}${field.slice(1)}" data-proposal-edit="${field}" type="${type}" value="${escapeHtml(agreementDraftValue(field, request))}" />
+    </label>
+  `;
+  const editArea = (field, label, rows) => `
+    <label class="field proposal-edit-wide">
+      <span>${label}</span>
+      <textarea name="proposalEdit${field[0].toUpperCase()}${field.slice(1)}" data-proposal-edit="${field}" rows="${rows}">${escapeHtml(agreementDraftValue(field, request))}</textarea>
+    </label>
+  `;
+  return `
+    <section class="proposal-builder-edit">
+      <div class="proposal-builder-edit-header">
+        <div>
+          <p class="section-label">Edit before sending</p>
+          <p class="helper">Make any final changes here. The preview updates as you type, and the edited values are sent to the client.</p>
+        </div>
+      </div>
+      <div class="form-grid proposal-edit-grid">
+        ${editInput("agreementDate", "Agreement date", "date")}
+        ${editInput("clientLegalName", "Client name")}
+        ${editInput("projectName", "Project / asset name")}
+        ${editInput("wcagStandard", "WCAG standard")}
+        ${editInput("timeline", "Timeline")}
+        ${editInput("totalCost", "Total cost")}
+        ${editArea("servicesText", "Services and prices", 10)}
+        ${editArea("scopeText", "Project scope", 7)}
+        ${editArea("deliverablesText", "Deliverables", 5)}
+        ${editArea("costBreakdownText", "Cost breakdown", 5)}
+      </div>
+    </section>
+  `;
+}
+
 function proposalBuilderPreview(request) {
   const draft = state.signatureDraft || {};
   if (!draft.proposalGenerated) {
@@ -2522,8 +2570,9 @@ function proposalBuilderPreview(request) {
         </div>
         <span class="status-pill success">Ready to send</span>
       </div>
+      ${proposalEditableFields(request)}
       <div class="proposal-builder-preview-document">
-        ${renderAgreementTerms(draft)}
+        <div data-proposal-preview-output>${renderAgreementTerms(draft)}</div>
       </div>
     </section>
   `;
@@ -3866,7 +3915,16 @@ function attachEvents() {
       showToast("Proposal preview generated. Review it before sending.");
     });
 
-    signatureDocumentForm.addEventListener("input", () => {
+    signatureDocumentForm.addEventListener("input", (event) => {
+      const editField = event.target?.closest?.("[data-proposal-edit]");
+      if (editField) {
+        const fieldName = editField.dataset.proposalEdit;
+        const hiddenField = signatureDocumentForm.querySelector(`input[type="hidden"][name="${fieldName}"]`);
+        if (hiddenField) hiddenField.value = editField.value;
+        state.signatureDraft = { ...state.signatureDraft, [fieldName]: editField.value };
+        const previewOutput = signatureDocumentForm.querySelector("[data-proposal-preview-output]");
+        if (previewOutput) previewOutput.innerHTML = renderAgreementTerms(state.signatureDraft);
+      }
       signatureDraftFromForm(signatureDocumentForm);
     });
     signatureDocumentForm.addEventListener("change", (event) => {

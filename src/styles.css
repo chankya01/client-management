@@ -2014,13 +2014,13 @@ a {
   max-width: none;
   min-height: 100vh;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   position: relative;
 }
 
 .proposal-section {
   border-bottom: 1px solid #edf0f2;
-  min-height: auto;
+  min-height: 100vh;
   padding: clamp(56px, 6vw, 86px) clamp(32px, 6vw, 96px);
   position: relative;
 }
@@ -2296,42 +2296,23 @@ a {
 }
 
 .proposal-terms-section {
-  overflow: hidden;
+  overflow: visible;
   padding-bottom: 90px;
 }
 
 .proposal-terms-section::before {
-  background: linear-gradient(135deg, #5949ff 0%, #21b5f2 100%);
-  border-radius: 0 0 120px 0;
-  content: "";
-  height: 170px;
-  left: -48px;
-  opacity: 0.95;
-  position: absolute;
-  top: -70px;
-  transform: rotate(15deg);
-  width: 230px;
-  z-index: 0;
+  display: none;
 }
 
 .proposal-terms-section::after {
-  background: linear-gradient(135deg, #21b5f2 0%, #5949ff 100%);
-  border-radius: 999px;
-  content: "";
-  height: 88px;
-  left: clamp(130px, 13vw, 230px);
-  opacity: 0.95;
-  position: absolute;
-  top: 135px;
-  width: 88px;
-  z-index: 0;
+  display: none;
 }
 
 .proposal-terms-section > h2 {
-  font-size: clamp(34px, 4.2vw, 58px);
+  font-size: clamp(30px, 3.4vw, 48px);
   letter-spacing: -0.045em;
   line-height: 1.05;
-  margin-bottom: clamp(70px, 10vw, 140px);
+  margin-bottom: clamp(38px, 5vw, 64px);
   margin-left: auto;
   margin-right: auto;
   max-width: 860px;
@@ -2540,6 +2521,38 @@ a {
   max-width: none;
 }
 
+.proposal-builder-edit {
+  background: #f8fafc;
+  border: 1px solid #dfe6ef;
+  border-radius: 14px;
+  margin-top: 22px;
+  padding: 20px;
+}
+
+.proposal-builder-edit-header {
+  margin-bottom: 14px;
+}
+
+.proposal-builder-edit-header .helper {
+  margin: 3px 0 0;
+}
+
+.proposal-edit-grid {
+  margin: 0;
+}
+
+.proposal-edit-wide {
+  grid-column: 1 / -1;
+}
+
+.proposal-builder-edit textarea {
+  min-height: 110px;
+}
+
+.proposal-builder-preview-document {
+  overflow-wrap: anywhere;
+}
+
 .proposal-recipient-box .signature-recipient-row {
   margin-top: 14px;
 }
@@ -2675,6 +2688,10 @@ button:disabled {
   .proposal-section {
     min-height: auto;
     padding: 56px 22px;
+  }
+
+  .proposal-edit-wide {
+    grid-column: auto;
   }
 
   .proposal-section h1 {
