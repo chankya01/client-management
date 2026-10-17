@@ -2106,11 +2106,32 @@ function signatureEventRows(document) {
     <div class="signature-event-row">
       <span>
         <strong>${escapeHtml(signatureStatusLabel(event.event_type))}</strong>
-        <small>${escapeHtml(event.event_note || "")}</small>
+        <small>${escapeHtml(signatureEventNote(event.event_note))}</small>
       </span>
       <time>${formatTime(event.created_at)}</time>
     </div>
   `).join("") || `<p class="helper">No activity yet.</p>`;
+}
+
+function signatureEventNote(note) {
+  const raw = String(note || "");
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed?.message || raw;
+  } catch {
+    return raw;
+  }
+}
+
+function signedSignatureDetails(payload) {
+  const signedEvent = [...(payload?.events || [])].reverse().find((event) => event.event_type === "signed");
+  if (!signedEvent?.event_note) return null;
+  try {
+    const parsed = JSON.parse(signedEvent.event_note);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 function proposalApprovalLabel(document) {
@@ -2142,7 +2163,7 @@ function proposalViewerModal() {
       <section class="proposal-viewer-modal" role="dialog" aria-modal="true" aria-labelledby="proposal-viewer-title">
         <header class="proposal-viewer-header">
           <div>
-            <p class="section-label">${isDraft ? "Generated proposal" : "Sent proposal"}</p>
+            <p class="section-label">${isDraft ? "Generated proposal" : proposalDocument?.proposal_approved ? "Agreement" : "Sent proposal"}</p>
             <h2 id="proposal-viewer-title">${escapeHtml(title)}</h2>
             ${proposalDocument ? `<p class="helper">${escapeHtml(proposalApprovalLabel(proposalDocument))}</p>` : ""}
           </div>
@@ -2190,16 +2211,14 @@ function signatureDocumentCard(document) {
   `;
 }
 
-function sentProposalFileRow(document, selectedDocumentId) {
+function sentProposalFileRow(document) {
   const request = state.requests.find((item) => item.id === document.request_id);
-  const isSelected = selectedDocumentId === document.id;
   const lastModified = document.updated_at || document.sent_at || document.created_at;
   return `
     <button
-      class="sent-proposal-file-row ${isSelected ? "active" : ""}"
+      class="sent-proposal-file-row"
       type="button"
-      aria-expanded="${isSelected ? "true" : "false"}"
-      data-select-sent-proposal="${document.id}"
+      data-open-proposal-view="${document.id}"
     >
       <span class="sent-proposal-file-name">
         <strong>${escapeHtml(document.title || "Accessibility Services Proposal")}</strong>
@@ -2208,31 +2227,28 @@ function sentProposalFileRow(document, selectedDocumentId) {
       </span>
       <span class="sent-proposal-file-meta">
         <span class="status-pill">${escapeHtml(proposalApprovalLabel(document))}</span>
-        <span class="sent-proposal-file-chevron" aria-hidden="true">${isSelected ? "⌃" : "⌄"}</span>
+        <span class="sent-proposal-file-view">${document.proposal_approved ? "View agreement" : "View proposal"}</span>
       </span>
     </button>
   `;
 }
 
 function sentProposalsCard(documents) {
-  const selectedDocument = documents.find((document) => document.id === state.selectedSignatureDocumentId) || documents[0] || null;
   return `
     <section class="card sent-proposals-card">
       <div class="section-heading-row">
         <p class="section-label sent-proposals-title">Sent Proposals</p>
       </div>
-      <p class="helper">Select a proposal file name to view its recipients, approval status, and activity.</p>
+      <p class="helper">Select a proposal file name to open the full proposal screen.</p>
       <div class="sent-proposals-dropdown" role="list">
-        ${documents.map((document) => sentProposalFileRow(document, selectedDocument?.id)).join("") || `<p class="helper">No proposals have been sent yet.</p>`}
+        ${documents.map((document) => sentProposalFileRow(document)).join("") || `<p class="helper">No proposals have been sent yet.</p>`}
       </div>
-      ${selectedDocument ? `<div class="sent-proposal-detail">${signatureDocumentCard(selectedDocument)}</div>` : ""}
     </section>
   `;
 }
 
 function requestSignatureDocumentsCard(request) {
   const documents = documentsForRequest(request?.id);
-  const selectedDocument = documents.find((document) => document.id === state.selectedSignatureDocumentId);
   return `
     <section class="card request-documents-card">
       <div class="section-heading-row">
@@ -2240,19 +2256,18 @@ function requestSignatureDocumentsCard(request) {
       </div>
       <div class="request-documents-scroll">
         ${documents.map((document) => `
-          <button class="signature-document-row ${selectedDocument?.id === document.id ? "active" : ""}" type="button" data-select-signature-document="${document.id}">
+          <button class="signature-document-row" type="button" data-open-proposal-view="${document.id}">
             <span>
               <strong>${escapeHtml(document.title || "Agreement")}</strong>
               <small>Proposal · ${escapeHtml(proposalApprovalLabel(document))}</small>
             </span>
             <span class="signature-document-row-actions">
               <span class="status-pill">${escapeHtml(signatureStatusLabel(document.status))}</span>
-              ${selectedDocument?.id === document.id ? `<span class="collapse-document-detail" aria-hidden="true">⌃</span>` : ""}
+              <span class="signature-document-row-view">${document.proposal_approved ? "View agreement" : "View proposal"}</span>
             </span>
           </button>
         `).join("") || `<p class="helper">No proposals have been sent for this request yet.</p>`}
       </div>
-      ${selectedDocument ? signatureDocumentCard(selectedDocument) : documents.length ? `<p class="helper">Select an agreement to view recipients, links, and activity.</p>` : ""}
     </section>
   `;
 }
@@ -2570,6 +2585,7 @@ function signatureRecipientInputs(request) {
           <option value="viewer" ${recipient.role === "viewer" ? "selected" : ""}>Viewer</option>
         </select>
       </label>
+      <button class="link-button recipient-remove-button" type="button" data-remove-signature-recipient>Remove Recipient</button>
     </div>
   `).join("");
 }
@@ -2753,7 +2769,7 @@ function signatureDocumentsPage() {
           ${proposalBuilderChat(selectedRequest)}
           ${proposalBuilderPreview(selectedRequest)}
           <section class="proposal-recipient-box">
-            <p class="section-label">Send to</p>
+            <p class="section-label send-to-title">Send to</p>
             <p class="helper">The client contact below will receive a private proposal link.</p>
             <div data-signature-recipient-list>${signatureRecipientInputs(selectedRequest)}</div>
           </section>
@@ -3281,6 +3297,7 @@ function renderPublicSignature() {
   const recipientName = payload.recipient?.name || payload.recipient?.email || "recipient";
   const agreementTitle = agreement.title || payload.document?.title || "Proposal";
   const agreementDetails = parseAgreementDetailsFromSnapshot(agreement, payload);
+  const signedDetails = signedSignatureDetails(payload);
   const proposalPages = ["services", "training", "about", "terms"];
   const activeProposalPage = proposalPages.includes(state.publicProposalPage) ? state.publicProposalPage : "services";
   state.publicProposalPage = activeProposalPage;
@@ -3296,7 +3313,7 @@ function renderPublicSignature() {
           ${proposalNavButton("services", "Services")}
           ${proposalNavButton("training", "Training")}
           ${proposalNavButton("about", "About")}
-          ${proposalNavButton("terms", "Terms")}
+          ${proposalNavButton("terms", proposalApproved ? "Agreement" : "Terms")}
         </nav>
       </aside>
 
@@ -3517,8 +3534,18 @@ function renderPublicSignature() {
                 <p class="helper">This agreement is view-only. No signature is required from you.</p>
               </section>
             ` : alreadySigned ? `
-              <section class="proposal-sign-panel">
-                <p class="helper">This agreement has already been signed by you.</p>
+              <section class="proposal-sign-panel proposal-signed-panel">
+                <div class="signed-agreement-summary">
+                  <strong>Agreement signed</strong>
+                  <div class="signature-field-grid">
+                    <p><span>Signature</span><strong>${escapeHtml(signedDetails?.typedSignature || (signedDetails?.signatureImage ? "Drawn signature" : "-"))}</strong></p>
+                    <p><span>Name</span><strong>${escapeHtml(signedDetails?.signerName || recipientName)}</strong></p>
+                    <p><span>Title</span><strong>${escapeHtml(signedDetails?.signerTitle || "-")}</strong></p>
+                    <p><span>Date</span><strong>${escapeHtml(signedDetails?.signatureDate || payload.recipient?.signed_at || "-")}</strong></p>
+                  </div>
+                  ${signedDetails?.signatureImage ? `<img class="signed-signature-image" src="${escapeHtml(signedDetails.signatureImage)}" alt="Drawn signature" />` : ""}
+                  <button class="secondary" type="button" data-download-signed-pdf>Print / Download signed PDF</button>
+                </div>
               </section>
             ` : !proposalApproved ? `
               <section class="proposal-sign-panel proposal-sign-locked">
@@ -3531,15 +3558,25 @@ function renderPublicSignature() {
               </section>
             ` : `
               <form class="proposal-sign-panel" id="publicSignatureForm">
-                <p>I, ${escapeHtml(recipientName)}, agree to the terms of this agreement and I agree that my typed name below can be used as a digital representation of my signature.</p>
-                <div class="proposal-sign-tabs">
-                  <span>▣ Sign by typing</span>
-                  <span>✎ Sign by drawing</span>
+                <p>I, ${escapeHtml(recipientName)}, agree to the terms of this agreement and consent to use the signature below as my digital signature.</p>
+                <div class="proposal-sign-tabs" role="tablist" aria-label="Signature method">
+                  <button type="button" class="active" data-signature-mode-button="typing">▣ Sign by typing</button>
+                  <button type="button" data-signature-mode-button="drawing">✎ Sign by drawing</button>
                 </div>
-                <label class="field"><span>To accept and sign, type your name below</span><input name="typedSignature" required autocomplete="off" /></label>
-                <input name="signerName" type="hidden" value="${escapeHtml(recipientName)}" />
-                <input name="signerTitle" type="hidden" value="Accepted" />
-                <input name="signatureDate" type="hidden" value="${new Date().toISOString().slice(0, 10)}" />
+                <div data-signature-mode="typing">
+                  <label class="field"><span>Signature</span><input name="typedSignature" autocomplete="off" /></label>
+                </div>
+                <div class="signature-drawing-panel" data-signature-mode="drawing" hidden>
+                  <span class="field-label">Draw your signature</span>
+                  <canvas class="signature-canvas" data-signature-canvas width="720" height="220" aria-label="Draw your signature"></canvas>
+                  <input name="signatureImage" type="hidden" />
+                  <button class="link-button" type="button" data-clear-signature>Clear drawing</button>
+                </div>
+                <div class="signature-field-grid">
+                  <label class="field"><span>Name</span><input name="signerName" value="${escapeHtml(recipientName)}" required autocomplete="name" /></label>
+                  <label class="field"><span>Title</span><input name="signerTitle" required autocomplete="organization-title" /></label>
+                  <label class="field"><span>Date</span><input name="signatureDate" type="date" value="${new Date().toISOString().slice(0, 10)}" required /></label>
+                </div>
                 <button class="primary" type="submit">Accept and sign</button>
               </form>
             `}
@@ -3678,7 +3715,74 @@ function attachPublicSignatureEvents() {
     });
   }
 
+  document.querySelector("[data-download-signed-pdf]")?.addEventListener("click", () => {
+    window.print();
+  });
+
   if (!form) return;
+
+  const signatureModeButtons = form.querySelectorAll("[data-signature-mode-button]");
+  const signatureModePanels = form.querySelectorAll("[data-signature-mode]");
+  signatureModeButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const mode = button.dataset.signatureModeButton;
+      signatureModeButtons.forEach((item) => item.classList.toggle("active", item === button));
+      signatureModePanels.forEach((panel) => {
+        panel.hidden = panel.dataset.signatureMode !== mode;
+      });
+      const typedInput = form.querySelector("[name='typedSignature']");
+      if (typedInput) typedInput.required = mode === "typing";
+    });
+  });
+
+  const canvas = form.querySelector("[data-signature-canvas]");
+  const signatureImageInput = form.querySelector("[name='signatureImage']");
+  if (canvas && signatureImageInput) {
+    const context = canvas.getContext("2d");
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    context.lineWidth = 3;
+    context.strokeStyle = "#171b22";
+    let drawing = false;
+    let hasDrawing = false;
+    const pointFromEvent = (event) => {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: (event.clientX - rect.left) * (canvas.width / rect.width),
+        y: (event.clientY - rect.top) * (canvas.height / rect.height)
+      };
+    };
+    canvas.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      drawing = true;
+      hasDrawing = true;
+      canvas.setPointerCapture(event.pointerId);
+      const point = pointFromEvent(event);
+      context.beginPath();
+      context.moveTo(point.x, point.y);
+    });
+    canvas.addEventListener("pointermove", (event) => {
+      if (!drawing) return;
+      event.preventDefault();
+      const point = pointFromEvent(event);
+      context.lineTo(point.x, point.y);
+      context.stroke();
+    });
+    const finishDrawing = () => {
+      if (!drawing) return;
+      drawing = false;
+      signatureImageInput.value = hasDrawing ? canvas.toDataURL("image/png") : "";
+    };
+    canvas.addEventListener("pointerup", finishDrawing);
+    canvas.addEventListener("pointercancel", finishDrawing);
+    canvas.addEventListener("pointerleave", finishDrawing);
+    form.querySelector("[data-clear-signature]")?.addEventListener("click", () => {
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      hasDrawing = false;
+      signatureImageInput.value = "";
+    });
+  }
+
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const values = Object.fromEntries(new FormData(event.currentTarget));
@@ -3686,6 +3790,7 @@ function attachPublicSignatureEvents() {
       try {
         await signSignatureRecipient(state.publicSignatureToken, {
           typedSignature: values.typedSignature,
+          signatureImage: values.signatureImage,
           signerName: values.signerName,
           signerTitle: values.signerTitle,
           signatureDate: values.signatureDate
@@ -4020,9 +4125,19 @@ function attachEvents() {
             <option value="viewer">Viewer</option>
           </select>
         </label>
+        <button class="link-button recipient-remove-button" type="button" data-remove-signature-recipient>Remove Recipient</button>
       `;
       list.appendChild(row);
       signatureDraftFromForm(form);
+    });
+  });
+
+  document.querySelectorAll("[data-remove-signature-recipient]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const form = button.closest("form");
+      const row = button.closest(".signature-recipient-row");
+      row?.remove();
+      if (form) signatureDraftFromForm(form);
     });
   });
 

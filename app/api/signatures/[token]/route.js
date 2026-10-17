@@ -161,6 +161,7 @@ async function requireMatchingPortalSessionIfNeeded(request, recipient) {
 function cleanSignatureFields(body) {
   return {
     typedSignature: String(body.typedSignature || "").trim(),
+    signatureImage: String(body.signatureImage || "").trim(),
     signerName: String(body.signerName || "").trim(),
     signerTitle: String(body.signerTitle || "").trim(),
     signatureDate: String(body.signatureDate || "").trim()
@@ -168,11 +169,11 @@ function cleanSignatureFields(body) {
 }
 
 function validateSignatureFields(signatureFields) {
-  if (!signatureFields.typedSignature) return "Enter your signature.";
+  if (!signatureFields.typedSignature && !signatureFields.signatureImage) return "Enter or draw your signature.";
   if (!signatureFields.signerName) return "Enter your name.";
   if (!signatureFields.signerTitle) return "Enter your title.";
   if (!signatureFields.signatureDate) return "Enter the signing date.";
-  if (signatureFields.typedSignature.length < 2) return "Signature is too short.";
+  if (signatureFields.typedSignature && signatureFields.typedSignature.length < 2) return "Signature is too short.";
   if (signatureFields.signerName.length < 2) return "Name is too short.";
   return "";
 }
@@ -241,7 +242,7 @@ export async function POST(request, { params }) {
       body: JSON.stringify({
         status: "signed",
         signed_at: now,
-        typed_signature: signatureFields.typedSignature,
+        typed_signature: signatureFields.typedSignature || "Drawn signature",
         signed_ip: ipAddress,
         signed_user_agent: request.headers.get("user-agent") || null
       })
@@ -253,7 +254,10 @@ export async function POST(request, { params }) {
         document_id: payload.document.id,
         recipient_id: payload.recipient.id,
         event_type: "signed",
-        event_note: `${signatureFields.signerName} accepted and signed the agreement as ${signatureFields.signerTitle}.`
+        event_note: JSON.stringify({
+          message: `${signatureFields.signerName} accepted and signed the agreement as ${signatureFields.signerTitle}.`,
+          ...signatureFields
+        })
       })
     });
 
@@ -272,6 +276,13 @@ export async function POST(request, { params }) {
     });
 
     if (allSigned) {
+      await supabaseAdminFetch(tablePath("requests", `?id=eq.${encodeValue(payload.document.request_id)}`), {
+        method: "PATCH",
+        body: JSON.stringify({ status: "agreement", updated_at: now })
+      });
+    }
+
+    if (allSigned) {
       await supabaseAdminFetch(tablePath("signature_events"), {
         method: "POST",
         body: JSON.stringify({
@@ -284,14 +295,15 @@ export async function POST(request, { params }) {
 
     if (payload.document.uploaded_by) {
       try {
+        const signerProfile = await profileForRecipientEmail(payload.recipient.email);
         await supabaseAdminFetch(tablePath("request_messages"), {
           method: "POST",
           body: JSON.stringify({
             request_id: payload.document.request_id,
-            sender_id: payload.document.uploaded_by,
+            sender_id: signerProfile?.id || payload.document.uploaded_by,
             message: allSigned
-              ? `Proposal completed: ${payload.document.title || "Accessibility Services Proposal"}`
-              : `Proposal signed by ${payload.recipient.name || payload.recipient.email}: ${payload.document.title || "Accessibility Services Proposal"}`,
+              ? `Agreement signed by ${payload.recipient.name || payload.recipient.email}: ${payload.document.title || "Accessibility Services Proposal"}. The signed agreement is ready to download.`
+              : `Agreement signed by ${payload.recipient.name || payload.recipient.email}: ${payload.document.title || "Accessibility Services Proposal"}`,
             is_internal: false
           })
         });

@@ -254,12 +254,16 @@ export async function POST(request) {
 
     let messageResult = { created: false };
     try {
+      const proposalLinks = (recipientRows || [])
+        .filter((recipient) => recipient.signing_token)
+        .map((recipient) => `${recipient.name || recipient.email}: ${origin}/sign/${recipient.signing_token}`)
+        .join("\n");
       await supabaseAdminFetch(tablePath("request_messages"), {
         method: "POST",
         body: JSON.stringify({
           request_id: requestId,
           sender_id: profile.id,
-          message: `${requiresSignature ? "Proposal sent for review" : "Proposal shared"}: ${document.title || "Accessibility Services Proposal"}. Recipients received their private link by email.`,
+          message: `${requiresSignature ? "Proposal sent for review" : "Proposal shared"}: ${document.title || "Accessibility Services Proposal"}.\n${proposalLinks ? `Open proposal:\n${proposalLinks}` : "Recipients received their private link by email."}`,
           is_internal: false
         })
       });

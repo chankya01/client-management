@@ -1602,6 +1602,15 @@ export async function createSignatureDocument({
       })
     };
     demoSignatureDocuments.unshift(document);
+    demoMessages.push({
+      id: crypto.randomUUID(),
+      request_id: request.id,
+      sender_id: profile.id,
+      message: `${requiresSignature ? "Proposal sent for review" : "Proposal shared"}: ${document.title}.\nOpen proposal: ${document.recipients[0]?.signing_url || ""}`,
+      is_internal: false,
+      created_at: new Date().toISOString(),
+      profiles: { full_name: profile.full_name, role: profile.role }
+    });
     return document;
   }
 
@@ -1658,6 +1667,26 @@ export async function signSignatureRecipient(token, signatureFields) {
       return { approved: true };
     }
     if (!demoProposalApprovals.has(token)) throw new Error("Approve the proposal before signing.");
+    const signedDocument = demoSignatureDocuments.find((document) => (
+      (document.recipients || []).some((recipient) => recipient.signing_token === token)
+    ));
+    const signedRecipient = signedDocument?.recipients?.find((recipient) => recipient.signing_token === token);
+    if (signedRecipient) signedRecipient.status = "signed";
+    if (signedDocument) {
+      signedDocument.status = "completed";
+      signedDocument.completed_at = new Date().toISOString();
+      const request = demoRequests.find((item) => item.id === signedDocument.request_id);
+      if (request) request.status = "agreement";
+      demoMessages.push({
+        id: crypto.randomUUID(),
+        request_id: signedDocument.request_id,
+        sender_id: demoIds.userId,
+        message: `Agreement signed by ${signedRecipient?.name || "client"}: ${signedDocument.title}. The signed agreement is ready to download.`,
+        is_internal: false,
+        created_at: new Date().toISOString(),
+        profiles: { full_name: signedRecipient?.name || "Client", role: "client" }
+      });
+    }
     return { signed: true, completed: true };
   }
   const body = typeof signatureFields === "string"

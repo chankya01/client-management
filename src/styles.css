@@ -1823,10 +1823,15 @@ a {
 
 .signature-recipient-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(160px, 220px);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(160px, 220px) auto;
   gap: 16px;
   align-items: end;
   margin-bottom: 16px;
+}
+
+.recipient-remove-button {
+  margin-bottom: 10px;
+  white-space: nowrap;
 }
 
 .signature-form-actions {
@@ -1882,6 +1887,13 @@ a {
   align-items: center;
   display: inline-flex;
   gap: 10px;
+}
+
+.signature-document-row-view,
+.sent-proposal-file-view {
+  color: var(--green);
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .signature-document-item {
@@ -2062,9 +2074,11 @@ a {
 
 .proposal-service-summary,
 .proposal-service-details article {
-  border-top: 1px solid #b7c3d2;
+  background: #f1f4f5;
+  border: 1px solid #d3dde3;
+  border-radius: 14px;
   max-width: 860px;
-  padding-top: 24px;
+  padding: 24px 26px;
 }
 
 .proposal-service-summary {
@@ -2179,6 +2193,14 @@ a {
 .proposal-training-content p,
 .proposal-terms-content p {
   margin: 0 0 16px;
+}
+
+.proposal-about-content > p,
+.proposal-training-content > p {
+  background: #f5f7f8;
+  border: 1px solid #dfe6ef;
+  border-radius: 12px;
+  padding: 18px 22px;
 }
 
 .proposal-about-content ul,
@@ -2353,10 +2375,79 @@ a {
   text-transform: uppercase;
 }
 
-.proposal-sign-tabs span:first-child {
+.proposal-sign-tabs button {
+  background: transparent;
+  border: 0;
+  color: #858b94;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  padding: 0 0 12px;
+  text-transform: uppercase;
+}
+
+.proposal-sign-tabs button.active,
+.proposal-sign-tabs button:hover,
+.proposal-sign-tabs button:focus-visible {
+  color: var(--ink);
+}
+
+.proposal-sign-tabs button.active {
   border-bottom: 4px solid #1d1d1d;
   margin-bottom: -16px;
-  padding-bottom: 12px;
+}
+
+.signature-drawing-panel {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.field-label {
+  font-weight: 800;
+}
+
+.signature-canvas {
+  background: #fff;
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  cursor: crosshair;
+  display: block;
+  max-width: 100%;
+  min-height: 150px;
+  touch-action: none;
+  width: 100%;
+}
+
+.signed-agreement-summary {
+  display: grid;
+  gap: 18px;
+}
+
+.signed-agreement-summary > strong {
+  font-size: 1.2rem;
+}
+
+.signed-agreement-summary .signature-field-grid p {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.signed-agreement-summary .signature-field-grid span {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.signed-signature-image {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  max-height: 120px;
+  max-width: 320px;
+  object-fit: contain;
 }
 
 .agreement-textarea {
@@ -2740,6 +2831,10 @@ button:disabled {
   font-size: 18px;
 }
 
+.send-to-title {
+  font-size: 18px;
+}
+
 .sent-proposals-dropdown {
   display: grid;
   gap: 8px;
@@ -2811,6 +2906,11 @@ button:disabled {
 @media (max-width: 900px) {
   .signature-recipient-row {
     grid-template-columns: 1fr;
+  }
+
+  .recipient-remove-button {
+    justify-self: start;
+    margin-bottom: 0;
   }
 
   .signature-form-actions {
@@ -2935,11 +3035,47 @@ button:disabled {
     gap: 12px;
   }
 
+  .proposal-sign-tabs button.active {
+    margin-bottom: 0;
+  }
+
   .proposal-service-columns {
     grid-template-columns: 1fr;
   }
 
   .signature-field-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media print {
+  .proposal-sidebar,
+  .proposal-sign-panel:not(.proposal-signed-panel),
+  .proposal-recipient-list,
+  .proposal-authorized-row,
+  .proposal-signature-area .status-pill {
+    display: none !important;
+  }
+
+  .proposal-site,
+  .proposal-document,
+  .proposal-section,
+  .proposal-terms-section {
+    background: #fff !important;
+    display: block !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+  }
+
+  .proposal-document {
+    width: 100%;
+  }
+
+  .proposal-section:not(.proposal-terms-section) {
+    display: none !important;
+  }
+
+  .proposal-terms-section > h2 {
+    text-align: left;
   }
 }
