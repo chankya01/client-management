@@ -2289,7 +2289,6 @@ a {
   margin: 0 0 16px;
 }
 
-.proposal-about-content > p,
 .proposal-training-content > p {
   background: #f5f7f8;
   border: 1px solid #dfe6ef;
@@ -2297,7 +2296,6 @@ a {
   padding: 18px 22px;
 }
 
-.proposal-about-content ul,
 .proposal-training-content ul {
   background: #f5f7f8;
   border: 1px solid #dfe6ef;
@@ -2825,6 +2823,27 @@ a {
 
 .proposal-builder-preview-document .proposal-terms-content {
   max-width: none;
+}
+
+/* Agreement content in the admin preview is a document, not a card stack. */
+.proposal-builder-preview-document .proposal-terms-content .proposal-inline-block,
+.proposal-builder-preview-document .proposal-terms-content .agreement-bullet-box,
+.proposal-viewer-document .proposal-terms-content .agreement-bullet-box {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  margin: 0 0 16px;
+  padding: 0;
+}
+
+.proposal-builder-preview-document .proposal-terms-content ul,
+.proposal-viewer-document .proposal-terms-content .agreement-bullet-box ul {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  margin: 0 0 16px;
+  padding-left: 22px;
 }
 
 .proposal-viewer-backdrop {
