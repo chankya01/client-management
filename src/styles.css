@@ -2144,6 +2144,12 @@ a {
   overflow: hidden;
 }
 
+.proposal-section#services .proposal-service-hero {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
 .proposal-service-hero > div,
 .proposal-training-hero > div,
 .proposal-about-hero > div {
@@ -2197,6 +2203,13 @@ a {
   border-radius: 14px;
   max-width: 860px;
   padding: 24px 26px;
+}
+
+.proposal-section#services .proposal-service-details article {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
 }
 
 .proposal-service-summary {
