@@ -3031,7 +3031,7 @@ function agreementServiceBlockHtml(value) {
     if (/^price\s*:/i.test(line)) {
       html.push(`<p>${escapeHtml(line)}</p>`);
     } else {
-      html.push(`<h4>${escapeHtml(line)}</h4>`);
+      html.push(`<h4 class="agreement-service-title">${escapeHtml(line)}</h4>`);
     }
   });
 

@@ -2252,7 +2252,18 @@ a {
 
 .proposal-service-details article h2 {
   font-size: 20px;
-  margin-bottom: 12px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  margin: 0 0 12px;
+}
+
+.proposal-terms-content .agreement-service-title {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+  margin: 18px 0 8px;
 }
 
 .proposal-copy-shell {
