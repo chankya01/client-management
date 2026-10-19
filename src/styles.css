@@ -2285,12 +2285,13 @@ a {
 }
 
 .proposal-terms-content {
+  color: #000;
   counter-reset: agreement-section;
   font-size: 1.04rem;
 }
 
 .proposal-terms-content .agreement-intro {
-  color: #4f545b;
+  color: #000;
   font-size: 1.12rem;
   line-height: 1.75;
   margin: 0 0 42px;
@@ -2307,7 +2308,7 @@ a {
 
 .proposal-terms-content h3 {
   border-top: 1px solid #b7c3d2;
-  color: #111;
+  color: #000;
   counter-increment: agreement-section;
   font-size: 24px;
   letter-spacing: -0.025em;
@@ -2317,13 +2318,13 @@ a {
 }
 
 .proposal-terms-content h3::before {
-  color: #111;
+  color: #000;
   content: counter(agreement-section) ". ";
   font-weight: 800;
 }
 
 .proposal-terms-content h4 {
-  color: #111;
+  color: #000;
   font-size: 16px;
   font-weight: 700;
   line-height: 1.35;
@@ -2598,7 +2599,7 @@ a {
 }
 
 .proposal-authorized-row {
-  color: #4f545b;
+  color: #000;
   font-size: 1.15rem;
   margin: 42px 0 0;
   max-width: 820px;
@@ -2690,7 +2691,7 @@ a {
 }
 
 .signed-agreement-summary .signature-field-grid span {
-  color: var(--muted);
+  color: #000;
   font-size: 0.85rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -3046,7 +3047,7 @@ button:disabled {
 }
 
 .agreement-body {
-  color: var(--ink);
+  color: #000;
   background: transparent;
   border: 0;
   border-top: 2px solid var(--line);
@@ -3059,7 +3060,7 @@ button:disabled {
 }
 
 .agreement-body h3 {
-  color: var(--ink);
+  color: #000;
   font-size: 1.25rem;
   margin: 28px 0 10px;
 }
