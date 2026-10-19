@@ -2100,46 +2100,15 @@ a {
   text-align: center;
 }
 
-.proposal-section#services .proposal-service-lede {
+.proposal-section#services .proposal-service-lede,
+.proposal-section#services .proposal-service-hero,
+.proposal-section#services .proposal-service-details article,
+.proposal-section#training .proposal-training-content,
+.proposal-section#training .proposal-training-hero,
+.proposal-section#about .proposal-about-content,
+.proposal-section#about .proposal-about-hero {
   margin-left: auto;
   margin-right: auto;
-  text-align: center;
-}
-
-.proposal-section#services .proposal-service-hero > div,
-.proposal-section#services .proposal-service-details article {
-  text-align: center;
-}
-
-.proposal-section#services .proposal-service-hero p,
-.proposal-section#services .proposal-service-details article p {
-  margin-left: auto;
-  margin-right: auto;
-}
-
-.proposal-section#services .proposal-service-details article {
-  margin-left: auto;
-  margin-right: auto;
-  width: 100%;
-}
-
-.proposal-section#training .proposal-training-hero > div,
-.proposal-section#training .proposal-training-content > h3,
-.proposal-section#training .proposal-training-content > p,
-.proposal-section#about .proposal-about-hero > div,
-.proposal-section#about .proposal-about-content > h3,
-.proposal-section#about .proposal-about-content > p {
-  text-align: center;
-}
-
-.proposal-section#training .proposal-training-content > p,
-.proposal-section#about .proposal-about-content > p {
-  margin-left: auto;
-  margin-right: auto;
-}
-
-.proposal-section#training .proposal-video-card > div {
-  text-align: center;
 }
 
 .proposal-service-lede {
