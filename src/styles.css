@@ -2144,12 +2144,6 @@ a {
   overflow: hidden;
 }
 
-.proposal-section#services .proposal-service-hero {
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-}
-
 .proposal-service-hero > div,
 .proposal-training-hero > div,
 .proposal-about-hero > div {
