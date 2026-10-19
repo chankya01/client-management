@@ -2321,12 +2321,33 @@ a {
   padding: 18px 22px;
 }
 
-.proposal-training-content ul {
+.proposal-training-content > ul {
   background: #f5f7f8;
   border: 1px solid #dfe6ef;
   border-radius: 12px;
   margin: 0 0 16px;
   padding: 18px 22px 18px 44px;
+}
+
+.proposal-training-block {
+  background: #f5f7f8;
+  border: 1px solid #dfe6ef;
+  border-radius: 12px;
+  margin: 0 0 16px;
+  padding: 18px 22px;
+}
+
+.proposal-training-block p {
+  margin: 0 0 16px;
+}
+
+.proposal-training-block p:last-child {
+  margin-bottom: 0;
+}
+
+.proposal-training-block ul {
+  margin: 0 0 16px;
+  padding-left: 22px;
 }
 
 .proposal-terms-content ul {
@@ -3251,6 +3272,12 @@ button:disabled {
   .proposal-about-hero img {
     max-height: 260px;
     min-height: 0;
+  }
+
+  .proposal-service-hero img {
+    height: auto;
+    max-height: 320px;
+    object-fit: contain;
   }
 
   .proposal-terms-content .agreement-intro {
