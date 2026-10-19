@@ -3403,7 +3403,24 @@ button:disabled {
   }
 }
 
+@page {
+  size: A4 portrait;
+  margin: 16mm 14mm;
+}
+
 @media print {
+  html,
+  body {
+    background: #fff !important;
+    margin: 0 !important;
+    width: auto !important;
+  }
+
+  body {
+    color: #111 !important;
+    font-size: 11pt;
+  }
+
   .proposal-sidebar,
   .proposal-sign-panel:not(.proposal-signed-panel),
   .proposal-recipient-list,
@@ -3428,12 +3445,20 @@ button:disabled {
   .proposal-terms-section {
     background: #fff !important;
     display: block !important;
+    max-width: none !important;
     min-height: 0 !important;
+    min-width: 0 !important;
+    overflow: visible !important;
     padding: 0 !important;
+    width: auto !important;
+  }
+
+  .proposal-site {
+    margin: 0 !important;
   }
 
   .proposal-document {
-    width: 100%;
+    margin: 0 !important;
   }
 
   .proposal-section:not(.proposal-terms-section) {
@@ -3441,6 +3466,40 @@ button:disabled {
   }
 
   .proposal-terms-section > h2 {
+    font-size: 24pt !important;
+    letter-spacing: -0.03em !important;
+    line-height: 1.1 !important;
+    margin: 0 0 20pt !important;
+    max-width: none !important;
+    overflow-wrap: anywhere !important;
     text-align: left;
+  }
+
+  .proposal-terms-content,
+  .proposal-authorized-row,
+  .proposal-signature-area {
+    font-size: 11pt !important;
+    line-height: 1.5 !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    max-width: none !important;
+    width: auto !important;
+  }
+
+  .proposal-terms-content .agreement-intro {
+    font-size: 12pt !important;
+    line-height: 1.55 !important;
+    margin-bottom: 24pt !important;
+  }
+
+  .proposal-terms-content h3 {
+    font-size: 17pt !important;
+    margin-top: 28pt !important;
+    padding-top: 14pt !important;
+  }
+
+  .proposal-terms-content h4,
+  .proposal-terms-content .agreement-service-title {
+    font-size: 12pt !important;
   }
 }

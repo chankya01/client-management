@@ -3365,6 +3365,9 @@ function renderPublicSignature() {
   const agreementTitle = agreement.title || payload.document?.title || "Proposal";
   const agreementDetails = parseAgreementDetailsFromSnapshot(agreement, payload);
   const signedDetails = signedSignatureDetails(payload);
+  const signedAt = payload.recipient?.signed_at
+    || [...(payload.events || [])].reverse().find((event) => event.event_type === "signed")?.created_at
+    || "";
   const proposalPages = ["services", "training", "about", "terms"];
   const activeProposalPage = proposalPages.includes(state.publicProposalPage) ? state.publicProposalPage : "services";
   state.publicProposalPage = activeProposalPage;
@@ -3670,6 +3673,7 @@ function renderPublicSignature() {
                     <p><span>Name</span><strong>${escapeHtml(signedDetails?.signerName || recipientName)}</strong></p>
                     <p><span>Title</span><strong>${escapeHtml(signedDetails?.signerTitle || "-")}</strong></p>
                     <p><span>Date</span><strong>${escapeHtml(signedDetails?.signatureDate || payload.recipient?.signed_at || "-")}</strong></p>
+                    <p><span>Signed at</span><strong>${escapeHtml(signedAt ? formatTime(signedAt) : "-")}</strong></p>
                   </div>
                   ${signedDetails?.signatureImage ? `<img class="signed-signature-image" src="${escapeHtml(signedDetails.signatureImage)}" alt="Drawn signature" />` : ""}
                   <button class="secondary" type="button" data-download-signed-pdf>Print / Download signed PDF</button>
