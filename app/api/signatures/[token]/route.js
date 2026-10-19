@@ -3,6 +3,7 @@ import {
   currentProfile,
   encodeValue,
   handleApiError,
+  internalRoles,
   normalizeEmail,
   supabaseAdminFetch,
   tablePath
@@ -148,6 +149,8 @@ async function requireMatchingPortalSessionIfNeeded(request, recipient) {
     authError.status = error.status === 401 || error.status === 403 ? error.status : 401;
     throw authError;
   }
+
+  if (internalRoles.has(signedInProfile.role)) return signedInProfile;
 
   if (normalizeEmail(signedInProfile.email) !== normalizeEmail(recipient.email)) {
     const error = new Error("This signing link belongs to a different recipient account. Please sign in with the matching recipient email.");
@@ -296,13 +299,14 @@ export async function POST(request, { params }) {
     if (payload.document.uploaded_by) {
       try {
         const signerProfile = await profileForRecipientEmail(payload.recipient.email);
+        const signedAgreementUrl = new URL(`/sign/${payload.recipient.signing_token}`, request.url).toString();
         await supabaseAdminFetch(tablePath("request_messages"), {
           method: "POST",
           body: JSON.stringify({
             request_id: payload.document.request_id,
             sender_id: signerProfile?.id || payload.document.uploaded_by,
             message: allSigned
-              ? `Agreement signed by ${payload.recipient.name || payload.recipient.email}: ${payload.document.title || "Accessibility Services Proposal"}. The signed agreement is ready to download.`
+              ? `Agreement signed by ${payload.recipient.name || payload.recipient.email}: ${payload.document.title || "Accessibility Services Proposal"}. The signed agreement is ready to download.\nOpen signed agreement: ${signedAgreementUrl}`
               : `Agreement signed by ${payload.recipient.name || payload.recipient.email}: ${payload.document.title || "Accessibility Services Proposal"}`,
             is_internal: false
           })

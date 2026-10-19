@@ -1025,6 +1025,10 @@ h2 {
   padding: 10px 12px;
 }
 
+.field input[type="date"] {
+  padding-right: 44px;
+}
+
 .field select {
   border: 2px solid var(--line);
   border-radius: 10px;
@@ -3406,6 +3410,16 @@ button:disabled {
   .proposal-authorized-row,
   .proposal-signature-area .status-pill {
     display: none !important;
+  }
+
+  [data-download-signed-pdf] {
+    display: none !important;
+  }
+
+  .proposal-signed-panel {
+    border: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
   }
 
   .proposal-site,

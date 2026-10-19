@@ -2163,6 +2163,10 @@ function proposalViewerModal() {
   const proposalUrl = proposalDocument
     ? (proposalDocument.recipients || []).find((recipient) => recipient.signing_url)?.signing_url || ""
     : "";
+  const proposalIsSigned = Boolean(
+    proposalDocument?.status === "completed"
+    || (proposalDocument?.events || []).some((event) => event.event_type === "signed" || event.event_type === "completed")
+  );
 
   return `
     <div class="proposal-viewer-backdrop" data-proposal-viewer-backdrop>
@@ -2174,7 +2178,7 @@ function proposalViewerModal() {
             ${proposalDocument ? `<p class="helper">${escapeHtml(proposalApprovalLabel(proposalDocument))}</p>` : ""}
           </div>
           <div class="proposal-viewer-actions">
-            ${proposalUrl ? `<a class="secondary signature-document-link" href="${escapeHtml(proposalUrl)}" target="_blank" rel="noopener noreferrer">Open client view</a>` : ""}
+            ${proposalUrl ? `<a class="secondary signature-document-link" href="${escapeHtml(proposalUrl)}" target="_blank" rel="noopener noreferrer">${proposalIsSigned ? "Open signed agreement" : "Open client view"}</a>` : ""}
             <button class="proposal-viewer-close" type="button" aria-label="Close proposal preview" data-close-proposal-view>×</button>
           </div>
         </header>
@@ -2190,6 +2194,8 @@ function signatureDocumentCard(document) {
   const request = state.requests.find((item) => item.id === document.request_id);
   const proposalApproved = Boolean(document.proposal_approved);
   const proposalUrl = (document.recipients || []).find((recipient) => recipient.signing_url)?.signing_url || "";
+  const proposalIsSigned = document.status === "completed"
+    || (document.events || []).some((event) => event.event_type === "signed" || event.event_type === "completed");
   return `
     <article class="signature-document-item signature-document-detail-card">
       <div class="signature-document-header">
@@ -2200,6 +2206,7 @@ function signatureDocumentCard(document) {
         </span>
         <span class="signature-document-actions">
             <span class="status-pill proposal-status-text">${escapeHtml(proposalApprovalLabel(document))}</span>
+            ${proposalIsSigned && proposalUrl ? `<a class="secondary signature-document-link proposal-status-text" href="${escapeHtml(proposalUrl)}" target="_blank" rel="noopener noreferrer">Signed agreement</a>` : ""}
             ${(proposalUrl || document.agreement) ? `<button class="secondary signature-document-link proposal-status-text" type="button" data-open-proposal-view="${escapeHtml(document.id)}">Open</button>` : ""}
         </span>
       </div>
@@ -3659,7 +3666,7 @@ function renderPublicSignature() {
                 <div class="signed-agreement-summary">
                   <strong>Agreement signed</strong>
                   <div class="signature-field-grid">
-                    <p><span>Signature</span><strong>${escapeHtml(signedDetails?.typedSignature || (signedDetails?.signatureImage ? "Drawn signature" : "-"))}</strong></p>
+                    ${signedDetails?.typedSignature ? `<p><span>Signature</span><strong>${escapeHtml(signedDetails.typedSignature)}</strong></p>` : ""}
                     <p><span>Name</span><strong>${escapeHtml(signedDetails?.signerName || recipientName)}</strong></p>
                     <p><span>Title</span><strong>${escapeHtml(signedDetails?.signerTitle || "-")}</strong></p>
                     <p><span>Date</span><strong>${escapeHtml(signedDetails?.signatureDate || payload.recipient?.signed_at || "-")}</strong></p>
