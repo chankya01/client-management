@@ -2100,6 +2100,48 @@ a {
   text-align: center;
 }
 
+.proposal-section#services .proposal-service-lede {
+  margin-left: auto;
+  margin-right: auto;
+  text-align: center;
+}
+
+.proposal-section#services .proposal-service-hero > div,
+.proposal-section#services .proposal-service-details article {
+  text-align: center;
+}
+
+.proposal-section#services .proposal-service-hero p,
+.proposal-section#services .proposal-service-details article p {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.proposal-section#services .proposal-service-details article {
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
+}
+
+.proposal-section#training .proposal-training-hero > div,
+.proposal-section#training .proposal-training-content > h3,
+.proposal-section#training .proposal-training-content > p,
+.proposal-section#about .proposal-about-hero > div,
+.proposal-section#about .proposal-about-content > h3,
+.proposal-section#about .proposal-about-content > p {
+  text-align: center;
+}
+
+.proposal-section#training .proposal-training-content > p,
+.proposal-section#about .proposal-about-content > p {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.proposal-section#training .proposal-video-card > div {
+  text-align: center;
+}
+
 .proposal-service-lede {
   color: #3f4349;
   font-size: clamp(1.05rem, 1.5vw, 1.25rem);
