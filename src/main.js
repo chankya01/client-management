@@ -878,7 +878,8 @@ async function refreshUnreadCounts({ onlyMissing = false, generation = loadGener
       });
     }
     calculateUnreadCounts();
-    render();
+    // Do not replace an active proposal document while it is being reviewed.
+    if (!document.querySelector("[data-proposal-preview-document], [data-proposal-viewer-document]")) render();
   } catch (error) {
     console.warn(`[${APP_NAME}] Unable to refresh unread counts`, error);
   } finally {
@@ -2177,7 +2178,7 @@ function proposalViewerModal() {
             <button class="proposal-viewer-close" type="button" aria-label="Close proposal preview" data-close-proposal-view>×</button>
           </div>
         </header>
-        <div class="proposal-viewer-document">
+        <div class="proposal-viewer-document" data-proposal-viewer-document>
           ${renderAgreementTerms(details)}
         </div>
       </section>
@@ -2377,63 +2378,125 @@ function parseAgreementNotes(notes, request) {
   const wcagStandard = normalized.match(/WCAG\s*2\.[12]\s*AA/i)?.[0].replace(/\s+/g, " ").toUpperCase().replace("WCAG 2.", "WCAG 2.") || defaults.wcagStandard;
   const totalCost = formatAgreementCurrency(normalized.match(/total\s+cost\s*:?\s*\$?\s*([\d,]+)/i)?.[1]) || defaults.totalCost;
 
-  const auditLine = lines.find((line) => /audit/i.test(line) && /\$?\s*[\d,]+/.test(line)) || "";
-  const auditCost = moneyFromText(auditLine) || "$1,450";
-  const auditName = /mobile/i.test(auditLine) ? "Desktop + Mobile Audit" : "Accessibility Audit";
   const timelineMatch = normalized.match(/(\d+)\s*[- ]?(?:day|business day|week|month)s?/i);
   const expeditedLine = lines.find((line) => /expedited/i.test(line)) || "";
-  const expeditedCost = lastMoneyFromText(expeditedLine);
   const expeditedDays = expeditedLine.match(/(\d+)\s*[- ]?(?:day|business day)s?/i)?.[1] || "";
-  const timeline = expeditedDays ? `${expeditedDays} days expedited service` : (timelineMatch?.[0] || defaults.timeline);
-
-  const supportLine = lines.find((line) => /technical\s+support|support\s+horus|support\s+hours/i.test(line)) || "";
-  const supportHours = supportLine.match(/(\d+)\s*(?:hours?|hrs?|horus)/i)?.[1] || "";
-  const supportCost = formatAgreementCurrency(
-    supportLine.match(/(?:total\s+cost|cost|price)\s*:?\s*\$?\s*([\d,]+(?:\.\d{2})?)/i)?.[1]
-    || moneyFromText(supportLine)
-  );
-
+  const timeline = timelineMatch?.[0] || defaults.timeline;
   const vpatLine = lines.find((line) => /vpat/i.test(line)) || "";
-  const vpatCost = moneyFromText(vpatLine);
   const vpatEdition = vpatLine.match(/\b([A-Za-z]+)\s+Edition\b/i)?.[1];
   const vpatEditionLabel = vpatEdition ? `${vpatEdition.toUpperCase()} Edition` : "WCAG Edition";
 
+  // Treat the assistant message as a lightweight proposal outline. Phase headings
+  // are carried onto each service, while service-specific lines remain bullets.
+  const serviceTitleFor = (line) => {
+    if (/technical\s+support|support\s+horus|support\s+hours/i.test(line)) return "Technical Support";
+    if (/user\s+testing/i.test(line)) return "User Testing";
+    if (/vpat/i.test(line)) return "VPAT Service";
+    if (/expedited/i.test(line)) return "Expedited Service";
+    if (/document\s+remediation/i.test(line)) return "Document Remediation";
+    if (/certification/i.test(line)) return "Certification";
+    if (/audit/i.test(line)) return /mobile/i.test(line) ? "Desktop + Mobile Audit" : "Accessibility Audit";
+    return "";
+  };
+  const defaultServiceBullets = (entry) => {
+    if (entry.baseTitle === "Desktop + Mobile Audit" || entry.baseTitle === "Accessibility Audit") {
+      return [`${wcagStandard} standard`, "Scope defined below", timeline];
+    }
+    if (entry.baseTitle === "User Testing") {
+      return ["1 session", "30-minute recorded session", "Takes place after remediation and validation", "Session recording and supplemental report provided"];
+    }
+    if (entry.baseTitle === "Technical Support") {
+      return [entry.hours ? `${entry.hours} hours` : "Support hours as requested", "Issue Validation", "Technical Questions"];
+    }
+    if (entry.baseTitle === "VPAT Service") {
+      return [`${entry.editionLabel || vpatEditionLabel} — Accessibility Conformance Report`, "Issued after validation"];
+    }
+    if (entry.baseTitle === "Expedited Service") return [entry.days ? `${entry.days} days` : "Rush delivery" ];
+    return [];
+  };
+  const entries = [];
+  let currentPhase = "";
+  let currentEntry = null;
+  let inScope = false;
+  const flushEntry = () => {
+    if (!currentEntry) return;
+    if (!currentEntry.bullets.length) currentEntry.bullets = defaultServiceBullets(currentEntry);
+    entries.push(currentEntry);
+    currentEntry = null;
+  };
+
+  lines.forEach((rawLine) => {
+    const line = rawLine.replace(/^(?:[-•*]|\d+[.)])\s*/, "").trim();
+    const phaseMatch = line.match(/^phase\s*(\d+)\s*:?(?:\s*.*)?$/i);
+    if (phaseMatch) {
+      flushEntry();
+      currentPhase = phaseMatch[1];
+      inScope = false;
+      return;
+    }
+    if (/^scope\s*:?$/i.test(line)) {
+      flushEntry();
+      inScope = true;
+      return;
+    }
+    if (/^(?:cost\s+breakdown|total\s+cost)\s*:?/i.test(line)) {
+      inScope = false;
+      return;
+    }
+    if (inScope) return;
+
+    const baseTitle = serviceTitleFor(line);
+    const hasServicePrice = Boolean(moneyFromText(line));
+    const beginsAsService = /^(?:desktop|accessibility|wcag|technical|support|user|vpat|expedited|document|certification)/i.test(line);
+    if (baseTitle && (hasServicePrice || beginsAsService)) {
+      flushEntry();
+      const hours = line.match(/(\d+)\s*(?:hours?|hrs?|horus)/i)?.[1] || "";
+      const days = line.match(/(\d+)\s*[- ]?(?:day|business day)s?/i)?.[1] || "";
+      const edition = line.match(/\b([A-Za-z]+)\s+Edition\b/i)?.[1];
+      currentEntry = {
+        baseTitle,
+        title: `${baseTitle}${currentPhase ? ` (Phase ${currentPhase})` : ""}`,
+        price: moneyFromText(line),
+        hours,
+        days,
+        editionLabel: edition ? `${edition.toUpperCase()} Edition` : "",
+        bullets: []
+      };
+      return;
+    }
+
+    if (!currentEntry) return;
+    if (/^price\s*:/i.test(line)) {
+      currentEntry.price = moneyFromText(line) || currentEntry.price;
+      return;
+    }
+    if (/^total\s+cost\s*:/i.test(line)) return;
+    if (line) currentEntry.bullets.push(line);
+  });
+  flushEntry();
+
+  if (!entries.length) {
+    entries.push({
+      baseTitle: /mobile/i.test(normalized) ? "Desktop + Mobile Audit" : "Accessibility Audit",
+      title: /mobile/i.test(normalized) ? "Desktop + Mobile Audit" : "Accessibility Audit",
+      price: "$1,450",
+      hours: "",
+      days: "",
+      editionLabel: "",
+      bullets: []
+    });
+    entries[0].bullets = defaultServiceBullets(entries[0]);
+  }
+
   const services = [];
   const costBreakdown = [];
-
-  services.push(auditName);
-  services.push(`• ${wcagStandard} standard`);
-  services.push("• Scope defined below");
-  if (timeline) services.push(`• ${timeline}`);
-  services.push(`Price: ${auditCost}`);
-  costBreakdown.push(`${wcagStandard} ${auditName}: ${auditCost}`);
-
-  if (supportLine || supportHours || supportCost) {
-    services.push("");
-    services.push("Technical Support");
-    if (supportHours) services.push(`• ${supportHours} hours`);
-    services.push("• Issue Validation");
-    services.push("• Technical Questions");
-    if (supportCost) services.push(`Price: ${supportCost}`);
-    if (supportCost) costBreakdown.push(`Technical Support${supportHours ? ` (${supportHours} hours)` : ""}: ${supportCost}`);
-  }
-
-  if (expeditedLine || expeditedCost) {
-    services.push("");
-    services.push("Expedited Service");
-    if (expeditedDays) services.push(`• ${expeditedDays} days`);
-    if (expeditedCost) services.push(`Price: ${expeditedCost}`);
-    if (expeditedCost) costBreakdown.push(`Expedited Service${expeditedDays ? ` (${expeditedDays} days)` : ""}: ${expeditedCost}`);
-  }
-
-  if (vpatLine || vpatCost) {
-    services.push("");
-    services.push("VPAT Service");
-    services.push(`• ${vpatEditionLabel} — Accessibility Conformance Report`);
-    services.push("• Issued after validation");
-    if (vpatCost) services.push(`Price: ${vpatCost}`);
-    if (vpatCost) costBreakdown.push(`VPAT Service (${vpatEditionLabel}): ${vpatCost}`);
-  }
+  entries.forEach((entry, index) => {
+    if (index) services.push("");
+    services.push(entry.title);
+    entry.bullets.forEach((bullet) => services.push(`• ${bullet}`));
+    if (entry.price) services.push(`Price: ${entry.price}`);
+    if (entry.price) costBreakdown.push(`${entry.title}: ${entry.price}`);
+  });
 
   return {
     wcagStandard,
@@ -2443,8 +2506,8 @@ function parseAgreementNotes(notes, request) {
     scopeText: urls.length ? urls.join("\n") : defaults.scopeText,
     deliverablesText: [
       "Audit Report",
-      ...(vpatLine || vpatCost ? [`Accessibility Conformance Report (${vpatEditionLabel})`] : []),
-      ...(expeditedLine || expeditedCost ? ["Expedited service delivery"] : [])
+      ...(entries.some((entry) => entry.baseTitle === "VPAT Service") ? [`Accessibility Conformance Report (${vpatEditionLabel})`] : []),
+      ...(entries.some((entry) => entry.baseTitle === "Expedited Service") ? ["Expedited service delivery"] : [])
     ].join("\n"),
     costBreakdownText: costBreakdown.join("\n")
   };
@@ -3637,6 +3700,7 @@ function escapeHtml(value) {
 function render() {
   const previousWindowScroll = window.scrollY;
   const previousPreviewScroll = document.querySelector("[data-proposal-preview-document]")?.scrollTop || 0;
+  const previousViewerScroll = document.querySelector("[data-proposal-viewer-document]")?.scrollTop || 0;
 
   if (state.loading) {
     root.innerHTML = `<main class="signin-shell"><section class="signin-card">${brandLogo("signin")}<p class="helper center-text">Loading ${APP_NAME}...</p></section>${toastHtml()}</main>`;
@@ -3712,6 +3776,8 @@ function render() {
     window.scrollTo({ top: previousWindowScroll, behavior: "auto" });
     const preview = document.querySelector("[data-proposal-preview-document]");
     if (preview) preview.scrollTop = previousPreviewScroll;
+    const viewer = document.querySelector("[data-proposal-viewer-document]");
+    if (viewer) viewer.scrollTop = previousViewerScroll;
   });
 }
 
