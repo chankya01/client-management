@@ -1841,6 +1841,10 @@ a {
   white-space: nowrap;
 }
 
+.add-recipient-button {
+  margin-top: 4px;
+}
+
 .signature-form-actions {
   display: flex;
   justify-content: space-between;
@@ -2588,6 +2592,7 @@ a {
 }
 
 .proposal-terms-section > h2 {
+  color: var(--green);
   font-size: clamp(30px, 3.4vw, 48px);
   letter-spacing: -0.045em;
   line-height: 1.05;
@@ -2596,6 +2601,13 @@ a {
   margin-right: auto;
   max-width: 860px;
   text-align: center;
+}
+
+.proposal-terms-section .proposal-terms-content,
+.proposal-terms-section .proposal-authorized-row,
+.proposal-terms-section .proposal-signature-area {
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .proposal-authorized-row {
@@ -2622,10 +2634,15 @@ a {
   padding: 32px;
 }
 
+.proposal-sign-panel > .signature-field-grid {
+  margin-bottom: 24px;
+}
+
 .proposal-sign-tabs {
   border-bottom: 1px solid #b7c3d2;
-  display: flex;
-  gap: 36px;
+  display: grid;
+  gap: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   margin: 28px 0 24px;
   padding-bottom: 12px;
   text-transform: uppercase;
@@ -2638,7 +2655,9 @@ a {
   cursor: pointer;
   font: inherit;
   font-weight: 800;
+  min-width: 0;
   padding: 0 0 12px;
+  text-align: center;
   text-transform: uppercase;
 }
 
@@ -3387,12 +3406,12 @@ button:disabled {
   }
 
   .proposal-sign-tabs {
-    flex-direction: column;
-    gap: 12px;
+    gap: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .proposal-sign-tabs button.active {
-    margin-bottom: 0;
+    margin-bottom: -16px;
   }
 
   .proposal-service-columns {

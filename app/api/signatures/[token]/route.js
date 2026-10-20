@@ -279,10 +279,22 @@ export async function POST(request, { params }) {
     });
 
     if (allSigned) {
-      await supabaseAdminFetch(tablePath("requests", `?id=eq.${encodeValue(payload.document.request_id)}`), {
-        method: "PATCH",
-        body: JSON.stringify({ status: "agreement", updated_at: now })
-      });
+      let requestStatusUpdated = false;
+      for (const requestStatus of ["agreement", "agreement_pending", "agreement_acknowledged"]) {
+        try {
+          await supabaseAdminFetch(tablePath("requests", `?id=eq.${encodeValue(payload.document.request_id)}`), {
+            method: "PATCH",
+            body: JSON.stringify({ status: requestStatus, updated_at: now })
+          });
+          requestStatusUpdated = true;
+          break;
+        } catch (error) {
+          console.warn(`Unable to set request status to ${requestStatus} after signing:`, error?.message || error);
+        }
+      }
+      if (!requestStatusUpdated) {
+        console.warn("Agreement signing completed, but the linked request status could not be updated.");
+      }
     }
 
     if (allSigned) {

@@ -2383,7 +2383,7 @@ function parseAgreementNotes(notes, request) {
   const normalized = raw.replace(/\s+/g, " ");
   const urls = [...new Set((raw.match(/https?:\/\/[^\s)]+/g) || []).map((url) => url.replace(/[.,;]+$/, "")))];
   const wcagStandard = normalized.match(/WCAG\s*2\.[12]\s*AA/i)?.[0].replace(/\s+/g, " ").toUpperCase().replace("WCAG 2.", "WCAG 2.") || defaults.wcagStandard;
-  const totalCost = formatAgreementCurrency(normalized.match(/total\s+cost\s*:?\s*\$?\s*([\d,]+)/i)?.[1]) || defaults.totalCost;
+  const explicitTotalCost = formatAgreementCurrency(normalized.match(/total\s+cost\s*:?\s*\$?\s*([\d,]+)/i)?.[1]);
 
   const timelineMatch = normalized.match(/(\d+)\s*[- ]?(?:day|business day|week|month)s?/i);
   const expeditedLine = lines.find((line) => /expedited/i.test(line)) || "";
@@ -2495,6 +2495,12 @@ function parseAgreementNotes(notes, request) {
     entries[0].bullets = defaultServiceBullets(entries[0]);
   }
 
+  const parsedServiceTotal = entries.reduce((sum, entry) => {
+    const amount = Number(String(entry.price || "").replace(/[^\d.]/g, ""));
+    return Number.isFinite(amount) ? sum + amount : sum;
+  }, 0);
+  const totalCost = explicitTotalCost || (parsedServiceTotal > 0 ? formatAgreementCurrency(parsedServiceTotal) : defaults.totalCost);
+
   const services = [];
   const costBreakdown = [];
   entries.forEach((entry, index) => {
@@ -2600,7 +2606,7 @@ function signatureDraftFromForm(form) {
     recipients: names.map((name, index) => ({
       name,
       email: emails[index] || "",
-      role: "signer"
+      role: index === 0 ? "signer" : "viewer"
     }))
   };
 }
@@ -2648,7 +2654,7 @@ function setSignatureDraftRecipientsForRequest(request) {
 function signatureRecipientInputs(request) {
   const draftRecipients = Array.isArray(state.signatureDraft.recipients) ? state.signatureDraft.recipients : [];
   const defaults = draftRecipients.length ? draftRecipients : signatureRecipientDefaults(request);
-  const rows = (defaults.length ? defaults : [{ name: "", email: "", role: "signer" }]).slice(0, 1);
+  const rows = defaults.length ? defaults : [{ name: "", email: "", role: "signer" }];
   return rows.map((recipient) => `
     <div class="signature-recipient-row">
       <label class="field"><span>Recipient Name</span><input name="recipientName" value="${escapeHtml(recipient.name || "")}" /></label>
@@ -2840,6 +2846,7 @@ function signatureDocumentsPage() {
             <p class="section-label send-to-title">Send to</p>
             <p class="helper">The client contact below will receive a private proposal link.</p>
             <div data-signature-recipient-list>${signatureRecipientInputs(selectedRequest)}</div>
+            <button class="secondary add-recipient-button" type="button" data-add-signature-recipient>Add Recipient Name</button>
           </section>
           <div class="signature-form-actions">
             <button class="primary" type="submit" ${draft.proposalGenerated ? "" : "disabled"}>Send proposal</button>
@@ -3447,15 +3454,6 @@ function renderPublicSignature() {
         <section class="${proposalSectionClass("training")}" id="training">
           <h2>Training</h2>
           <div class="proposal-training-content">
-            <div class="proposal-training-hero">
-              <img src="https://i0.wp.com/accessible.org/wp-content/uploads/2025/08/Web-Accessibility-Training.jpg?resize=1200%2C675&amp;ssl=1" alt="Accessibility training with Kris Rivenburgh" />
-              <div>
-                <span class="proposal-eyebrow">Learn at your pace</span>
-                <h3>Practical accessibility training for real teams.</h3>
-                <p>Live workshops and on-demand courses make WCAG easier to understand for designers, developers, content editors, and non-technical teams.</p>
-                <a class="proposal-media-link" href="https://adacompliance.net/course/wcag-course" target="_blank" rel="noopener">Start the WCAG course</a>
-              </div>
-            </div>
             <div class="proposal-training-table-wrap">
               <table class="proposal-training-table">
                 <thead>
@@ -3591,21 +3589,6 @@ function renderPublicSignature() {
               <p>The ADA Compliance Course is an excellent complement to the WCAG Course. As you implement the lessons and resolve issues on your website one-by-one, you will incrementally reduce your risk of being sued.</p>
             </div>
 
-            <div class="proposal-training-image">
-              <img src="/images/accessibility-training.png" alt="Accessibility Training" />
-            </div>
-            <div class="proposal-video-card">
-              <div>
-                <span class="proposal-eyebrow">Video library</span>
-                <h3>Keep learning with Accessible.org</h3>
-                <p>Browse practical accessibility and compliance videos from Kris Rivenburgh and the Accessible.org team.</p>
-                <a class="primary proposal-media-link" href="https://www.youtube.com/@adabook" target="_blank" rel="noopener">Watch on YouTube</a>
-              </div>
-              <a class="proposal-video-card-media" href="https://www.youtube.com/@adabook" target="_blank" rel="noopener" aria-label="Open the Accessible.org video library on YouTube">
-                <img src="/images/accessibility-training.png" alt="Accessible.org accessibility training video thumbnail" />
-                <span aria-hidden="true">▶</span>
-              </a>
-            </div>
           </div>
         </section>
 
@@ -3880,6 +3863,32 @@ function attachPublicSignatureEvents() {
     context.strokeStyle = "#171b22";
     let drawing = false;
     let hasDrawing = false;
+    const draftKey = `request-management-signature-draft:${state.publicSignatureToken || "unknown"}`;
+    const persistDrawing = () => {
+      const image = hasDrawing ? canvas.toDataURL("image/png") : "";
+      signatureImageInput.value = image;
+      try {
+        if (image) sessionStorage.setItem(draftKey, image);
+        else sessionStorage.removeItem(draftKey);
+      } catch {
+        // Some privacy modes disable sessionStorage; the hidden field still preserves the draft.
+      }
+    };
+    try {
+      const savedImage = sessionStorage.getItem(draftKey);
+      if (savedImage) {
+        const image = new Image();
+        image.onload = () => {
+          context.clearRect(0, 0, canvas.width, canvas.height);
+          context.drawImage(image, 0, 0, canvas.width, canvas.height);
+          hasDrawing = true;
+          signatureImageInput.value = savedImage;
+        };
+        image.src = savedImage;
+      }
+    } catch {
+      // Some privacy modes disable sessionStorage; start with a blank canvas.
+    }
     const pointFromEvent = (event) => {
       const rect = canvas.getBoundingClientRect();
       return {
@@ -3906,15 +3915,14 @@ function attachPublicSignatureEvents() {
     const finishDrawing = () => {
       if (!drawing) return;
       drawing = false;
-      signatureImageInput.value = hasDrawing ? canvas.toDataURL("image/png") : "";
+      persistDrawing();
     };
     canvas.addEventListener("pointerup", finishDrawing);
     canvas.addEventListener("pointercancel", finishDrawing);
-    canvas.addEventListener("pointerleave", finishDrawing);
     form.querySelector("[data-clear-signature]")?.addEventListener("click", () => {
       context.clearRect(0, 0, canvas.width, canvas.height);
       hasDrawing = false;
-      signatureImageInput.value = "";
+      persistDrawing();
     });
   }
 
@@ -4252,6 +4260,21 @@ function attachEvents() {
     });
   });
 
+  document.querySelectorAll("[data-add-signature-recipient]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const form = button.closest("form");
+      if (form) signatureDraftFromForm(form);
+      state.signatureDraft = {
+        ...state.signatureDraft,
+        recipients: [
+          ...(state.signatureDraft?.recipients || []),
+          { name: "", email: "", role: "viewer" }
+        ]
+      };
+      render();
+    });
+  });
+
   const signatureDocumentForm = document.getElementById("signatureDocumentForm");
   if (signatureDocumentForm) {
     signatureDocumentForm.querySelector("[data-send-proposal-message]")?.addEventListener("click", () => {
@@ -4318,8 +4341,8 @@ function attachEvents() {
       const recipients = emails.map((email, index) => ({
         name: names[index],
         email,
-        role: requiresSignature ? "signer" : "viewer"
-      })).filter((recipient) => recipient.name && recipient.email).slice(0, 1);
+        role: requiresSignature && index === 0 ? "signer" : "viewer"
+      })).filter((recipient) => recipient.name && recipient.email);
 
       if (!request) {
         showToast("Select a request.");

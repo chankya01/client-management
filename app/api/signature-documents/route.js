@@ -179,18 +179,19 @@ export async function POST(request) {
     }
 
     const recipients = (body.recipients || [])
-      .map((recipient) => ({
+      .map((recipient, index) => ({
         name: String(recipient.name || "").trim(),
         email: normalizeEmail(recipient.email),
-        role: requiresSignature ? "signer" : "viewer"
+        role: requiresSignature && (recipient.role === "signer" || index === 0) ? "signer" : "viewer"
       }))
       .filter((recipient) => recipient.name && recipient.email);
 
     if (!recipients.length) {
       return apiJson({ error: "Add at least one recipient." }, 400);
     }
-    if (requiresSignature && recipients.length > 1) {
-      return apiJson({ error: "Only one recipient can sign an agreement." }, 400);
+    const signerCount = recipients.filter((recipient) => recipient.role === "signer").length;
+    if (requiresSignature && signerCount !== 1) {
+      return apiJson({ error: "Add exactly one signing recipient. Additional recipients are view-only." }, 400);
     }
     const agreement = cleanAgreementContent(body);
     if (!agreement.agreementText) {
