@@ -308,27 +308,29 @@ export async function POST(request, { params }) {
       });
     }
 
-    if (payload.document.uploaded_by) {
-      try {
-        const signerProfile = await profileForRecipientEmail(payload.recipient.email);
-        const signedAgreementUrl = new URL(`/sign/${payload.recipient.signing_token}`, request.url).toString();
-        await supabaseAdminFetch(tablePath("request_messages"), {
-          method: "POST",
-          body: JSON.stringify({
-            request_id: payload.document.request_id,
-            sender_id: signerProfile?.id || payload.document.uploaded_by,
-            message: allSigned
-              ? `Agreement signed by ${payload.recipient.name || payload.recipient.email}: ${payload.document.title || "Accessibility Services Proposal"}. The signed agreement is ready to download.\nOpen signed agreement: ${signedAgreementUrl}`
-              : `Agreement signed by ${payload.recipient.name || payload.recipient.email}: ${payload.document.title || "Accessibility Services Proposal"}`,
-            is_internal: false
-          })
-        });
-      } catch (messageError) {
-        console.warn("[Clients] Agreement message entry failed", messageError);
-      }
+    let signedMessageCreated = false;
+    try {
+      const senderId = payload.document.uploaded_by
+        || (await profileForRecipientEmail(payload.recipient.email))?.id;
+      if (!senderId) throw new Error("No sender profile is available for the agreement message.");
+      const signedAgreementUrl = new URL(`/sign/${payload.recipient.signing_token}`, request.url).toString();
+      await supabaseAdminFetch(tablePath("request_messages"), {
+        method: "POST",
+        body: JSON.stringify({
+          request_id: payload.document.request_id,
+          sender_id: senderId,
+          message: allSigned
+            ? `Agreement signed by ${payload.recipient.name || payload.recipient.email}: ${payload.document.title || "Accessibility Services Proposal"}. The signed agreement is ready to download.\nOpen signed agreement: ${signedAgreementUrl}`
+            : `Agreement signed by ${payload.recipient.name || payload.recipient.email}: ${payload.document.title || "Accessibility Services Proposal"}`,
+          is_internal: false
+        })
+      });
+      signedMessageCreated = true;
+    } catch (messageError) {
+      console.warn("[Clients] Agreement message entry failed", messageError);
     }
 
-    return apiJson({ signed: true, completed: allSigned });
+    return apiJson({ signed: true, completed: allSigned, signedMessageCreated });
   } catch (error) {
     return handleApiError(error);
   }

@@ -90,6 +90,30 @@ function parseAgreementSnapshot(events, document) {
   }
 }
 
+async function ensureCompletedAgreementMessage(document, recipients, events, origin) {
+  const completed = document?.status === "completed" || (events || []).some((event) => event.event_type === "completed");
+  const signer = (recipients || []).find((recipient) => recipient.role === "signer" && recipient.status === "signed");
+  if (!completed || !signer || !document?.uploaded_by || !document?.request_id) return;
+
+  const signerName = signer.name || signer.email || "Client";
+  const title = document.title || "Accessibility Services Proposal";
+  const marker = `Agreement signed by ${signerName}: ${title}`;
+  const existingMessages = await supabaseAdminFetch(
+    tablePath("request_messages", `?select=id,message&request_id=eq.${encodeValue(document.request_id)}&order=created_at.desc&limit=100`)
+  );
+  if ((existingMessages || []).some((message) => String(message.message || "").includes(marker))) return;
+
+  await supabaseAdminFetch(tablePath("request_messages"), {
+    method: "POST",
+    body: JSON.stringify({
+      request_id: document.request_id,
+      sender_id: document.uploaded_by,
+      message: `${marker}. The signed agreement is ready to download.\nOpen signed agreement: ${origin}/sign/${signer.signing_token}`,
+      is_internal: false
+    })
+  });
+}
+
 function agreementFileName(title) {
   const safeTitle = String(title || "Service Agreement")
     .replace(/[^a-zA-Z0-9._-]/g, "-")
@@ -127,6 +151,19 @@ async function documentsForProfile(profile, origin) {
     list.push(event);
     eventsByDocument.set(event.document_id, list);
   });
+
+  await Promise.all(documents.map(async (document) => {
+    try {
+      await ensureCompletedAgreementMessage(
+        document,
+        recipientsByDocument.get(document.id) || [],
+        eventsByDocument.get(document.id) || [],
+        origin
+      );
+    } catch (error) {
+      console.warn("[Clients] Completed agreement message reconciliation failed", error);
+    }
+  }));
 
   return Promise.all(documents.map(async (document) => {
     let documentUrl = null;
