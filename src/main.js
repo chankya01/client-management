@@ -3516,7 +3516,6 @@ function renderPublicSignature() {
   }
   const alreadySigned = payload.recipient?.status === "signed";
   const canSign = payload.recipient?.role === "signer";
-  const proposalApproved = Boolean(payload.proposalApproved || (payload.events || []).some((event) => event.event_type === "proposal_approved"));
   const agreement = payload.agreement || {};
   const recipientName = payload.recipient?.name || payload.recipient?.email || "recipient";
   const agreementTitle = agreement.title || payload.document?.title || "Proposal";
@@ -3540,7 +3539,7 @@ function renderPublicSignature() {
           ${proposalNavButton("services", "Services")}
           ${proposalNavButton("training", "Training")}
           ${proposalNavButton("about", "About")}
-          ${proposalNavButton("terms", proposalApproved ? "Agreement" : "Terms")}
+          ${proposalNavButton("terms", alreadySigned ? "Agreement" : "Terms")}
         </nav>
       </aside>
 
@@ -3802,7 +3801,7 @@ function renderPublicSignature() {
                 <div class="signed-agreement-summary">
                   <strong>Agreement signed</strong>
                   <div class="signature-field-grid">
-                    ${signedDetails?.typedSignature ? `<p><span>Signature</span><strong>${escapeHtml(signedDetails.typedSignature)}</strong></p>` : ""}
+                    ${signedDetails?.typedSignature && signedDetails.typedSignature !== "Drawn signature" ? `<p><span>Signature</span><strong>${escapeHtml(signedDetails.typedSignature)}</strong></p>` : ""}
                     <p><span>Name</span><strong>${escapeHtml(signedDetails?.signerName || recipientName)}</strong></p>
                     <p><span>Title</span><strong>${escapeHtml(signedDetails?.signerTitle || "-")}</strong></p>
                     <p><span>Date</span><strong>${escapeHtml(signedDetails?.signatureDate || payload.recipient?.signed_at || "-")}</strong></p>
@@ -3811,15 +3810,6 @@ function renderPublicSignature() {
                   ${signedDetails?.signatureImage ? `<img class="signed-signature-image" src="${escapeHtml(signedDetails.signatureImage)}" alt="Drawn signature" />` : ""}
                   <button class="secondary" type="button" data-download-signed-pdf>Print / Download signed PDF</button>
                 </div>
-              </section>
-            ` : !proposalApproved ? `
-              <section class="proposal-sign-panel proposal-sign-locked">
-                <div class="proposal-lock-icon" aria-hidden="true">🔒</div>
-                <div>
-                  <strong>Signing is locked</strong>
-                  <p class="helper">Review the proposal above. When everything looks correct, approve it to unlock the signature field.</p>
-                </div>
-                <button class="primary" type="button" data-approve-proposal>Approve proposal and unlock signing</button>
               </section>
             ` : `
               <form class="proposal-sign-panel" id="publicSignatureForm">
@@ -3968,22 +3958,6 @@ function attachPublicSignatureEvents() {
   });
 
   const form = document.getElementById("publicSignatureForm");
-  const approveButton = document.querySelector("[data-approve-proposal]");
-  if (approveButton) {
-    approveButton.addEventListener("click", async () => {
-      await withActionLock("approve-proposal", approveButton, async () => {
-        try {
-          await signSignatureRecipient(state.publicSignatureToken, { action: "approve" });
-          state.publicSignature = await loadSignatureByToken(state.publicSignatureToken);
-          showToast("Proposal approved. Signing is now unlocked.");
-          renderPublicSignature();
-        } catch (error) {
-          showAppError(error, "Approve proposal");
-        }
-      });
-    });
-  }
-
   document.querySelector("[data-download-signed-pdf]")?.addEventListener("click", () => {
     window.print();
   });

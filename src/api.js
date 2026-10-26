@@ -1666,7 +1666,6 @@ export async function signSignatureRecipient(token, signatureFields) {
       });
       return { approved: true };
     }
-    if (!demoProposalApprovals.has(token)) throw new Error("Approve the proposal before signing.");
     const signedDocument = demoSignatureDocuments.find((document) => (
       (document.recipients || []).some((recipient) => recipient.signing_token === token)
     ));
@@ -1675,8 +1674,6 @@ export async function signSignatureRecipient(token, signatureFields) {
     if (signedDocument) {
       signedDocument.status = "completed";
       signedDocument.completed_at = new Date().toISOString();
-      const request = demoRequests.find((item) => item.id === signedDocument.request_id);
-      if (request) request.status = "agreement";
       demoMessages.push({
         id: crypto.randomUUID(),
         request_id: signedDocument.request_id,

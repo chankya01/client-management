@@ -2655,6 +2655,10 @@ a {
   margin-bottom: 24px;
 }
 
+.proposal-sign-panel > button[type="submit"] {
+  margin-top: 8px;
+}
+
 .proposal-sign-tabs {
   border-bottom: 1px solid #b7c3d2;
   display: grid;
