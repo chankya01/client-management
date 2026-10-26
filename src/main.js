@@ -1632,10 +1632,10 @@ function requestStatusOptions(selected) {
   )).join("");
 }
 
-function clientStatusBar() {
+function clientStatusBar(clients = state.clients) {
   const counts = ["signed", "unsigned"].map((status) => ({
     status,
-    count: state.clients.filter((client) => clientStatusKey(client.status) === status).length
+    count: clients.filter((client) => clientStatusKey(client.status) === status).length
   }));
 
   return `
@@ -1656,6 +1656,8 @@ function adminClientsPage() {
   const showClientCancel = editingClient || hasClientDraft();
   const showClientForm = Boolean(state.clientFormOpen || editingClient || hasClientDraft());
   const editingClientContacts = editingClient ? organizationContacts(editingClient.id) : [];
+  const signedClientIds = new Set(state.requests.filter(isActiveClientRequest).map((request) => request.client_id).filter(Boolean));
+  const clients = state.clients.filter((client) => signedClientIds.has(client.id) || clientStatusKey(client.status) === "signed");
   return `
     <section class="admin-page">
       <div class="admin-heading">
@@ -1699,8 +1701,8 @@ function adminClientsPage() {
       ` : ""}
       <section class="card">
         <p class="section-label">Client List</p>
-        ${clientStatusBar()}
-        ${state.clients.map((client) => `
+        ${clientStatusBar(clients)}
+        ${clients.map((client) => `
           <div class="admin-row clickable-row" data-open-client="${client.id}">
             <div>
               <strong>${escapeHtml(client.name)}</strong>
@@ -1713,7 +1715,7 @@ function adminClientsPage() {
               ${canDelete() ? `<button class="danger-link" data-delete-client="${client.id}">Delete</button>` : ""}
             </div>
           </div>
-        `).join("")}
+        `).join("") || `<p class="helper">No signed clients yet. Signed leads will appear here automatically.</p>`}
       </section>
     </section>
   `;
@@ -1724,7 +1726,7 @@ function adminClientDetailPage() {
   if (!client) return emptyCard("Client Not Found", "The selected client is no longer available.");
 
   const contacts = organizationContacts(client.id);
-  const clientRequests = state.requests.filter((request) => request.client_id === client.id);
+  const clientRequests = state.requests.filter((request) => request.client_id === client.id && isActiveClientRequest(request));
   return `
     <section class="admin-page">
       <button class="secondary back-button" data-page="admin-clients">Back to Clients</button>
@@ -1786,6 +1788,7 @@ function adminRequestsPage() {
   const showRequestCancel = editingRequest || hasRequestDraft();
   const showRequestForm = Boolean(state.requestFormOpen || editingRequest || hasRequestDraft());
   const leadClient = editingRequest ? state.clients.find((client) => client.id === editingRequest.client_id) : null;
+  const leadRequests = state.requests.filter(isLeadRequest);
   return `
     <section class="admin-page">
       <div class="admin-heading">
@@ -1823,7 +1826,7 @@ function adminRequestsPage() {
       `}
       <section class="card">
         <p class="section-label">All Leads and Client Work</p>
-        ${adminRequestRows(state.requests)}
+        ${adminRequestRows(canManageRequests() ? leadRequests : state.requests)}
       </section>
     </section>
   `;
