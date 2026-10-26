@@ -69,12 +69,19 @@ const state = {
   requestClientContacts: [],
   signatureDocuments: [],
   publicSignature: null,
+  publicSignatureDraft: {},
   publicSignatureToken: signatureTokenFromUrl(),
   publicSignatureError: "",
   publicProposalPage: "services",
   messageDrafts: {},
   clientDraft: {},
   requestDraft: {},
+  teamDraft: {},
+  profileDraft: {},
+  skipClientDraftCapture: false,
+  skipRequestDraftCapture: false,
+  skipTeamDraftCapture: false,
+  skipProfileDraftCapture: false,
   ccContactDrafts: {},
   signatureDraft: {},
   pendingActions: new Set(),
@@ -146,9 +153,11 @@ function normalizeEmail(email) {
 function statusLabel(status) {
   const normalizedStatus = workflowStatusKey(status);
   const labels = {
-    new: "Enquiry",
+    new: "New Lead",
     scoping: "Scoping",
-    agreement: "Agreement",
+    agreement: "Proposal Sent",
+    proposal_sent: "Proposal Sent",
+    signed: "Signed",
     payment: "Payment",
     in_progress: "In Progress",
     validation: "Validation",
@@ -166,6 +175,8 @@ function statusDescription(status) {
     new: "Client provided project details.",
     scoping: "Scope and quote are being prepared.",
     agreement: "Agreement details are being handled with the client.",
+    proposal_sent: "The proposal is with the client for review and approval.",
+    signed: "The agreement has been signed and client work is unlocked.",
     payment: "Payment is pending, received, or being confirmed.",
     in_progress: "Audit, tracker setup, remediation, or assigned work is in progress.",
     validation: "Fixes are being validated.",
@@ -181,6 +192,51 @@ function workflowStatusKey(status) {
   if (["remediation", "client_fixes", "delivered", "tracker_uploaded"].includes(status)) return "in_progress";
   if (["documentation_issued"].includes(status)) return "closed";
   return status || "new";
+}
+
+function signatureDocumentForRequest(requestId) {
+  return state.signatureDocuments
+    .filter((document) => document.request_id === requestId)
+    .sort((left, right) => new Date(right.updated_at || right.created_at || 0).getTime() - new Date(left.updated_at || left.created_at || 0).getTime())[0] || null;
+}
+
+function requestHasSignedAgreement(requestOrId) {
+  const requestId = typeof requestOrId === "string" ? requestOrId : requestOrId?.id;
+  if (!requestId) return false;
+  const document = signatureDocumentForRequest(requestId);
+  return Boolean(document && (
+    document.status === "completed"
+    || (document.events || []).some((event) => event.event_type === "completed")
+    || (document.recipients || []).some((recipient) => recipient.role === "signer" && recipient.status === "signed")
+  ));
+}
+
+function lifecycleStageKey(request) {
+  if (requestHasSignedAgreement(request)) return "signed";
+  return workflowStatusKey(request?.status);
+}
+
+function isLeadRequest(request) {
+  return !requestHasSignedAgreement(request) && !["in_progress", "validation", "closed"].includes(workflowStatusKey(request?.status));
+}
+
+function isActiveClientRequest(request) {
+  return requestHasSignedAgreement(request) || ["in_progress", "validation"].includes(workflowStatusKey(request?.status));
+}
+
+function lifecycleStageLabel(request) {
+  if (requestHasSignedAgreement(request)) return "Signed";
+  return statusLabel(request?.status);
+}
+
+function trackerStageKey(request) {
+  if (requestHasSignedAgreement(request)) return "signed";
+  if (workflowStatusKey(request?.status) === "agreement") return "proposal_sent";
+  return workflowStatusKey(request?.status);
+}
+
+function clientStatusKey(status) {
+  return ["signed", "active", "ongoing"].includes(String(status || "").toLowerCase()) ? "signed" : "unsigned";
 }
 
 function isTerminalRequestStatus(status) {
@@ -257,13 +313,13 @@ function statusTracker(request) {
   const steps = [
     "new",
     "scoping",
-    "agreement",
-    "payment",
+    "proposal_sent",
+    "signed",
     "in_progress",
     "validation",
     "closed"
   ];
-  const currentIndex = Math.max(0, steps.indexOf(workflowStatusKey(request?.status)));
+  const currentIndex = Math.max(0, steps.indexOf(trackerStageKey(request)));
   return `
     <section class="card">
       <p class="section-label">Status Tracker</p>
@@ -665,6 +721,7 @@ function clientDraftValue(field, fallback = "") {
 
 function clearClientDraft() {
   state.clientDraft = {};
+  state.skipClientDraftCapture = true;
 }
 
 function hasClientDraft() {
@@ -681,11 +738,11 @@ function hasClientDraft() {
 }
 
 function requestDraftValue(field, fallback = "") {
-  return state.editingRequestId ? fallback : (state.requestDraft[field] ?? fallback ?? "");
+  return state.requestDraft[field] ?? fallback ?? "";
 }
 
 function requestDraftList(field, fallback = []) {
-  return state.editingRequestId ? fallback : (state.requestDraft[field] || fallback || []);
+  return state.requestDraft[field] || fallback || [];
 }
 
 function hasRequestDraft() {
@@ -705,6 +762,33 @@ function hasRequestDraft() {
 function clearRequestDraft() {
   state.requestDraft = {};
   state.requestClientSelection = null;
+  state.skipRequestDraftCapture = true;
+}
+
+function teamDraftValue(field, fallback = "") {
+  return state.teamDraft[field] ?? fallback ?? "";
+}
+
+function clearTeamDraft() {
+  state.teamDraft = {};
+  state.skipTeamDraftCapture = true;
+}
+
+function profileDraftValue(field, fallback = "") {
+  return state.profileDraft[field] ?? fallback ?? "";
+}
+
+function clearProfileDraft() {
+  state.profileDraft = {};
+  state.skipProfileDraftCapture = true;
+}
+
+function publicSignatureDraftValue(field, fallback = "") {
+  return state.publicSignatureDraft[field] ?? fallback ?? "";
+}
+
+function clearPublicSignatureDraft() {
+  state.publicSignatureDraft = {};
 }
 
 function requestDraftFromForm(form) {
@@ -719,6 +803,54 @@ function requestDraftFromForm(form) {
     assignedProfileIds: formData.getAll("assignedProfileIds").map(String),
     ccContactEmails: formData.getAll("ccContactEmails").map(String)
   };
+}
+
+function captureUnsavedFormDrafts() {
+  const clientForm = document.getElementById("clientForm");
+  if (clientForm && !state.skipClientDraftCapture) {
+    const values = Object.fromEntries(new FormData(clientForm));
+    state.clientDraft = {
+      ...state.clientDraft,
+      ...values
+    };
+  }
+
+  const requestForm = document.getElementById("requestForm");
+  if (requestForm && !state.skipRequestDraftCapture) {
+    state.requestDraft = requestDraftFromForm(requestForm);
+    state.requestClientSelection = state.requestDraft.clientId || null;
+  }
+
+  const teamForm = document.getElementById("teamForm");
+  if (teamForm && !state.skipTeamDraftCapture) {
+    state.teamDraft = Object.fromEntries(new FormData(teamForm));
+  }
+
+  const profileForm = document.getElementById("profileForm");
+  if (profileForm && !state.skipProfileDraftCapture) {
+    state.profileDraft = Object.fromEntries(new FormData(profileForm));
+  }
+
+  document.querySelectorAll("[data-client-cc-contact-form]").forEach((form) => {
+    const requestId = form.dataset.requestId;
+    if (!requestId) return;
+    const values = Object.fromEntries(new FormData(form));
+    state.ccContactDrafts[requestId] = {
+      ...ccContactDraft(requestId),
+      name: String(values.name || ""),
+      email: String(values.email || "")
+    };
+  });
+
+  document.querySelectorAll("[data-message-draft]").forEach((textarea) => {
+    const requestId = textarea.dataset.messageDraft;
+    if (requestId) state.messageDrafts[requestId] = textarea.value;
+  });
+
+  state.skipClientDraftCapture = false;
+  state.skipRequestDraftCapture = false;
+  state.skipTeamDraftCapture = false;
+  state.skipProfileDraftCapture = false;
 }
 
 function ccContactDraft(requestId) {
@@ -1235,7 +1367,7 @@ function adminNavHtml() {
         <nav class="nav" aria-label="Admin portal">
           ${navButton("admin-dashboard", "Dashboard")}
           ${canManage ? navButton("admin-clients", "Clients") : ""}
-          ${navButton("admin-requests", "Requests")}
+          ${navButton("admin-requests", "Leads")}
           ${navButton("admin-messages", `Messages ${totalUnreadCount() ? `<span class="count">${totalUnreadCount()}</span>` : ""}`)}
           ${navButton("admin-documents", "Proposals")}
           ${navButton("admin-team", "Team")}
@@ -1410,7 +1542,8 @@ function displayRequestNumber(request) {
 }
 
 function adminDashboardPage() {
-  const activeRequests = state.requests.filter((request) => !isTerminalRequestStatus(request.status));
+  const activeClients = new Set(state.requests.filter(isActiveClientRequest).map((request) => request.client_id).filter(Boolean));
+  const openLeads = state.requests.filter(isLeadRequest);
   const permissionText = canAccessManagementPages()
     ? "management permissions."
     : `${roleLabel(state.profile.role)} access.`;
@@ -1419,17 +1552,16 @@ function adminDashboardPage() {
       <div class="admin-heading">
         <div>
           <h1>Dashboard</h1>
-          <p class="subtitle">Overview of clients, active requests, team members, and recent requests. Signed in as ${escapeHtml(state.profile.full_name)} · ${escapeHtml(permissionText)}</p>
+          <p class="subtitle">Overview of active clients, open leads, and recent activity. Signed in as ${escapeHtml(state.profile.full_name)} · ${escapeHtml(permissionText)}</p>
         </div>
       </div>
       <div class="metric-grid">
-        ${canAccessManagementPages() ? metricCard("Clients", state.clients.length) : ""}
-        ${metricCard("Active Requests", activeRequests.length)}
-        ${metricCard("Team Members", state.team.length)}
+        ${canAccessManagementPages() ? metricCard("Active Clients", activeClients.size) : ""}
+        ${metricCard("Open Leads", openLeads.length)}
         ${metricCard("Access", roleLabel(state.profile.role))}
       </div>
       <section class="card">
-        <p class="section-label">Recent Requests</p>
+        <p class="section-label">Recent Activity</p>
         ${adminRequestRows(state.requests, { source: "dashboard" })}
       </section>
       ${!canAccessManagementPages() && (state.profile?.must_change_password || state.showPasswordForm) ? passwordSection("Password and Account") : ""}
@@ -1442,8 +1574,9 @@ function metricCard(label, value) {
 }
 
 function clientStatusOptions(selected) {
-  return ["signed", "ongoing", "dropped"].map((status) => (
-    `<option value="${status}" ${selected === status ? "selected" : ""}>${statusLabel(status)}</option>`
+  const selectedStatus = clientStatusKey(selected || "signed");
+  return ["signed", "unsigned"].map((status) => (
+    `<option value="${status}" ${selectedStatus === status ? "selected" : ""}>${status === "signed" ? "Signed" : "Unsigned"}</option>`
   )).join("");
 }
 
@@ -1464,16 +1597,16 @@ function requestStatusOptions(selected) {
 }
 
 function clientStatusBar() {
-  const counts = ["signed", "ongoing", "dropped"].map((status) => ({
+  const counts = ["signed", "unsigned"].map((status) => ({
     status,
-    count: state.clients.filter((client) => (client.status || "signed") === status).length
+    count: state.clients.filter((client) => clientStatusKey(client.status) === status).length
   }));
 
   return `
     <div class="status-bar">
       ${counts.map((item) => `
         <div class="status-segment ${item.status}">
-          <span>${statusLabel(item.status)}</span>
+          <span>${item.status === "signed" ? "Signed" : "Unsigned"}</span>
           <strong>${item.count}</strong>
         </div>
       `).join("")}
@@ -1537,7 +1670,7 @@ function adminClientsPage() {
               <span>CC Contacts: ${escapeHtml(listDisplay(organizationContacts(client.id).map((contact) => `${contact.full_name || contact.email} <${contact.email}>`), "None"))}</span>
             </div>
             <div class="row-actions">
-              <span class="status-pill">${escapeHtml(statusLabel(client.status || "signed"))}</span>
+              <span class="status-pill">${clientStatusKey(client.status) === "signed" ? "Signed" : "Unsigned"}</span>
               <button class="secondary small-action" data-edit-client="${client.id}">Edit</button>
               ${canDelete() ? `<button class="danger-link" data-delete-client="${client.id}">Delete</button>` : ""}
             </div>
@@ -1575,7 +1708,7 @@ function adminClientDetailPage() {
           ${accountRow("Primary Contact", client.primary_contact_name)}
           ${accountRow("Primary Email", client.primary_contact_email)}
           ${accountRow("Billing Email", client.billing_email)}
-          ${accountRow("Status", statusLabel(client.status || "signed"))}
+          ${accountRow("Status", clientStatusKey(client.status) === "signed" ? "Signed" : "Unsigned")}
           ${accountRow("Created", formatDate(client.created_at))}
         </section>
         <section class="card">
@@ -1591,8 +1724,8 @@ function adminClientDetailPage() {
           <p class="section-label">Requests</p>
           ${clientRequests.map((request) => `
             <div class="list-row clickable-row" data-open-request="${request.id}">
-              <strong>${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(request.title)}</strong>
-              <span>${escapeHtml(statusLabel(request.status))} · Due ${formatDate(request.due_date)}</span>
+              <strong>${escapeHtml(request.title || "Untitled work")}</strong>
+              <span>${escapeHtml(lifecycleStageLabel(request))} · Due ${formatDate(request.due_date)}</span>
             </div>
           `).join("") || `<p class="helper">No requests for this client yet.</p>`}
         </section>
@@ -1617,8 +1750,8 @@ function adminRequestsPage() {
     <section class="admin-page">
       <div class="admin-heading">
         <div>
-          <h1>Request Management</h1>
-          <p class="subtitle">Create work for a client and keep the client view scoped to that request/company.</p>
+          <h1>Lead Management</h1>
+          <p class="subtitle">Track organizations from New Lead through proposal and signing, then continue the same record as client work.</p>
         </div>
       </div>
       ${canManageRequests() ? `
@@ -1641,12 +1774,12 @@ function adminRequestsPage() {
         </section>
       ` : `
         <section class="card">
-          <p class="section-label">Work Queue</p>
-          <p class="helper">You can view request details and continue request conversations. Client creation, request edits, and deletion are available only to Admin and Project Manager.</p>
+          <p class="section-label">Lead Queue</p>
+          <p class="helper">You can view lead details and continue conversations. Lead creation, edits, and deletion are available only to Admin and Project Manager.</p>
         </section>
       `}
       <section class="card">
-        <p class="section-label">All Requests</p>
+        <p class="section-label">All Leads and Client Work</p>
         ${adminRequestRows(state.requests)}
       </section>
     </section>
@@ -1659,10 +1792,11 @@ function adminRequestRows(requests, { source = "requests" } = {}) {
       <div>
         <strong class="request-client-line">${escapeHtml(clientName(request.client_id))}</strong>
         <span class="request-title-line">
-          <span class="request-number">${escapeHtml(displayRequestNumber(request))}</span>
-          · Due ${formatDate(request.due_date)}
-          <span class="request-status-text">${statusLabel(request.status)}</span>
+          <span>${escapeHtml(request.title || "Untitled work")}</span>
+          <span class="request-status-text">${escapeHtml(lifecycleStageLabel(request))}</span>
         </span>
+        <span class="request-summary-line">${escapeHtml(String(request.description || servicesText(request)).split(/\s+/).slice(0, 18).join(" "))}</span>
+        <span class="request-meta-line">${escapeHtml(servicesText(request))} · Due ${formatDate(request.due_date)}</span>
         ${isInternal() ? `<span class="assigned-line">Tagged: ${escapeHtml(assignedPeopleText(request.id))}</span>` : ""}
       </div>
       <div class="row-actions">
@@ -1684,7 +1818,7 @@ function adminRequestDetailPage() {
       <button class="secondary back-button" data-page="admin-requests">Back to Requests</button>
       <div class="admin-heading">
         <div>
-          <p class="section-label green">${escapeHtml(displayRequestNumber(request))}</p>
+          <p class="section-label green">${escapeHtml(lifecycleStageLabel(request))}</p>
           <h1>${escapeHtml(request.title)}</h1>
           <p class="subtitle">${escapeHtml(clientName(request.client_id))} · ${escapeHtml(request.service_type || "Service")}</p>
         </div>
@@ -1697,7 +1831,7 @@ function adminRequestDetailPage() {
         <section class="card">
           <p class="section-label">Request Details</p>
           ${accountRow("Client", clientName(request.client_id))}
-          ${accountRow("Status", statusLabel(request.status))}
+          ${accountRow("Stage", lifecycleStageLabel(request))}
           ${accountRow("Tagged Team", assignedPeopleText(request.id))}
           ${accountRow("Due Date", formatDate(request.due_date))}
           ${accountRow("Created", formatDate(request.created_at))}
@@ -1731,7 +1865,7 @@ function adminMessagesPage() {
       <div class="admin-heading">
         <div>
           <h1>Message Management</h1>
-          <p class="subtitle">${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(request.title)} · ${escapeHtml(clientName(request.client_id))}</p>
+          <p class="subtitle">${escapeHtml(request.title)} · ${escapeHtml(clientName(request.client_id))} · ${escapeHtml(lifecycleStageLabel(request))}</p>
         </div>
       </div>
       <div class="message-layout">
@@ -1740,8 +1874,8 @@ function adminMessagesPage() {
           ${state.requests.map((item) => `
             <button type="button" class="${item.id === request.id ? "active" : ""}" data-admin-message-request="${item.id}">
               <span>
-                <strong>${escapeHtml(displayRequestNumber(item))}</strong>
-                <span>${escapeHtml(item.title)}</span>
+                <strong>${escapeHtml(clientName(item.client_id))}</strong>
+                <span>${escapeHtml(item.title)} · ${escapeHtml(lifecycleStageLabel(item))}</span>
                 <span>${escapeHtml(clientName(item.client_id))}</span>
               </span>
               ${requestUnreadBadge(item.id)}
@@ -1779,7 +1913,7 @@ function adminTeamPage() {
   const editingMember = state.team.find((member) => member.id === state.editingTeamId);
   const formTitle = editingMember ? "Update Team Member" : "Add Team Member";
   const submitText = editingMember ? "Update Team Member" : "Add Team Member";
-  const roleValue = editingMember?.role || "";
+  const roleValue = teamDraftValue("role", editingMember?.role || "");
   return `
     <section class="admin-page">
       <div class="admin-heading">
@@ -1793,8 +1927,8 @@ function adminTeamPage() {
           <p class="section-label">${formTitle}</p>
           <p class="helper">This creates or updates the Supabase Auth user and profile through the local/server backend. Share the configured temporary password, then ask the user to change it after first login.</p>
           <form class="admin-form" id="teamForm">
-            <label class="field"><span>Full Name</span><input name="fullName" value="${escapeHtml(editingMember?.full_name || "")}" required /></label>
-            <label class="field"><span>Email</span><input name="email" type="email" value="${escapeHtml(editingMember?.email || "")}" required /></label>
+            <label class="field"><span>Full Name</span><input name="fullName" value="${escapeHtml(teamDraftValue("fullName", editingMember?.full_name || ""))}" required /></label>
+            <label class="field"><span>Email</span><input name="email" type="email" value="${escapeHtml(teamDraftValue("email", editingMember?.email || ""))}" required /></label>
             <label class="field"><span>Role</span><select name="role">
               <option value="" ${roleValue ? "" : "selected"} disabled>Select Role</option>
               <option value="assignee" ${roleValue === "assignee" ? "selected" : ""}>Assignee</option>
@@ -1803,7 +1937,7 @@ function adminTeamPage() {
               <option value="project_manager" ${roleValue === "project_manager" ? "selected" : ""}>Project Manager</option>
               <option value="owner" ${roleValue === "owner" ? "selected" : ""}>Admin</option>
             </select></label>
-            <label class="field"><span>Job Title</span><input name="jobTitle" value="${escapeHtml(editingMember?.job_title || "")}" /></label>
+            <label class="field"><span>Job Title</span><input name="jobTitle" value="${escapeHtml(teamDraftValue("jobTitle", editingMember?.job_title || ""))}" /></label>
             <button class="primary team-form-button" type="submit">${submitText}</button>
             ${editingMember ? `<button class="primary team-form-button" type="button" data-cancel-team-edit>Cancel Edit</button>` : ""}
           </form>
@@ -1849,8 +1983,8 @@ function adminSettingsPage() {
           <section class="card">
             <p class="section-label">Profile</p>
             <form class="admin-form profile-form" id="profileForm">
-              <label class="field"><span>Name</span><input name="fullName" value="${escapeHtml(state.profile.full_name || "")}" required /></label>
-              <label class="field"><span>Email</span><input name="email" type="email" value="${escapeHtml(state.profile.email || "")}" required /></label>
+              <label class="field"><span>Name</span><input name="fullName" value="${escapeHtml(profileDraftValue("fullName", state.profile.full_name || ""))}" required /></label>
+              <label class="field"><span>Email</span><input name="email" type="email" value="${escapeHtml(profileDraftValue("email", state.profile.email || ""))}" required /></label>
               <label class="field"><span>Role</span><input value="${escapeHtml(roleLabel(state.profile.role))}" disabled /></label>
               <button class="primary" type="submit">Update Profile</button>
             </form>
@@ -1881,7 +2015,8 @@ function adminSettingsPage() {
         <section class="card">
           <p class="section-label">Current Workspace</p>
           ${accountRow("Clients", state.clients.length)}
-          ${accountRow("Active Requests", state.requests.filter((request) => !isTerminalRequestStatus(request.status)).length)}
+          ${accountRow("Active Clients", new Set(state.requests.filter(isActiveClientRequest).map((request) => request.client_id).filter(Boolean)).size)}
+          ${accountRow("Open Leads", state.requests.filter(isLeadRequest).length)}
           ${accountRow("Team Members", state.team.length)}
         </section>
       </div>
@@ -1992,11 +2127,11 @@ function clientRequestSwitcher() {
   if (isInternal() || !state.requests.length) return "";
   return `
     <aside class="card request-switcher message-request-list client-request-list-card">
-      <p class="section-label">Requests</p>
+          <p class="section-label">Leads and Work</p>
       ${state.requests.map((request) => `
         <button type="button" class="${request.id === state.activeRequest?.id ? "active" : ""}" data-client-message-request="${request.id}">
           <span>
-            <strong>${escapeHtml(displayRequestNumber(request))}</strong>
+            <strong>${escapeHtml(clientName(request.client_id))}</strong>
             <span>${escapeHtml(request.title)}</span>
             <span>${escapeHtml(clientName(request.client_id))}</span>
           </span>
@@ -2010,7 +2145,7 @@ function clientRequestSwitcher() {
         <select id="clientMessageRequestSelect" data-client-message-request-select>
           ${state.requests.map((request) => `
             <option value="${escapeHtml(request.id)}" ${request.id === state.activeRequest?.id ? "selected" : ""}>
-              ${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(request.title)}
+              ${escapeHtml(clientName(request.client_id))} · ${escapeHtml(request.title)}
             </option>
           `).join("")}
         </select>
@@ -2040,11 +2175,11 @@ function clientRequestPage() {
       <button class="secondary back-button" data-page="dashboard">Back to Dashboard</button>
       <div class="heading-accent">
         <h1>${escapeHtml(state.activeRequest.title)}</h1>
-        <p class="subtitle">${escapeHtml(displayRequestNumber(state.activeRequest))} · ${statusLabel(state.activeRequest.status)} ${requestUnreadBadge(state.activeRequest.id)}</p>
+        <p class="subtitle">${escapeHtml(state.activeRequest.title)} · ${escapeHtml(lifecycleStageLabel(state.activeRequest))} ${requestUnreadBadge(state.activeRequest.id)}</p>
       </div>
       <section class="card status-card">
         <p class="section-label green">Request Details</p>
-        ${accountRow("Status", statusLabel(state.activeRequest.status))}
+        ${accountRow("Stage", lifecycleStageLabel(state.activeRequest))}
         ${accountRow("Tagged Team", assignedPeopleText(state.activeRequest.id))}
         ${accountRow("Due Date", formatDate(state.activeRequest.due_date))}
         ${accountRow("Created", formatDate(state.activeRequest.created_at))}
@@ -2201,7 +2336,7 @@ function signatureDocumentCard(document) {
       <div class="signature-document-header">
         <span>
           <strong>${escapeHtml(document.title || "Agreement")}</strong>
-          <small>${escapeHtml(request ? `${displayRequestNumber(request)} · ${request.title}` : "Request agreement")}</small>
+          <small>${escapeHtml(request ? `${request.title} · ${lifecycleStageLabel(request)}` : "Request agreement")}</small>
           <small>Proposal</small>
         </span>
         <span class="signature-document-actions">
@@ -2235,7 +2370,7 @@ function sentProposalFileRow(document) {
     >
       <span class="sent-proposal-file-name">
         <strong>${escapeHtml(document.title || "Accessibility Services Proposal")}</strong>
-        ${request ? `<small>${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(request.title)}</small>` : ""}
+        ${request ? `<small>${escapeHtml(request.title)} · ${escapeHtml(lifecycleStageLabel(request))}</small>` : ""}
         <small class="sent-proposal-file-date">Last modified: ${escapeHtml(formatDate(lastModified))}</small>
       </span>
       <span class="sent-proposal-file-meta">
@@ -2832,7 +2967,7 @@ function signatureDocumentsPage() {
             <label class="field"><span>Request</span>
               <select name="requestId" data-signature-request-select required ${initialClientId ? "" : "disabled"}>
                 <option value="">Select Request</option>
-                ${clientRequests.map((request) => `<option value="${request.id}" ${request.id === selectedRequest?.id ? "selected" : ""}>${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(request.title)}</option>`).join("")}
+                ${clientRequests.map((request) => `<option value="${request.id}" ${request.id === selectedRequest?.id ? "selected" : ""}>${escapeHtml(request.title)} · ${escapeHtml(lifecycleStageLabel(request))}</option>`).join("")}
               </select>
             </label>
           </div>
@@ -2846,7 +2981,7 @@ function signatureDocumentsPage() {
             <p class="section-label send-to-title">Send to</p>
             <p class="helper">The client contact below will receive a private proposal link.</p>
             <div data-signature-recipient-list>${signatureRecipientInputs(selectedRequest)}</div>
-            <button class="secondary add-recipient-button" type="button" data-add-signature-recipient>Add Recipient Name</button>
+            <button class="secondary add-recipient-button" type="button" data-add-signature-recipient>Add Recipient</button>
           </section>
           <div class="signature-form-actions">
             <button class="primary" type="submit" ${draft.proposalGenerated ? "" : "disabled"}>Send proposal</button>
@@ -2874,10 +3009,10 @@ function clientRequestCards(requests) {
       <h2>${escapeHtml(request.title)} ${requestUnreadBadge(request.id)}</h2>
       <p>${escapeHtml(request.description || "Request linked to this client account.")}</p>
       <div class="deliverable-row request-card-meta">
-        <span>${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(request.service_type || "Accessibility Service")}</span>
+          <span>${escapeHtml(request.title || request.service_type || "Accessibility Service")}</span>
         <span class="request-card-status">
           <time>${formatDate(request.due_date || request.closed_at || request.created_at)}</time>
-          <span class="status-pill">${statusLabel(request.status)}</span>
+          <span class="status-pill">${escapeHtml(lifecycleStageLabel(request))}</span>
         </span>
       </div>
       <p class="assigned-line">Team: ${escapeHtml(assignedPeopleText(request.id))}</p>
@@ -3675,22 +3810,22 @@ function renderPublicSignature() {
               <form class="proposal-sign-panel" id="publicSignatureForm">
                 <p>I, ${escapeHtml(recipientName)}, agree to the terms of this agreement and consent to use the signature below as my digital signature.</p>
                 <div class="proposal-sign-tabs" role="tablist" aria-label="Signature method">
-                  <button type="button" class="active" data-signature-mode-button="typing">▣ Sign by typing</button>
-                  <button type="button" data-signature-mode-button="drawing">✎ Sign by drawing</button>
+                  <button type="button" class="${publicSignatureDraftValue("signatureMode", "typing") === "typing" ? "active" : ""}" data-signature-mode-button="typing">▣ Sign by typing</button>
+                  <button type="button" class="${publicSignatureDraftValue("signatureMode", "typing") === "drawing" ? "active" : ""}" data-signature-mode-button="drawing">✎ Sign by drawing</button>
                 </div>
-                <div data-signature-mode="typing">
-                  <label class="field"><span>Signature</span><input name="typedSignature" autocomplete="off" /></label>
+                <div data-signature-mode="typing" ${publicSignatureDraftValue("signatureMode", "typing") === "typing" ? "" : "hidden"}>
+                  <label class="field"><span>Signature</span><input name="typedSignature" value="${escapeHtml(publicSignatureDraftValue("typedSignature"))}" autocomplete="off" /></label>
                 </div>
-                <div class="signature-drawing-panel" data-signature-mode="drawing" hidden>
+                <div class="signature-drawing-panel" data-signature-mode="drawing" ${publicSignatureDraftValue("signatureMode", "typing") === "drawing" ? "" : "hidden"}>
                   <span class="field-label">Draw your signature</span>
                   <canvas class="signature-canvas" data-signature-canvas width="720" height="220" aria-label="Draw your signature"></canvas>
-                  <input name="signatureImage" type="hidden" />
+                  <input name="signatureImage" type="hidden" value="${escapeHtml(publicSignatureDraftValue("signatureImage"))}" />
                   <button class="link-button" type="button" data-clear-signature>Clear drawing</button>
                 </div>
                 <div class="signature-field-grid">
-                  <label class="field"><span>Name</span><input name="signerName" value="${escapeHtml(recipientName)}" required autocomplete="name" /></label>
-                  <label class="field"><span>Title</span><input name="signerTitle" required autocomplete="organization-title" /></label>
-                  <label class="field"><span>Date</span><input name="signatureDate" type="date" value="${new Date().toISOString().slice(0, 10)}" required /></label>
+                  <label class="field"><span>Name</span><input name="signerName" value="${escapeHtml(publicSignatureDraftValue("signerName", recipientName))}" required autocomplete="name" /></label>
+                  <label class="field"><span>Title</span><input name="signerTitle" value="${escapeHtml(publicSignatureDraftValue("signerTitle"))}" required autocomplete="organization-title" /></label>
+                  <label class="field"><span>Date</span><input name="signatureDate" type="date" value="${escapeHtml(publicSignatureDraftValue("signatureDate", new Date().toISOString().slice(0, 10)))}" required /></label>
                 </div>
                 <button class="primary" type="submit">Accept and sign</button>
               </form>
@@ -3714,6 +3849,7 @@ function escapeHtml(value) {
 }
 
 function render() {
+  captureUnsavedFormDrafts();
   const previousWindowScroll = window.scrollY;
   const previousPreviewScroll = document.querySelector("[data-proposal-preview-document]")?.scrollTop || 0;
   const previousViewerScroll = document.querySelector("[data-proposal-viewer-document]")?.scrollTop || 0;
@@ -3839,11 +3975,26 @@ function attachPublicSignatureEvents() {
 
   if (!form) return;
 
+  const savePublicSignatureDraft = () => {
+    const values = Object.fromEntries(new FormData(form));
+    state.publicSignatureDraft = {
+      ...state.publicSignatureDraft,
+      typedSignature: String(values.typedSignature || ""),
+      signerName: String(values.signerName || ""),
+      signerTitle: String(values.signerTitle || ""),
+      signatureDate: String(values.signatureDate || "")
+    };
+  };
+  form.addEventListener("input", savePublicSignatureDraft);
+  form.addEventListener("change", savePublicSignatureDraft);
+  form.addEventListener("focusout", savePublicSignatureDraft);
+
   const signatureModeButtons = form.querySelectorAll("[data-signature-mode-button]");
   const signatureModePanels = form.querySelectorAll("[data-signature-mode]");
   signatureModeButtons.forEach((button) => {
     button.addEventListener("click", () => {
       const mode = button.dataset.signatureModeButton;
+      state.publicSignatureDraft = { ...state.publicSignatureDraft, signatureMode: mode };
       signatureModeButtons.forEach((item) => item.classList.toggle("active", item === button));
       signatureModePanels.forEach((panel) => {
         panel.hidden = panel.dataset.signatureMode !== mode;
@@ -3867,6 +4018,7 @@ function attachPublicSignatureEvents() {
     const persistDrawing = () => {
       const image = hasDrawing ? canvas.toDataURL("image/png") : "";
       signatureImageInput.value = image;
+      state.publicSignatureDraft = { ...state.publicSignatureDraft, signatureImage: image };
       try {
         if (image) sessionStorage.setItem(draftKey, image);
         else sessionStorage.removeItem(draftKey);
@@ -3875,7 +4027,7 @@ function attachPublicSignatureEvents() {
       }
     };
     try {
-      const savedImage = sessionStorage.getItem(draftKey);
+      const savedImage = sessionStorage.getItem(draftKey) || signatureImageInput.value;
       if (savedImage) {
         const image = new Image();
         image.onload = () => {
@@ -3883,6 +4035,7 @@ function attachPublicSignatureEvents() {
           context.drawImage(image, 0, 0, canvas.width, canvas.height);
           hasDrawing = true;
           signatureImageInput.value = savedImage;
+          state.publicSignatureDraft = { ...state.publicSignatureDraft, signatureImage: savedImage };
         };
         image.src = savedImage;
       }
@@ -3939,6 +4092,7 @@ function attachPublicSignatureEvents() {
           signatureDate: values.signatureDate
         });
         state.publicSignature = await loadSignatureByToken(state.publicSignatureToken);
+        clearPublicSignatureDraft();
         showToast("Proposal signed.");
         renderPublicSignature();
       } catch (error) {
@@ -4329,6 +4483,9 @@ function attachEvents() {
       if (event.target?.type === "file") return;
       signatureDraftFromForm(signatureDocumentForm);
     });
+    signatureDocumentForm.addEventListener("focusout", () => {
+      signatureDraftFromForm(signatureDocumentForm);
+    });
     signatureDocumentForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const form = event.currentTarget;
@@ -4401,6 +4558,9 @@ function attachEvents() {
     clientForm.addEventListener("change", (event) => {
       saveClientDraft(event);
     });
+    clientForm.addEventListener("focusout", (event) => {
+      saveClientDraft(event);
+    });
     clientForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const values = Object.fromEntries(new FormData(event.currentTarget));
@@ -4462,6 +4622,24 @@ function attachEvents() {
       event.stopPropagation();
     });
     clientCcContactForm.addEventListener("input", (event) => {
+      const form = event.currentTarget;
+      const requestId = form.dataset.requestId || state.activeRequest?.id;
+      if (!requestId || !event.target?.name) return;
+      state.ccContactDrafts[requestId] = {
+        ...ccContactDraft(requestId),
+        [event.target.name]: event.target.value
+      };
+    });
+    clientCcContactForm.addEventListener("change", (event) => {
+      const form = event.currentTarget;
+      const requestId = form.dataset.requestId || state.activeRequest?.id;
+      if (!requestId || !event.target?.name) return;
+      state.ccContactDrafts[requestId] = {
+        ...ccContactDraft(requestId),
+        [event.target.name]: event.target.value
+      };
+    });
+    clientCcContactForm.addEventListener("focusout", (event) => {
       const form = event.currentTarget;
       const requestId = form.dataset.requestId || state.activeRequest?.id;
       if (!requestId || !event.target?.name) return;
@@ -4591,7 +4769,6 @@ function attachEvents() {
   const requestForm = document.getElementById("requestForm");
   if (requestForm) {
     const saveRequestDraft = () => {
-      if (state.editingRequestId) return;
       state.requestDraft = requestDraftFromForm(requestForm);
       state.requestClientSelection = state.requestDraft.clientId || null;
       const cancelButton = requestForm.querySelector("[data-cancel-request-edit]");
@@ -4599,6 +4776,7 @@ function attachEvents() {
     };
     requestForm.addEventListener("input", saveRequestDraft);
     requestForm.addEventListener("change", saveRequestDraft);
+    requestForm.addEventListener("focusout", saveRequestDraft);
     requestForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const formData = new FormData(event.currentTarget);
@@ -4715,7 +4893,7 @@ function attachEvents() {
   if (requestClientSelect) {
     requestClientSelect.addEventListener("change", (event) => {
       const form = event.currentTarget.closest("form");
-      if (form && !state.editingRequestId) state.requestDraft = requestDraftFromForm(form);
+      if (form) state.requestDraft = requestDraftFromForm(form);
       state.requestClientSelection = event.currentTarget.value;
       render();
     });
@@ -4729,7 +4907,7 @@ function attachEvents() {
         return;
       }
       const request = state.requests.find((item) => item.id === button.dataset.deleteRequest);
-      if (!window.confirm(`Delete ${request ? displayRequestNumber(request) : "this request"}?`)) return;
+      if (!window.confirm(`Delete ${request ? request.title || clientName(request.client_id) : "this lead"}?`)) return;
 
       await withActionLock(`delete-request-${button.dataset.deleteRequest}`, button, async () => {
         try {
@@ -4752,6 +4930,12 @@ function attachEvents() {
 
   const teamForm = document.getElementById("teamForm");
   if (teamForm) {
+    const saveTeamDraft = () => {
+      state.teamDraft = Object.fromEntries(new FormData(teamForm));
+    };
+    teamForm.addEventListener("input", saveTeamDraft);
+    teamForm.addEventListener("change", saveTeamDraft);
+    teamForm.addEventListener("focusout", saveTeamDraft);
     teamForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const values = Object.fromEntries(new FormData(event.currentTarget));
@@ -4760,9 +4944,11 @@ function attachEvents() {
         if (state.editingTeamId) {
           await updateTeamMember(state.editingTeamId, values);
           state.editingTeamId = null;
+          clearTeamDraft();
           showToast("Team member updated.");
         } else {
           await createTeamMember(values);
+          clearTeamDraft();
           showToast("Team member added.");
         }
         state.team = await loadTeam();
@@ -4776,6 +4962,7 @@ function attachEvents() {
 
   document.querySelectorAll("[data-edit-team]").forEach((button) => {
     button.addEventListener("click", () => {
+      clearTeamDraft();
       state.editingTeamId = button.dataset.editTeam;
       render();
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -4786,6 +4973,7 @@ function attachEvents() {
   if (cancelTeamEdit) {
     cancelTeamEdit.addEventListener("click", () => {
       state.editingTeamId = null;
+      clearTeamDraft();
       render();
     });
   }
@@ -4816,6 +5004,12 @@ function attachEvents() {
 
   const profileForm = document.getElementById("profileForm");
   if (profileForm) {
+    const saveProfileDraft = () => {
+      state.profileDraft = Object.fromEntries(new FormData(profileForm));
+    };
+    profileForm.addEventListener("input", saveProfileDraft);
+    profileForm.addEventListener("change", saveProfileDraft);
+    profileForm.addEventListener("focusout", saveProfileDraft);
     profileForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const values = Object.fromEntries(new FormData(event.currentTarget));
@@ -4823,6 +5017,7 @@ function attachEvents() {
         try {
         const updatedProfile = await updateOwnProfile(values);
         if (updatedProfile) state.profile = updatedProfile;
+        clearProfileDraft();
         showToast("Profile updated.");
         render();
         } catch (error) {
@@ -4835,9 +5030,12 @@ function attachEvents() {
   attachFileInputRemovers();
 
   document.querySelectorAll("[data-message-draft]").forEach((textarea) => {
-    textarea.addEventListener("input", () => {
+    const saveMessageDraft = () => {
       state.messageDrafts[textarea.dataset.messageDraft] = textarea.value;
-    });
+    };
+    textarea.addEventListener("input", saveMessageDraft);
+    textarea.addEventListener("change", saveMessageDraft);
+    textarea.addEventListener("focusout", saveMessageDraft);
   });
 
   const form = document.getElementById("messageForm");
@@ -4859,6 +5057,7 @@ function attachEvents() {
           if (message) await createMessage(state.activeRequest.id, state.profile.id, message);
           if (file) await uploadRequestAttachment({ request: state.activeRequest, profile: state.profile, file });
           clearMessageDraft(state.activeRequest.id);
+          event.currentTarget.reset();
           await refreshActiveMessages({ markRead: true });
           showToast(message ? "Message sent." : "Attachment uploaded.");
           render();
@@ -4890,6 +5089,7 @@ function attachEvents() {
           if (message) await createMessage(state.activeRequest.id, state.profile.id, message);
           if (file) await uploadRequestAttachment({ request: state.activeRequest, profile: state.profile, file });
           clearMessageDraft(state.activeRequest.id);
+          event.currentTarget.reset();
           await refreshActiveMessages({ markRead: true });
           showToast(message ? "Message sent." : "Attachment uploaded.");
           render();
@@ -5055,10 +5255,17 @@ function resetSessionState() {
   state.requestClientContacts = [];
   state.signatureDocuments = [];
   state.publicSignature = null;
+  state.publicSignatureDraft = {};
   state.publicSignatureToken = "";
   state.messageDrafts = {};
   state.clientDraft = {};
   state.requestDraft = {};
+  state.teamDraft = {};
+  state.profileDraft = {};
+  state.skipClientDraftCapture = false;
+  state.skipRequestDraftCapture = false;
+  state.skipTeamDraftCapture = false;
+  state.skipProfileDraftCapture = false;
   state.ccContactDrafts = {};
   state.signatureDraft = {};
   state.pendingActions = new Set();
