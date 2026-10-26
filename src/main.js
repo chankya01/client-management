@@ -94,6 +94,8 @@ const state = {
   editingClientId: null,
   editingRequestId: null,
   editingTeamId: null,
+  clientFormOpen: false,
+  requestFormOpen: false,
   showPasswordForm: false,
   authView: isPasswordRecoveryFlow() ? "reset-password" : "signin",
   page: "dashboard",
@@ -730,7 +732,7 @@ function hasClientDraft() {
     String(draft.name || "").trim()
     || String(draft.contactName || "").trim()
     || String(draft.email || "").trim()
-    || String(draft.billingEmail || "").trim()
+    || String(draft.billingEmail || draft.invoiceEmail || "").trim()
     || (draft.status && draft.status !== "signed")
     || String(draft.ccFullName || "").trim()
     || String(draft.ccEmail || "").trim()
@@ -749,6 +751,9 @@ function hasRequestDraft() {
   const draft = state.requestDraft || {};
   return Boolean(
     state.requestClientSelection
+    || String(draft.organizationName || "").trim()
+    || String(draft.contactName || "").trim()
+    || String(draft.contactEmail || "").trim()
     || String(draft.title || "").trim()
     || String(draft.description || "").trim()
     || String(draft.dueDate || "").trim()
@@ -795,6 +800,9 @@ function requestDraftFromForm(form) {
   const formData = new FormData(form);
   return {
     clientId: String(formData.get("clientId") || ""),
+    organizationName: String(formData.get("organizationName") || ""),
+    contactName: String(formData.get("contactName") || ""),
+    contactEmail: String(formData.get("contactEmail") || ""),
     title: String(formData.get("title") || ""),
     description: String(formData.get("description") || ""),
     dueDate: String(formData.get("dueDate") || ""),
@@ -1618,6 +1626,7 @@ function adminClientsPage() {
   const editingClient = state.clients.find((client) => client.id === state.editingClientId);
   const clientStatus = editingClient?.status || clientDraftValue("status", "signed");
   const showClientCancel = editingClient || hasClientDraft();
+  const showClientForm = Boolean(state.clientFormOpen || editingClient || hasClientDraft());
   const editingClientContacts = editingClient ? organizationContacts(editingClient.id) : [];
   return `
     <section class="admin-page">
@@ -1626,14 +1635,15 @@ function adminClientsPage() {
           <h1>Client Management</h1>
           <p class="subtitle">Create the client company, then create requests against that client.</p>
         </div>
+        ${canManageClients() ? `<button class="primary" type="button" data-show-client-form>Add Client</button>` : ""}
       </div>
-      <section class="card">
+      ${showClientForm ? `<section class="card">
         <p class="section-label">${editingClient ? "Edit Client" : "Add Client"}</p>
         <form class="admin-form" id="clientForm">
           <label class="field"><span>Organization</span><input name="name" value="${escapeHtml(clientDraftValue("name", editingClient?.name || ""))}" required /></label>
           <label class="field"><span>Primary Contact</span><input name="contactName" value="${escapeHtml(clientDraftValue("contactName", editingClient?.primary_contact_name || ""))}" required /></label>
           <label class="field"><span>Client Email</span><input name="email" type="email" value="${escapeHtml(clientDraftValue("email", editingClient?.primary_contact_email || ""))}" required /></label>
-          <label class="field"><span>Billing Email</span><input name="billingEmail" type="email" value="${escapeHtml(clientDraftValue("billingEmail", editingClient?.billing_email || ""))}" /></label>
+          <label class="field"><span>Invoice Email (optional)</span><input name="invoiceEmail" type="email" value="${escapeHtml(clientDraftValue("invoiceEmail", editingClient?.billing_email || ""))}" /></label>
           <label class="field"><span>Status</span><select name="status">${clientStatusOptions(clientStatus)}</select></label>
           <p class="section-label cc-contact-heading wide">Add CC Contact</p>
           <label class="field"><span>Contact Name</span><input name="ccFullName" value="${escapeHtml(clientDraftValue("ccFullName", ""))}" /></label>
@@ -1644,7 +1654,7 @@ function adminClientsPage() {
             <button class="secondary" type="button" data-cancel-client-edit ${showClientCancel ? "" : "hidden"}>${editingClient ? "Cancel Edit" : "Cancel"}</button>
           </div>
         </form>
-      </section>
+      </section>` : ""}
       ${editingClient ? `
         <section class="card">
           <p class="section-label">CC Contacts</p>
@@ -1707,7 +1717,7 @@ function adminClientDetailPage() {
           ${accountRow("Organization", client.name)}
           ${accountRow("Primary Contact", client.primary_contact_name)}
           ${accountRow("Primary Email", client.primary_contact_email)}
-          ${accountRow("Billing Email", client.billing_email)}
+          ${accountRow("Invoice Email", client.billing_email)}
           ${accountRow("Status", clientStatusKey(client.status) === "signed" ? "Signed" : "Unsigned")}
           ${accountRow("Created", formatDate(client.created_at))}
         </section>
@@ -1746,6 +1756,8 @@ function adminRequestsPage() {
     ));
   const selectedServicesText = requestDraftList("services", requestServices(editingRequest || {})).join(", ");
   const showRequestCancel = editingRequest || hasRequestDraft();
+  const showRequestForm = Boolean(state.requestFormOpen || editingRequest || hasRequestDraft());
+  const leadClient = editingRequest ? state.clients.find((client) => client.id === editingRequest.client_id) : null;
   return `
     <section class="admin-page">
       <div class="admin-heading">
@@ -1753,12 +1765,15 @@ function adminRequestsPage() {
           <h1>Lead Management</h1>
           <p class="subtitle">Track organizations from New Lead through proposal and signing, then continue the same record as client work.</p>
         </div>
+        ${canManageRequests() ? `<button class="primary" type="button" data-show-request-form>Add Lead</button>` : ""}
       </div>
       ${canManageRequests() ? `
-        <section class="card">
-          <p class="section-label">${editingRequest ? "Edit Request" : "Create Request"}</p>
+        ${showRequestForm ? `<section class="card">
+          <p class="section-label">${editingRequest ? "Edit Lead / Work Item" : "Create Lead"}</p>
           <form class="admin-form" id="requestForm">
-            <label class="field"><span>Client</span><select name="clientId" required><option value="" ${selectedClientId ? "" : "selected"} disabled>Select Client</option>${state.clients.map((client) => `<option value="${client.id}" ${selectedClientId === client.id ? "selected" : ""}>${escapeHtml(client.name)}</option>`).join("")}</select></label>
+            <label class="field"><span>Organization</span><input name="organizationName" value="${escapeHtml(requestDraftValue("organizationName", leadClient?.name || ""))}" required /></label>
+            <label class="field"><span>Primary Contact</span><input name="contactName" value="${escapeHtml(requestDraftValue("contactName", leadClient?.primary_contact_name || ""))}" required /></label>
+            <label class="field"><span>Primary Contact Email</span><input name="contactEmail" type="email" value="${escapeHtml(requestDraftValue("contactEmail", leadClient?.primary_contact_email || ""))}" required /></label>
             <label class="field"><span>Title</span><input name="title" value="${escapeHtml(requestDraftValue("title", editingRequest?.title || ""))}" required /></label>
             <label class="field wide"><span>Description</span><input name="description" value="${escapeHtml(requestDraftValue("description", editingRequest?.description || ""))}" /></label>
             ${ccContactCheckboxes(selectedClientId, selectedCcContacts)}
@@ -1767,11 +1782,11 @@ function adminRequestsPage() {
             <label class="field"><span>Due Date</span><input name="dueDate" type="date" value="${escapeHtml(requestDraftValue("dueDate", editingRequest?.due_date || ""))}" /></label>
             <label class="field"><span>Status</span><select name="status">${requestStatusOptions(requestStatus)}</select></label>
             <div class="form-actions wide request-form-actions">
-              <button class="primary" type="submit">${editingRequest ? "Update Request" : "Create Request"}</button>
+              <button class="primary" type="submit">${editingRequest ? "Update Lead" : "Create Lead"}</button>
               <button class="secondary" type="button" data-cancel-request-edit ${showRequestCancel ? "" : "hidden"}>${editingRequest ? "Cancel Edit" : "Cancel"}</button>
             </div>
           </form>
-        </section>
+        </section>` : ""}
       ` : `
         <section class="card">
           <p class="section-label">Lead Queue</p>
@@ -2790,11 +2805,11 @@ function signatureRecipientInputs(request) {
   const draftRecipients = Array.isArray(state.signatureDraft.recipients) ? state.signatureDraft.recipients : [];
   const defaults = draftRecipients.length ? draftRecipients : signatureRecipientDefaults(request);
   const rows = defaults.length ? defaults : [{ name: "", email: "", role: "signer" }];
-  return rows.map((recipient) => `
+  return rows.map((recipient, index) => `
     <div class="signature-recipient-row">
       <label class="field"><span>Recipient Name</span><input name="recipientName" value="${escapeHtml(recipient.name || "")}" /></label>
       <label class="field"><span>Email</span><input name="recipientEmail" type="email" value="${escapeHtml(recipient.email || "")}" /></label>
-      <button class="secondary recipient-remove-button" type="button" data-remove-signature-recipient>Remove Recipient</button>
+      ${rows.length > 1 ? `<button class="secondary recipient-remove-button" type="button" data-remove-signature-recipient>Remove Recipient</button>` : ""}
     </div>
   `).join("");
 }
@@ -4123,6 +4138,22 @@ function attachEvents() {
 
   attachPasswordToggles();
 
+  document.querySelectorAll("[data-show-client-form]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.clientFormOpen = true;
+      render();
+      document.getElementById("clientForm")?.querySelector("input")?.focus();
+    });
+  });
+
+  document.querySelectorAll("[data-show-request-form]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.requestFormOpen = true;
+      render();
+      document.getElementById("requestForm")?.querySelector("input")?.focus();
+    });
+  });
+
   document.querySelectorAll("[data-action='toggle-services']").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.preventDefault();
@@ -4566,6 +4597,8 @@ function attachEvents() {
       const values = Object.fromEntries(new FormData(event.currentTarget));
       const ccFullName = String(values.ccFullName || "").trim();
       const ccEmail = normalizeEmail(values.ccEmail);
+      values.billingEmail = values.invoiceEmail || "";
+      delete values.invoiceEmail;
       delete values.ccFullName;
       delete values.ccEmail;
 
@@ -4587,6 +4620,7 @@ function attachEvents() {
             state.clientContacts = await loadClientContacts();
           }
           state.editingClientId = null;
+          state.clientFormOpen = false;
           clearClientDraft();
           showToast(ccEmail ? "Client updated and CC contact added." : "Client updated.");
         } else {
@@ -4600,6 +4634,7 @@ function attachEvents() {
             state.clientContacts = await loadClientContacts();
           }
           clearClientDraft();
+          state.clientFormOpen = false;
           if (createdClient?.account_setup_email?.sent) {
             showToast(ccEmail ? "Client and CC contact created. Invite emails sent." : "Client created and invite email sent.");
           } else if (createdClient?.account_setup_email?.reason) {
@@ -4719,6 +4754,7 @@ function attachEvents() {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
       state.editingClientId = button.dataset.editClient;
+      state.clientFormOpen = true;
       clearClientDraft();
       state.page = "admin-clients";
       rememberPage();
@@ -4731,6 +4767,7 @@ function attachEvents() {
   if (cancelClientEdit) {
     cancelClientEdit.addEventListener("click", () => {
       state.editingClientId = null;
+      state.clientFormOpen = false;
       clearClientDraft();
       render();
     });
@@ -4784,7 +4821,9 @@ function attachEvents() {
       const selectedServices = formData.getAll("services").map(String);
       const assignedProfileIds = formData.getAll("assignedProfileIds").map(String);
       const selectedCcEmails = new Set(formData.getAll("ccContactEmails").map(normalizeEmail));
-      const clientContacts = organizationContacts(values.clientId)
+      const editingRequest = state.requests.find((request) => request.id === state.editingRequestId);
+      const selectedClientId = editingRequest?.client_id || values.clientId || "";
+      const clientContacts = organizationContacts(selectedClientId)
         .filter((contact) => selectedCcEmails.has(normalizeEmail(contact.email)))
         .map((contact) => ({
           name: contact.full_name || "",
@@ -4801,7 +4840,7 @@ function attachEvents() {
         const previousContacts = state.editingRequestId ? clientContactsForRequest(state.editingRequestId) : [];
         const addedCcEmails = newContactEmails(previousContacts, clientContacts);
         const requestPayload = {
-          clientId: values.clientId,
+          clientId: selectedClientId,
           title: values.title,
           description: values.description,
           serviceType: selectedServices.join(", "),
@@ -4831,9 +4870,18 @@ function attachEvents() {
             }
           }
           state.editingRequestId = null;
+          state.requestFormOpen = false;
           clearRequestDraft();
           showToast("Request updated.");
         } else {
+          const createdClient = await createClient({
+            name: values.organizationName,
+            contactName: values.contactName,
+            email: values.contactEmail,
+            billingEmail: values.contactEmail,
+            status: "unsigned"
+          });
+          requestPayload.clientId = createdClient.id;
           const createdRequest = await createRequest(requestPayload);
           await setRequestAssignments(createdRequest.id, assignedProfileIds, state.profile.id);
           await setRequestClientContacts(createdRequest.id, clientContacts);
@@ -4844,7 +4892,8 @@ function attachEvents() {
             { notify: false }
           );
           clearRequestDraft();
-          showToast("Request created and linked to the selected client.");
+          state.requestFormOpen = false;
+          showToast("Lead created with its organization and primary contact.");
         }
         await loadPortalData();
         render();
@@ -4868,6 +4917,7 @@ function attachEvents() {
           state.requestAssignments = assignments;
           clearRequestDraft();
           state.editingRequestId = button.dataset.editRequest;
+          state.requestFormOpen = true;
           state.requestClientSelection = state.requests.find((request) => request.id === state.editingRequestId)?.client_id || null;
           state.page = "admin-requests";
           rememberPage();
@@ -4884,6 +4934,7 @@ function attachEvents() {
   if (cancelRequestEdit) {
     cancelRequestEdit.addEventListener("click", () => {
       state.editingRequestId = null;
+      state.requestFormOpen = false;
       clearRequestDraft();
       render();
     });
