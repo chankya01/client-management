@@ -297,7 +297,7 @@ export async function POST(request, { params }) {
           request_id: payload.document.request_id,
           sender_id: senderId,
           message: allSigned
-            ? `Agreement signed by ${payload.recipient.name || payload.recipient.email}: ${payload.document.title || "Accessibility Services Proposal"}. The signed agreement is ready to download.\nOpen signed agreement: ${signedAgreementUrl}`
+            ? `Agreement signed by ${payload.recipient.name || payload.recipient.email}: ${payload.document.title || "Accessibility Services Proposal"}. Signed at: ${now}. The signed agreement is ready to download.\nOpen signed agreement: ${signedAgreementUrl}`
             : `Agreement signed by ${payload.recipient.name || payload.recipient.email}: ${payload.document.title || "Accessibility Services Proposal"}`,
           is_internal: false
         })

@@ -2323,7 +2323,7 @@ function proposalApprovalLabel(document) {
   if (document?.status === "completed" || latestEvent?.event_type === "signed") return "Agreement Signed";
   if (document?.proposal_approved || latestEvent?.event_type === "proposal_approved") return "Agreement Unlocked";
   if (latestEvent?.event_type === "viewed" || document?.status === "viewed") return "Proposal Viewed";
-  return "Proposal Sent";
+  return "Sent";
 }
 
 function proposalViewerModal() {
@@ -2360,6 +2360,7 @@ function proposalViewerModal() {
             ${proposalDocument ? `<p class="helper">${escapeHtml(proposalApprovalLabel(proposalDocument))}</p>` : ""}
           </div>
           <div class="proposal-viewer-actions">
+            ${proposalDocument && !proposalIsSigned ? `<button class="secondary signature-document-link" type="button" data-edit-proposal="${escapeHtml(proposalDocument.id)}">Edit and resend</button>` : ""}
             ${proposalUrl ? `<a class="secondary signature-document-link" href="${escapeHtml(proposalUrl)}" target="_blank" rel="noopener noreferrer">${proposalIsSigned ? "Open signed agreement" : "Open client view"}</a>` : ""}
             <button class="proposal-viewer-close" type="button" aria-label="Close proposal preview" data-close-proposal-view>×</button>
           </div>
@@ -2408,7 +2409,9 @@ function signatureDocumentCard(document) {
 
 function sentProposalFileRow(document) {
   const request = state.requests.find((item) => item.id === document.request_id);
-  const lastModified = document.updated_at || document.sent_at || document.created_at;
+  const sentAt = document.sent_at || document.created_at;
+  const signedAt = (document.recipients || []).find((recipient) => recipient.status === "signed")?.signed_at
+    || [...(document.events || [])].reverse().find((event) => event.event_type === "signed")?.created_at;
   return `
     <button
       class="sent-proposal-file-row"
@@ -2417,8 +2420,8 @@ function sentProposalFileRow(document) {
     >
       <span class="sent-proposal-file-name">
         <strong>${escapeHtml(document.title || "Accessibility Services Proposal")}</strong>
-        ${request ? `<small>${escapeHtml(request.title)} · ${escapeHtml(lifecycleStageLabel(request))}</small>` : ""}
-        <small class="sent-proposal-file-date">Last modified: ${escapeHtml(formatDate(lastModified))}</small>
+        ${request ? `<small>${escapeHtml(clientName(request.client_id))} · ${escapeHtml(request.title)}</small>` : ""}
+        <small class="sent-proposal-file-date">Sent: ${escapeHtml(formatDate(sentAt))}${signedAt ? ` · Signed: ${escapeHtml(formatDate(signedAt))}` : ""}</small>
       </span>
       <span class="sent-proposal-file-meta">
         <span class="status-pill proposal-status-text">${escapeHtml(proposalApprovalLabel(document))}</span>
@@ -2429,6 +2432,9 @@ function sentProposalFileRow(document) {
 }
 
 function sentProposalsCard(documents) {
+  const sortedDocuments = [...documents].sort((left, right) => (
+    new Date(right.sent_at || right.created_at || 0).getTime() - new Date(left.sent_at || left.created_at || 0).getTime()
+  ));
   return `
     <section class="card sent-proposals-card">
       <div class="section-heading-row">
@@ -2436,7 +2442,7 @@ function sentProposalsCard(documents) {
       </div>
       <p class="helper">Select a proposal file name to open the full proposal screen.</p>
       <div class="sent-proposals-dropdown" role="list">
-        ${documents.map((document) => sentProposalFileRow(document)).join("") || `<p class="helper">No proposals have been sent yet.</p>`}
+        ${sortedDocuments.map((document) => sentProposalFileRow(document)).join("") || `<p class="helper">No proposals have been sent yet.</p>`}
       </div>
     </section>
   `;
@@ -3000,7 +3006,7 @@ function signatureDocumentsPage() {
   return `
     <section class="${isInternal() ? "admin-page" : "page"}">
       <h1>Proposals</h1>
-      <p class="subtitle">Build a client-facing proposal from a short conversation. The client approves it before signing is unlocked.</p>
+      <p class="subtitle">Build a client-facing proposal from a short conversation, review it, and send it for signature.</p>
       ${isInternal() ? `
         <form class="proposal-builder" id="signatureDocumentForm">
           <div class="proposal-builder-selection">
@@ -3033,7 +3039,6 @@ function signatureDocumentsPage() {
           <div class="signature-form-actions">
             <button class="primary" type="submit" ${draft.proposalGenerated ? "" : "disabled"}>Send proposal</button>
           </div>
-          <p class="helper">Signing is locked for the client until they approve the proposal.</p>
         </form>
       ` : ""}
       ${sentProposalsCard(state.signatureDocuments)}
@@ -4380,6 +4385,34 @@ function attachEvents() {
     button.addEventListener("click", () => {
       state.proposalViewer = null;
       render();
+    });
+  });
+
+  document.querySelectorAll("[data-edit-proposal]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const documentToEdit = state.signatureDocuments.find((document) => document.id === button.dataset.editProposal);
+      const request = state.requests.find((item) => item.id === documentToEdit?.request_id);
+      if (!documentToEdit || !request) return;
+      const details = parseAgreementDetailsFromSnapshot(documentToEdit.agreement || {}, { document: documentToEdit });
+      state.signatureDraft = {
+        ...details,
+        title: documentToEdit.title || "Accessibility Services Proposal",
+        clientId: request.client_id,
+        requestId: request.id,
+        documentPurpose: "signature",
+        proposalGenerated: true,
+        proposalMessages: [],
+        recipients: (documentToEdit.recipients || []).map((recipient, index) => ({
+          name: recipient.name || "",
+          email: recipient.email || "",
+          role: index === 0 ? "signer" : "viewer"
+        }))
+      };
+      state.signatureClientSelection = request.client_id;
+      state.proposalViewer = null;
+      state.page = "admin-documents";
+      render();
+      window.scrollTo({ top: 0, behavior: "smooth" });
     });
   });
 

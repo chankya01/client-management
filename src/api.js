@@ -1681,7 +1681,7 @@ export async function signSignatureRecipient(token, signatureFields) {
         id: crypto.randomUUID(),
         request_id: signedDocument.request_id,
         sender_id: demoIds.userId,
-        message: `Agreement signed by ${signedRecipient?.name || "client"}: ${signedDocument.title}. The signed agreement is ready to download.`,
+        message: `Agreement signed by ${signedRecipient?.name || "client"}: ${signedDocument.title}. Signed at: ${signedDocument.completed_at}. The signed agreement is ready to download.`,
         is_internal: false,
         created_at: new Date().toISOString(),
         profiles: { full_name: signedRecipient?.name || "Client", role: "client" }

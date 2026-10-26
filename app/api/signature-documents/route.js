@@ -108,7 +108,7 @@ async function ensureCompletedAgreementMessage(document, recipients, events, ori
     body: JSON.stringify({
       request_id: document.request_id,
       sender_id: document.uploaded_by,
-      message: `${marker}. The signed agreement is ready to download.\nOpen signed agreement: ${origin}/sign/${signer.signing_token}`,
+      message: `${marker}. Signed at: ${signer.signed_at || "-"}. The signed agreement is ready to download.\nOpen signed agreement: ${origin}/sign/${signer.signing_token}`,
       is_internal: false
     })
   });
