@@ -96,6 +96,7 @@ const state = {
   editingTeamId: null,
   clientFormOpen: false,
   requestFormOpen: false,
+  teamFormOpen: false,
   showPasswordForm: false,
   authView: isPasswordRecoveryFlow() ? "reset-password" : "signin",
   page: "dashboard",
@@ -774,6 +775,12 @@ function teamDraftValue(field, fallback = "") {
   return state.teamDraft[field] ?? fallback ?? "";
 }
 
+function teamDraftResponsibilities(member) {
+  const draft = state.teamDraft;
+  if (Array.isArray(draft.responsibilities)) return draft.responsibilities;
+  return Array.isArray(member?.responsibilities) ? member.responsibilities : [];
+}
+
 function clearTeamDraft() {
   state.teamDraft = {};
   state.skipTeamDraftCapture = true;
@@ -831,7 +838,11 @@ function captureUnsavedFormDrafts() {
 
   const teamForm = document.getElementById("teamForm");
   if (teamForm && !state.skipTeamDraftCapture) {
-    state.teamDraft = Object.fromEntries(new FormData(teamForm));
+    const formData = new FormData(teamForm);
+    state.teamDraft = {
+      ...Object.fromEntries(formData),
+      responsibilities: formData.getAll("responsibilities").map(String)
+    };
   }
 
   const profileForm = document.getElementById("profileForm");
@@ -1158,7 +1169,7 @@ function renderSignIn() {
       <form class="signin-card" id="signinForm">
         ${brandLogo("signin")}
         <h1>Sign In</h1>
-        <p class="helper">Use your email and password to access your workspace or client portal.</p>
+        <p class="helper">Use your email and password, or request a secure magic link.</p>
           <label class="field">
             <span>Email Address</span>
             <input name="email" type="email" autocomplete="email" required />
@@ -1173,6 +1184,7 @@ function renderSignIn() {
           </label>
         <button class="primary" type="submit">Sign In</button>
         <div class="signin-actions">
+          <button class="link-button" type="button" data-action="magic-link">Email me a magic link</button>
           <button class="link-button" type="button" data-action="forgot-password">Forgot Password?</button>
         </div>
       </form>
@@ -1203,6 +1215,22 @@ function attachSignInEvents() {
   document.querySelector("[data-action='forgot-password']")?.addEventListener("click", () => {
     state.authView = "forgot-password";
     render();
+  });
+
+  document.querySelector("[data-action='magic-link']")?.addEventListener("click", async () => {
+    const form = document.getElementById("signinForm");
+    const email = String(new FormData(form).get("email") || "").trim();
+    if (!email) {
+      showToast("Enter your email address first.");
+      form?.querySelector("[name='email']")?.focus();
+      return;
+    }
+    try {
+      await sendMagicLink(email);
+      showToast("Magic link sent. Check your email to sign in.");
+    } catch (error) {
+      showAppError(error, "Send magic link");
+    }
   });
 
   attachPasswordToggles();
@@ -1929,6 +1957,8 @@ function adminTeamPage() {
   const formTitle = editingMember ? "Update Team Member" : "Add Team Member";
   const submitText = editingMember ? "Update Team Member" : "Add Team Member";
   const roleValue = teamDraftValue("role", editingMember?.role || "");
+  const responsibilities = teamDraftResponsibilities(editingMember);
+  const showTeamForm = Boolean(state.teamFormOpen || editingMember || Object.keys(state.teamDraft || {}).length);
   return `
     <section class="admin-page">
       <div class="admin-heading">
@@ -1936,11 +1966,11 @@ function adminTeamPage() {
           <h1>Team Management</h1>
           <p class="subtitle">Internal users who can own, manage, develop, or review work.</p>
         </div>
+        ${canManageTeam() ? `<button class="primary" type="button" data-show-team-form>Add Team Member</button>` : ""}
       </div>
       ${canManageTeam() ? `
-        <section class="card">
+        ${showTeamForm ? `<section class="card">
           <p class="section-label">${formTitle}</p>
-          <p class="helper">This creates or updates the Supabase Auth user and profile through the local/server backend. Share the configured temporary password, then ask the user to change it after first login.</p>
           <form class="admin-form" id="teamForm">
             <label class="field"><span>Full Name</span><input name="fullName" value="${escapeHtml(teamDraftValue("fullName", editingMember?.full_name || ""))}" required /></label>
             <label class="field"><span>Email</span><input name="email" type="email" value="${escapeHtml(teamDraftValue("email", editingMember?.email || ""))}" required /></label>
@@ -1953,10 +1983,14 @@ function adminTeamPage() {
               <option value="owner" ${roleValue === "owner" ? "selected" : ""}>Admin</option>
             </select></label>
             <label class="field"><span>Job Title</span><input name="jobTitle" value="${escapeHtml(teamDraftValue("jobTitle", editingMember?.job_title || ""))}" /></label>
+            <fieldset class="field wide team-responsibilities-field">
+              <legend>Top Responsibilities (up to 3)</legend>
+              ${[0, 1, 2].map((index) => `<input name="responsibilities" value="${escapeHtml(responsibilities[index] || "")}" placeholder="Responsibility ${index + 1}" />`).join("")}
+            </fieldset>
             <button class="primary team-form-button" type="submit">${submitText}</button>
             ${editingMember ? `<button class="primary team-form-button" type="button" data-cancel-team-edit>Cancel Edit</button>` : ""}
           </form>
-        </section>
+        </section>` : ""}
       ` : `
         <section class="card">
           <p class="section-label">Team Directory</p>
@@ -1971,6 +2005,7 @@ function adminTeamPage() {
               <strong>${escapeHtml(member.full_name)}</strong>
               <span>${escapeHtml(member.email)} · ${escapeHtml(member.job_title || roleLabel(member.role))}</span>
               <span class="role-meta">${escapeHtml(roleLabel(member.role))}</span>
+              ${Array.isArray(member.responsibilities) && member.responsibilities.filter(Boolean).length ? `<ul class="team-responsibility-list">${member.responsibilities.filter(Boolean).slice(0, 3).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : ""}
             </div>
             <div class="row-actions">
               ${canManageTeam() ? `<button class="secondary small-action" data-edit-team="${member.id}">Edit</button>` : ""}
@@ -2004,7 +2039,7 @@ function adminSettingsPage() {
               <button class="primary" type="submit">Update Profile</button>
             </form>
           </section>
-          ${passwordSection("Password")}
+          <p class="helper settings-magic-link-note">Use the secure magic link from the sign-in screen to access this workspace without a stored password workflow.</p>
         </div>
       </section>
     `;
@@ -2026,13 +2061,10 @@ function adminSettingsPage() {
           ${accountRow("Default Admin", state.profile.full_name)}
           ${accountRow("Support Email", "support@accessible.org")}
         </section>
-        ${passwordSection("Password and Account")}
         <section class="card">
           <p class="section-label">Current Workspace</p>
-          ${accountRow("Clients", state.clients.length)}
           ${accountRow("Active Clients", new Set(state.requests.filter(isActiveClientRequest).map((request) => request.client_id).filter(Boolean)).size)}
           ${accountRow("Open Leads", state.requests.filter(isLeadRequest).length)}
-          ${accountRow("Team Members", state.team.length)}
         </section>
       </div>
     </section>
@@ -3045,7 +3077,7 @@ function accountPage() {
         ${accountRow("Organization", client?.name)}
         ${accountRow("Primary Contact", client?.primary_contact_name || state.profile?.full_name)}
         ${accountRow("Email", client?.primary_contact_email || state.profile?.email)}
-        ${accountRow("Billing Email", client?.billing_email)}
+        ${accountRow("Invoice Email", client?.billing_email)}
         ${accountRow("Client Since", formatDate(client?.created_at))}
         <p class="card-note">To change any of these, send a note in <a href="#" data-jump="messages">Messages</a>.</p>
       </section>
@@ -4128,6 +4160,14 @@ function attachEvents() {
     });
   });
 
+  document.querySelectorAll("[data-show-team-form]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.teamFormOpen = true;
+      render();
+      document.getElementById("teamForm")?.querySelector("input")?.focus();
+    });
+  });
+
   document.querySelectorAll("[data-action='toggle-services']").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.preventDefault();
@@ -4963,16 +5003,22 @@ function attachEvents() {
     teamForm.addEventListener("focusout", saveTeamDraft);
     teamForm.addEventListener("submit", async (event) => {
       event.preventDefault();
-      const values = Object.fromEntries(new FormData(event.currentTarget));
+      const formData = new FormData(event.currentTarget);
+      const values = {
+        ...Object.fromEntries(formData),
+        responsibilities: formData.getAll("responsibilities").map((item) => String(item).trim()).filter(Boolean).slice(0, 3)
+      };
       await withActionLock("team-form", event.currentTarget, async () => {
         try {
         if (state.editingTeamId) {
           await updateTeamMember(state.editingTeamId, values);
           state.editingTeamId = null;
+          state.teamFormOpen = false;
           clearTeamDraft();
           showToast("Team member updated.");
         } else {
           await createTeamMember(values);
+          state.teamFormOpen = false;
           clearTeamDraft();
           showToast("Team member added.");
         }
@@ -4989,6 +5035,7 @@ function attachEvents() {
     button.addEventListener("click", () => {
       clearTeamDraft();
       state.editingTeamId = button.dataset.editTeam;
+      state.teamFormOpen = true;
       render();
       window.scrollTo({ top: 0, behavior: "smooth" });
     });
@@ -4998,6 +5045,7 @@ function attachEvents() {
   if (cancelTeamEdit) {
     cancelTeamEdit.addEventListener("click", () => {
       state.editingTeamId = null;
+      state.teamFormOpen = false;
       clearTeamDraft();
       render();
     });
@@ -5301,6 +5349,9 @@ function resetSessionState() {
   state.editingClientId = null;
   state.editingRequestId = null;
   state.editingTeamId = null;
+  state.clientFormOpen = false;
+  state.requestFormOpen = false;
+  state.teamFormOpen = false;
   state.showPasswordForm = false;
   state.authView = "signin";
   state.loadError = "";

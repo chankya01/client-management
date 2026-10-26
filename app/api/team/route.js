@@ -18,7 +18,7 @@ import {
 } from "../_supabaseAdmin.js";
 
 function teamSelect() {
-  return "id,full_name,email,role,job_title,client_id";
+  return "id,full_name,email,role,job_title,responsibilities,client_id";
 }
 
 function profilePayload(body, id) {
@@ -26,6 +26,10 @@ function profilePayload(body, id) {
   const role = String(body.role || "").trim();
   const fullName = String(body.fullName || "").trim();
   const jobTitle = String(body.jobTitle || "").trim() || role;
+  const responsibilities = (Array.isArray(body.responsibilities) ? body.responsibilities : [])
+    .map((item) => String(item || "").trim())
+    .filter(Boolean)
+    .slice(0, 3);
 
   if (!fullName) throw new Error("Full name is required.");
   if (!email) throw new Error("Email address is required.");
@@ -37,6 +41,7 @@ function profilePayload(body, id) {
     email,
     role,
     job_title: jobTitle,
+    responsibilities,
     client_id: null,
     is_active: true,
     must_change_password: true

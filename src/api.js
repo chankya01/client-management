@@ -857,7 +857,7 @@ export async function loadTeam() {
 
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, full_name, email, role, job_title, client_id")
+    .select("id, full_name, email, role, job_title, responsibilities, client_id")
     .neq("role", "client")
     .order("full_name", { ascending: true });
 
@@ -1231,13 +1231,13 @@ export async function deleteRequest(requestId) {
   if (error) throw error;
 }
 
-export async function createTeamMember({ fullName, email, role, jobTitle }) {
+export async function createTeamMember({ fullName, email, role, jobTitle, responsibilities }) {
   const normalizedEmail = normalizeEmail(email);
 
   if (!useDemo()) {
     return localApi("/team", {
       method: "POST",
-      body: JSON.stringify({ fullName, email: normalizedEmail, role, jobTitle })
+      body: JSON.stringify({ fullName, email: normalizedEmail, role, jobTitle, responsibilities })
     });
   }
 
@@ -1250,7 +1250,8 @@ export async function createTeamMember({ fullName, email, role, jobTitle }) {
       full_name: fullName,
       email: normalizedEmail,
       role,
-      job_title: jobTitle || role
+      job_title: jobTitle || role,
+      responsibilities: Array.isArray(responsibilities) ? responsibilities.slice(0, 3) : []
     };
     demoTeam.push(member);
     return member;
@@ -1271,13 +1272,13 @@ export async function createTeamMember({ fullName, email, role, jobTitle }) {
   throw new Error(`Invite ${normalizedEmail} in Supabase Auth first, then create or sync their public.profiles row. Frontend cannot create auth users safely.`);
 }
 
-export async function updateTeamMember(memberId, { fullName, email, role, jobTitle }) {
+export async function updateTeamMember(memberId, { fullName, email, role, jobTitle, responsibilities }) {
   const normalizedEmail = normalizeEmail(email);
   if (!useDemo()) {
     try {
       return await localApi(`/team/${memberId}`, {
         method: "PUT",
-        body: JSON.stringify({ fullName, email: normalizedEmail, role, jobTitle })
+        body: JSON.stringify({ fullName, email: normalizedEmail, role, jobTitle, responsibilities })
       });
     } catch (error) {
       if (!isServerRouteMissing(error)) throw error;
@@ -1293,6 +1294,7 @@ export async function updateTeamMember(memberId, { fullName, email, role, jobTit
       member.email = normalizedEmail;
       member.role = role;
       member.job_title = jobTitle || role;
+      member.responsibilities = Array.isArray(responsibilities) ? responsibilities.slice(0, 3) : [];
     }
     return member;
   }
@@ -1313,7 +1315,8 @@ export async function updateTeamMember(memberId, { fullName, email, role, jobTit
       full_name: fullName,
       email: normalizedEmail,
       role,
-      job_title: jobTitle || role
+      job_title: jobTitle || role,
+      responsibilities: Array.isArray(responsibilities) ? responsibilities.slice(0, 3) : []
     })
     .eq("id", memberId)
     .select()
