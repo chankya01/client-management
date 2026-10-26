@@ -234,7 +234,7 @@ function lifecycleStageLabel(request) {
 
 function trackerStageKey(request) {
   if (requestHasSignedAgreement(request)) return "signed";
-  if (workflowStatusKey(request?.status) === "agreement") return "proposal_sent";
+  if (["agreement", "payment"].includes(workflowStatusKey(request?.status))) return "proposal_sent";
   return workflowStatusKey(request?.status);
 }
 
@@ -1759,7 +1759,7 @@ function adminClientDetailPage() {
           `).join("") || `<p class="helper">No CC contacts added for this organization yet.</p>`}
         </section>
         <section class="card">
-          <p class="section-label">Requests</p>
+          <p class="section-label">Leads and Work</p>
           ${clientRequests.map((request) => `
             <div class="list-row clickable-row" data-open-request="${request.id}">
               <strong>${escapeHtml(request.title || "Untitled work")}</strong>
@@ -1848,7 +1848,7 @@ function adminRequestRows(requests, { source = "requests" } = {}) {
         ${canDelete() ? `<button class="danger-link" data-delete-request="${request.id}">Delete</button>` : ""}
       </div>
     </div>
-  `).join("") || `<p class="helper">No Requests Yet.</p>`;
+  `).join("") || `<p class="helper">No leads or work items yet.</p>`;
 }
 
 function adminRequestDetailPage() {
@@ -1858,7 +1858,7 @@ function adminRequestDetailPage() {
   const requestMessages = state.messages.filter((message) => message.request_id === request.id);
   return `
     <section class="admin-page">
-      <button class="secondary back-button" data-page="admin-requests">Back to Requests</button>
+      <button class="secondary back-button" data-page="admin-requests">Back to Leads</button>
       <div class="admin-heading">
         <div>
           <p class="section-label green">${escapeHtml(lifecycleStageLabel(request))}</p>
@@ -1866,7 +1866,7 @@ function adminRequestDetailPage() {
           <p class="subtitle">${escapeHtml(clientName(request.client_id))} · ${escapeHtml(request.service_type || "Service")}</p>
         </div>
         <div class="row-actions">
-          ${canManageRequests() ? `<button class="secondary" data-edit-request="${request.id}">Edit Request</button>` : ""}
+          ${canManageRequests() ? `<button class="secondary" data-edit-request="${request.id}">Edit Lead</button>` : ""}
           ${canDelete() ? `<button class="danger-button" data-delete-request="${request.id}">Delete Request</button>` : ""}
         </div>
       </div>
@@ -1913,7 +1913,7 @@ function adminMessagesPage() {
       </div>
       <div class="message-layout">
         <aside class="card message-request-list">
-          <p class="section-label">Requests</p>
+          <p class="section-label">Leads and Work</p>
           ${state.requests.map((item) => `
             <button type="button" class="${item.id === request.id ? "active" : ""}" data-admin-message-request="${item.id}">
               <span>
@@ -2321,8 +2321,6 @@ function proposalApprovalLabel(document) {
   const events = Array.isArray(document?.events) ? document.events : [];
   const latestEvent = [...events].reverse().find((event) => event?.event_type);
   if (document?.status === "completed" || latestEvent?.event_type === "signed") return "Agreement Signed";
-  if (document?.proposal_approved || latestEvent?.event_type === "proposal_approved") return "Agreement Unlocked";
-  if (latestEvent?.event_type === "viewed" || document?.status === "viewed") return "Proposal Viewed";
   return "Sent";
 }
 
@@ -2375,7 +2373,6 @@ function proposalViewerModal() {
 
 function signatureDocumentCard(document) {
   const request = state.requests.find((item) => item.id === document.request_id);
-  const proposalApproved = Boolean(document.proposal_approved);
   const proposalUrl = (document.recipients || []).find((recipient) => recipient.signing_url)?.signing_url || "";
   const proposalIsSigned = document.status === "completed"
     || (document.events || []).some((event) => event.event_type === "signed" || event.event_type === "completed");
@@ -3049,7 +3046,7 @@ function signatureDocumentsPage() {
 function historyPage() {
   return `
     <section class="page">
-      <h1>Request History</h1>
+      <h1>Work History</h1>
       ${clientRequestCards(state.history)}
     </section>
   `;
@@ -3069,7 +3066,7 @@ function clientRequestCards(requests) {
       </div>
       <p class="assigned-line">Team: ${escapeHtml(assignedPeopleText(request.id))}</p>
     </section>
-  `).join("") || emptyCard("No Requests Yet", "Requests linked to this client account will appear here.");
+  `).join("") || emptyCard("No Work Yet", "Work linked to this client account will appear here.");
 }
 
 function accountPage() {
@@ -3104,7 +3101,7 @@ function passwordSection(title) {
       <p class="section-label">${escapeHtml(title)}</p>
       <p class="helper">
         ${mustChange
-          ? "Your account is using a temporary password. Please set a new password to continue."
+          ? "Complete the secure account setup step to continue."
           : `Signed in as ${escapeHtml(state.profile?.email || "")}.`}
       </p>
       ${showForm ? `
