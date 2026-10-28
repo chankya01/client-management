@@ -1402,8 +1402,8 @@ function adminNavHtml() {
         ${brandLogo("nav")}
         <nav class="nav" aria-label="Admin portal">
           ${navButton("admin-dashboard", "Dashboard")}
-          ${canManage ? navButton("admin-clients", "Clients") : ""}
           ${navButton("admin-requests", "Leads")}
+          ${canManage ? navButton("admin-clients", "Clients") : ""}
           ${navButton("admin-messages", `Messages ${totalUnreadCount() ? `<span class="count">${totalUnreadCount()}</span>` : ""}`)}
           ${navButton("admin-documents", "Proposals")}
           ${navButton("admin-team", "Team")}
@@ -1448,6 +1448,13 @@ function clientName(clientId) {
 function clientPrimaryContactName(clientId) {
   const client = state.clients.find((item) => item.id === clientId);
   return client?.primary_contact_name || state.profile?.clients?.primary_contact_name || state.profile?.full_name || "Client";
+}
+
+function clientContactLine(clientId) {
+  const client = state.clients.find((item) => item.id === clientId);
+  const name = client?.primary_contact_name || state.profile?.clients?.primary_contact_name || state.profile?.full_name || "Primary Contact";
+  const email = client?.primary_contact_email || state.profile?.clients?.primary_contact_email || state.profile?.email || "-";
+  return `${name} · ${email}`;
 }
 
 function organizationContacts(clientId) {
@@ -1783,7 +1790,6 @@ function adminRequestsPage() {
       requestDraftList("ccContactEmails").map(normalizeEmail).includes(normalizeEmail(contact.email))
     ));
   const selectedServicesText = requestDraftList("services", requestServices(editingRequest || {})).join(", ");
-  const showRequestCancel = editingRequest || hasRequestDraft();
   const showRequestForm = Boolean(state.requestFormOpen || editingRequest || hasRequestDraft());
   const leadClient = editingRequest ? state.clients.find((client) => client.id === editingRequest.client_id) : null;
   const leadRequests = state.requests.filter(isLeadRequest);
@@ -1812,7 +1818,7 @@ function adminRequestsPage() {
             <label class="field"><span>Status</span><select name="status">${requestStatusOptions(requestStatus)}</select></label>
             <div class="form-actions wide request-form-actions">
               <button class="primary" type="submit">${editingRequest ? "Update Lead" : "Create Lead"}</button>
-              <button class="secondary" type="button" data-cancel-request-edit ${showRequestCancel ? "" : "hidden"}>${editingRequest ? "Cancel Edit" : "Cancel"}</button>
+              <button class="secondary" type="button" data-cancel-request-edit>${editingRequest ? "Cancel Edit" : "Close"}</button>
             </div>
           </form>
         </section>` : ""}
@@ -1823,7 +1829,7 @@ function adminRequestsPage() {
         </section>
       `}
       <section class="card">
-        <p class="section-label">All Leads and Client Work</p>
+        <p class="section-label">Lead List</p>
         ${adminRequestRows(canManageRequests() ? leadRequests : state.requests)}
       </section>
     </section>
@@ -1835,12 +1841,13 @@ function adminRequestRows(requests, { source = "requests" } = {}) {
     <div class="admin-row clickable-row" data-open-request="${request.id}">
       <div>
         <strong class="request-client-line">${escapeHtml(clientName(request.client_id))}</strong>
+        <span class="request-contact-line">${escapeHtml(clientContactLine(request.client_id))}</span>
         <span class="request-title-line">
           <span>${escapeHtml(request.title || "Untitled work")}</span>
           <span class="request-status-text">${escapeHtml(lifecycleStageLabel(request))}</span>
         </span>
         <span class="request-summary-line">${escapeHtml(String(request.description || servicesText(request)).split(/\s+/).slice(0, 18).join(" "))}</span>
-        <span class="request-meta-line">${escapeHtml(servicesText(request))} · Due ${formatDate(request.due_date)}</span>
+        <span class="request-meta-line">Services: ${escapeHtml(servicesText(request))} · Due ${formatDate(request.due_date)}</span>
         ${isInternal() ? `<span class="assigned-line">Tagged: ${escapeHtml(assignedPeopleText(request.id))}</span>` : ""}
       </div>
       <div class="row-actions">

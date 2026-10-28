@@ -1198,6 +1198,12 @@ h2 {
   margin-bottom: 3px;
 }
 
+.request-contact-line {
+  color: var(--muted);
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
 .request-title-line {
   align-items: center;
   display: flex;
