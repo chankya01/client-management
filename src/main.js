@@ -1653,11 +1653,9 @@ function clientStatusBar(clients = state.clients) {
 function adminClientsPage() {
   const editingClient = state.clients.find((client) => client.id === state.editingClientId);
   const clientStatus = editingClient?.status || clientDraftValue("status", "signed");
-  const showClientCancel = editingClient || hasClientDraft();
   const showClientForm = Boolean(state.clientFormOpen || editingClient || hasClientDraft());
   const editingClientContacts = editingClient ? organizationContacts(editingClient.id) : [];
-  const signedClientIds = new Set(state.requests.filter(isActiveClientRequest).map((request) => request.client_id).filter(Boolean));
-  const clients = state.clients.filter((client) => signedClientIds.has(client.id) || clientStatusKey(client.status) === "signed");
+  const clients = state.clients;
   return `
     <section class="admin-page">
       <div class="admin-heading">
@@ -1672,7 +1670,7 @@ function adminClientsPage() {
         <form class="admin-form" id="clientForm">
           <label class="field"><span>Organization</span><input name="name" value="${escapeHtml(clientDraftValue("name", editingClient?.name || ""))}" required /></label>
           <label class="field"><span>Primary Contact</span><input name="contactName" value="${escapeHtml(clientDraftValue("contactName", editingClient?.primary_contact_name || ""))}" required /></label>
-          <label class="field"><span>Client Email</span><input name="email" type="email" value="${escapeHtml(clientDraftValue("email", editingClient?.primary_contact_email || ""))}" required /></label>
+          <label class="field"><span>Primary Contact Email</span><input name="email" type="email" value="${escapeHtml(clientDraftValue("email", editingClient?.primary_contact_email || ""))}" required /></label>
           <label class="field"><span>Invoice Email (optional)</span><input name="invoiceEmail" type="email" value="${escapeHtml(clientDraftValue("invoiceEmail", editingClient?.billing_email || ""))}" /></label>
           <label class="field"><span>Status</span><select name="status">${clientStatusOptions(clientStatus)}</select></label>
           <p class="section-label cc-contact-heading wide">Add CC Contact</p>
@@ -1681,7 +1679,7 @@ function adminClientsPage() {
           <small class="helper wide">${editingClient ? `Optional: add one CC contact for ${escapeHtml(editingClient.name)} while updating this client.` : "Optional: add one CC contact while creating this client."} New contacts receive an account setup email.</small>
           <div class="form-actions wide client-form-actions">
             <button class="primary" type="submit">${editingClient ? "Update Client" : "Create Client"}</button>
-            <button class="secondary" type="button" data-cancel-client-edit ${showClientCancel ? "" : "hidden"}>${editingClient ? "Cancel Edit" : "Cancel"}</button>
+            <button class="secondary" type="button" data-cancel-client-edit>${editingClient ? "Cancel Edit" : "Close"}</button>
           </div>
         </form>
       </section>` : ""}
@@ -1738,7 +1736,7 @@ function adminClientDetailPage() {
         </div>
         <div class="row-actions">
           <button class="secondary" data-edit-client="${client.id}">Edit Client</button>
-          ${canDelete() ? `<button class="danger-button" data-delete-client="${client.id}">Delete Client</button>` : ""}
+          ${canDelete() ? `<button class="danger-link" data-delete-client="${client.id}">Delete</button>` : ""}
         </div>
       </div>
       <div class="detail-grid">
@@ -1870,7 +1868,7 @@ function adminRequestDetailPage() {
         </div>
         <div class="row-actions">
           ${canManageRequests() ? `<button class="secondary" data-edit-request="${request.id}">Edit Lead</button>` : ""}
-          ${canDelete() ? `<button class="danger-button" data-delete-request="${request.id}">Delete Request</button>` : ""}
+          ${canDelete() ? `<button class="danger-link" data-delete-request="${request.id}">Delete</button>` : ""}
         </div>
       </div>
       <div class="detail-grid request-detail-stack">

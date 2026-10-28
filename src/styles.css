@@ -910,8 +910,8 @@ h2 {
 
 .danger-button {
   border: 1px solid var(--green);
-  background: var(--green);
-  color: #fff;
+  background: #fff;
+  color: var(--green);
   border-radius: 8px;
   font-weight: 700;
   min-height: 38px;
@@ -919,7 +919,7 @@ h2 {
 }
 
 .danger-button:hover {
-  background: var(--blue-dark);
+  background: #f1eaf6;
 }
 
 .card {
@@ -1130,7 +1130,7 @@ h2 {
 
 .status-bar {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   margin: 0 0 16px;
 }
@@ -1161,14 +1161,9 @@ h2 {
   background: #f4f7ff;
 }
 
-.status-segment.ongoing {
-  border-color: #b7e4d8;
-  background: #f1fbf8;
-}
-
-.status-segment.dropped {
-  border-color: #f0c3c0;
-  background: #fff6f5;
+.status-segment.unsigned {
+  border-color: #d9dee8;
+  background: #f8fafc;
 }
 
 .admin-row {
@@ -1281,13 +1276,17 @@ h2 {
   align-items: center;
   border: 1px solid var(--green);
   border-radius: 8px;
-  background: var(--green);
-  color: #fff;
+  background: #fff;
+  color: var(--green);
   display: inline-flex;
   font-size: 13px;
   font-weight: 700;
   min-height: 30px;
   padding: 4px 10px;
+}
+
+.danger-link:hover {
+  background: #f1eaf6;
 }
 
 .danger-link:disabled {
@@ -1824,11 +1823,9 @@ a {
   color: var(--green);
 }
 
-.secondary,
-.danger-link,
-.danger-button {
-  color: #fff;
-}
+.secondary { color: #fff; }
+
+.danger-button { color: var(--green); }
 
 .nav button.active,
 .primary,
@@ -1840,7 +1837,6 @@ a {
 .nav button.active,
 .primary,
 .secondary,
-.danger-link,
 .request-switcher button.active,
 .timeline-step.done .timeline-dot,
 .timeline-step.current .timeline-dot {
