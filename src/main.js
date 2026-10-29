@@ -3508,7 +3508,11 @@ function renderAgreementTerms(details, { editable = false } = {}) {
       <h3>Execution</h3>
       <p>In Witness Whereof, the parties have executed this Agreement as of the date first above written.</p>
       <h4>Accessible.org, LLC</h4>
-      <p>Signature: Kris Rivenburgh<br />Name: Kris Rivenburgh<br />Title: Founder, Accessible.org<br />Date: ${escapeHtml(details.agreementDate || todayIsoDate())}</p>
+      <div class="provider-signature-block">
+        <div class="provider-signature" role="img" aria-label="Signature of Kris Rivenburgh">Kris Rivenburgh</div>
+        <div class="provider-signature-line" aria-hidden="true"></div>
+        <p><strong>Name:</strong> Kris Rivenburgh<br /><strong>Title:</strong> Founder, Accessible.org<br /><strong>Date:</strong> ${escapeHtml(details.agreementDate || todayIsoDate())}</p>
+      </div>
     </div>
   `;
 }

@@ -2031,6 +2031,31 @@ a {
   max-width: 860px;
 }
 
+.provider-signature-block {
+  margin: 18px 0 8px;
+  max-width: 360px;
+}
+
+.provider-signature {
+  color: #000;
+  font-family: "Brush Script MT", "Segoe Script", "URW Chancery L", cursive;
+  font-size: 38px;
+  font-style: italic;
+  line-height: 1;
+  min-height: 42px;
+}
+
+.provider-signature-line {
+  border-bottom: 1px solid #000;
+  margin-top: 8px;
+  width: 100%;
+}
+
+.provider-signature-block p {
+  line-height: 1.55;
+  margin: 12px 0 0;
+}
+
 .proposal-site {
   background: #f7f7f7;
   color: var(--ink);
