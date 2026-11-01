@@ -231,10 +231,6 @@ export async function POST(request, { params }) {
       return apiJson({ error: "This agreement has already been signed by this recipient." }, 400);
     }
 
-    if (!payload.proposalApproved) {
-      return apiJson({ error: "Approve the proposal before signing." }, 409);
-    }
-
     await requireMatchingPortalSessionIfNeeded(request, payload.recipient);
 
     const now = new Date().toISOString();
@@ -245,7 +241,7 @@ export async function POST(request, { params }) {
       body: JSON.stringify({
         status: "signed",
         signed_at: now,
-        typed_signature: signatureFields.typedSignature || "Drawn signature",
+        typed_signature: signatureFields.typedSignature || null,
         signed_ip: ipAddress,
         signed_user_agent: request.headers.get("user-agent") || null
       })
@@ -279,25 +275,6 @@ export async function POST(request, { params }) {
     });
 
     if (allSigned) {
-      let requestStatusUpdated = false;
-      for (const requestStatus of ["agreement", "agreement_pending", "agreement_acknowledged"]) {
-        try {
-          await supabaseAdminFetch(tablePath("requests", `?id=eq.${encodeValue(payload.document.request_id)}`), {
-            method: "PATCH",
-            body: JSON.stringify({ status: requestStatus, updated_at: now })
-          });
-          requestStatusUpdated = true;
-          break;
-        } catch (error) {
-          console.warn(`Unable to set request status to ${requestStatus} after signing:`, error?.message || error);
-        }
-      }
-      if (!requestStatusUpdated) {
-        console.warn("Agreement signing completed, but the linked request status could not be updated.");
-      }
-    }
-
-    if (allSigned) {
       await supabaseAdminFetch(tablePath("signature_events"), {
         method: "POST",
         body: JSON.stringify({
@@ -320,7 +297,7 @@ export async function POST(request, { params }) {
           request_id: payload.document.request_id,
           sender_id: senderId,
           message: allSigned
-            ? `Agreement signed by ${payload.recipient.name || payload.recipient.email}: ${payload.document.title || "Accessibility Services Proposal"}. The signed agreement is ready to download.\nOpen signed agreement: ${signedAgreementUrl}`
+            ? `Agreement signed by ${payload.recipient.name || payload.recipient.email}: ${payload.document.title || "Accessibility Services Proposal"}. Signed at: ${now}. The signed agreement is ready to download.\nOpen signed agreement: ${signedAgreementUrl}`
             : `Agreement signed by ${payload.recipient.name || payload.recipient.email}: ${payload.document.title || "Accessibility Services Proposal"}`,
           is_internal: false
         })

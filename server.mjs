@@ -897,7 +897,7 @@ async function handleApi(req, res, url) {
   }
 
   if (path === "/team" && method === "GET") {
-    const rows = await supabaseFetch(rest("profiles", "?select=id,full_name,email,role,job_title,client_id&role=neq.client&order=full_name.asc"));
+    const rows = await supabaseFetch(rest("profiles", "?select=id,full_name,email,role,job_title,responsibilities,client_id&role=neq.client&order=full_name.asc"));
     return json(res, 200, rows);
   }
 
@@ -921,6 +921,7 @@ async function handleApi(req, res, url) {
         email,
         role: body.role,
         job_title: body.jobTitle || body.role,
+        responsibilities: Array.isArray(body.responsibilities) ? body.responsibilities.slice(0, 3) : [],
         client_id: null,
         is_active: true,
         must_change_password: true
@@ -928,7 +929,7 @@ async function handleApi(req, res, url) {
     });
     profile = inserted[0];
 
-    const rows = await supabaseFetch(rest("profiles", `?id=eq.${encode(profile.id)}&select=id,full_name,email,role,job_title,client_id`), {
+    const rows = await supabaseFetch(rest("profiles", `?id=eq.${encode(profile.id)}&select=id,full_name,email,role,job_title,responsibilities,client_id`), {
       method: "PATCH",
       headers: { Prefer: "return=representation" },
       body: JSON.stringify({
@@ -936,6 +937,7 @@ async function handleApi(req, res, url) {
         email,
         role: body.role,
         job_title: body.jobTitle || body.role,
+        responsibilities: Array.isArray(body.responsibilities) ? body.responsibilities.slice(0, 3) : [],
         client_id: null,
         is_active: true,
         must_change_password: true
@@ -959,14 +961,15 @@ async function handleApi(req, res, url) {
         error: `User already exists for ${email}. Use the existing profile.`
       });
     }
-    const rows = await supabaseFetch(rest("profiles", `?id=eq.${encode(teamMatch[1])}&select=id,full_name,email,role,job_title,client_id`), {
+    const rows = await supabaseFetch(rest("profiles", `?id=eq.${encode(teamMatch[1])}&select=id,full_name,email,role,job_title,responsibilities,client_id`), {
       method: "PATCH",
       headers: { Prefer: "return=representation" },
       body: JSON.stringify({
         full_name: body.fullName,
         email,
         role: body.role,
-        job_title: body.jobTitle || body.role
+        job_title: body.jobTitle || body.role,
+        responsibilities: Array.isArray(body.responsibilities) ? body.responsibilities.slice(0, 3) : []
       })
     });
     return json(res, 200, rows[0]);

@@ -231,6 +231,29 @@ a:hover { text-decoration: underline; }
   color: var(--green);
 }
 
+.team-responsibilities-field {
+  border: 0;
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+}
+
+.team-responsibilities-field legend {
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.team-responsibility-list {
+  margin: 10px 0 0;
+  padding-left: 20px;
+}
+
+.team-responsibility-list li {
+  color: var(--muted);
+  margin-top: 4px;
+}
+
 .count {
   min-width: 24px;
   height: 24px;
@@ -887,8 +910,8 @@ h2 {
 
 .danger-button {
   border: 1px solid var(--green);
-  background: var(--green);
-  color: #fff;
+  background: #fff;
+  color: var(--green);
   border-radius: 8px;
   font-weight: 700;
   min-height: 38px;
@@ -896,7 +919,7 @@ h2 {
 }
 
 .danger-button:hover {
-  background: var(--blue-dark);
+  background: #f1eaf6;
 }
 
 .card {
@@ -1107,7 +1130,7 @@ h2 {
 
 .status-bar {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   margin: 0 0 16px;
 }
@@ -1138,14 +1161,9 @@ h2 {
   background: #f4f7ff;
 }
 
-.status-segment.ongoing {
-  border-color: #b7e4d8;
-  background: #f1fbf8;
-}
-
-.status-segment.dropped {
-  border-color: #f0c3c0;
-  background: #fff6f5;
+.status-segment.unsigned {
+  border-color: #d9dee8;
+  background: #f8fafc;
 }
 
 .admin-row {
@@ -1178,6 +1196,12 @@ h2 {
   color: var(--text);
   font-weight: 700;
   margin-bottom: 3px;
+}
+
+.request-contact-line {
+  color: var(--muted);
+  font-size: 13px;
+  margin-bottom: 4px;
 }
 
 .request-title-line {
@@ -1258,13 +1282,17 @@ h2 {
   align-items: center;
   border: 1px solid var(--green);
   border-radius: 8px;
-  background: var(--green);
-  color: #fff;
+  background: #fff;
+  color: var(--green);
   display: inline-flex;
   font-size: 13px;
   font-weight: 700;
   min-height: 30px;
   padding: 4px 10px;
+}
+
+.danger-link:hover {
+  background: #f1eaf6;
 }
 
 .danger-link:disabled {
@@ -1801,11 +1829,9 @@ a {
   color: var(--green);
 }
 
-.secondary,
-.danger-link,
-.danger-button {
-  color: #fff;
-}
+.secondary { color: #fff; }
+
+.danger-button { color: var(--green); }
 
 .nav button.active,
 .primary,
@@ -1817,7 +1843,6 @@ a {
 .nav button.active,
 .primary,
 .secondary,
-.danger-link,
 .request-switcher button.active,
 .timeline-step.done .timeline-dot,
 .timeline-step.current .timeline-dot {
@@ -2004,6 +2029,31 @@ a {
 
 .signature-signing-card {
   max-width: 860px;
+}
+
+.provider-signature-block {
+  margin: 18px 0 8px;
+  max-width: 360px;
+}
+
+.provider-signature {
+  color: #000;
+  font-family: "Brush Script MT", "Segoe Script", "URW Chancery L", cursive;
+  font-size: 38px;
+  font-style: italic;
+  line-height: 1;
+  min-height: 42px;
+}
+
+.provider-signature-line {
+  border-bottom: 1px solid #000;
+  margin-top: 8px;
+  width: 100%;
+}
+
+.provider-signature-block p {
+  line-height: 1.55;
+  margin: 12px 0 0;
 }
 
 .proposal-site {
@@ -2653,6 +2703,10 @@ a {
 
 .proposal-sign-panel > .signature-field-grid {
   margin-bottom: 24px;
+}
+
+.proposal-sign-panel > button[type="submit"] {
+  margin-top: 8px;
 }
 
 .proposal-sign-tabs {

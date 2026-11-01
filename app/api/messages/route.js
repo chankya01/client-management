@@ -274,6 +274,59 @@ async function sendMessageNotification({ requestRow, senderProfile, excludedEmai
   };
 }
 
+async function protonClientRecipients(requestRow) {
+  const [clients, contacts] = await Promise.all([
+    supabaseAdminFetch(
+      tablePath("clients", `?select=primary_contact_name,primary_contact_email&id=eq.${encodeValue(requestRow.client_id)}&limit=1`)
+    ),
+    safeFetchRows(
+      tablePath("request_client_contacts", `?select=name,email&request_id=eq.${encodeValue(requestRow.id)}`)
+    )
+  ]);
+  const client = clients?.[0] || {};
+  return uniqueRecipients([
+    { name: client.primary_contact_name, email: client.primary_contact_email },
+    ...(contacts || [])
+  ], "");
+}
+
+async function sendProtonOutbound({ requestRow, senderProfile, message, subject }) {
+  const endpoint = String(process.env.PROTON_MAIL_OUTBOUND_WEBHOOK_URL || "").trim();
+  if (!endpoint) return { sent: false, configured: false, reason: "Proton outbound worker is not configured." };
+
+  const secret = String(process.env.PROTON_MAIL_OUTBOUND_WEBHOOK_SECRET || "").trim();
+  if (!secret) return { sent: false, configured: true, reason: "PROTON_MAIL_OUTBOUND_WEBHOOK_SECRET is not configured." };
+
+  const recipients = await protonClientRecipients(requestRow);
+  if (!recipients.length) return { sent: false, configured: true, reason: "No client email recipients were found for this request." };
+
+  const requestNumber = String(requestRow.request_number || requestRow.id);
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Proton-Webhook-Secret": secret
+    },
+    body: JSON.stringify({
+      from: process.env.PROTON_MAIL_FROM || "",
+      to: recipients.map((recipient) => recipient.email),
+      subject: subject || `Re: ${requestNumber} ${requestRow.title || "Request"}`,
+      text: message,
+      requestId: requestRow.id,
+      requestNumber,
+      sentAt: new Date().toISOString(),
+      sender: senderProfile.email
+    })
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    console.warn("[Clients] Proton outbound worker failed", detail);
+    return { sent: false, configured: true, reason: detail || `Proton worker returned ${response.status}.` };
+  }
+  return { sent: true, configured: true, recipients: recipients.map((recipient) => recipient.email) };
+}
+
 export async function GET(request) {
   try {
     const url = new URL(request.url);
@@ -335,7 +388,16 @@ export async function POST(request) {
       ? await sendMessageNotification({ requestRow, senderProfile: profile, excludedEmails: body.excludeEmails || [] })
       : { sent: false, reason: "Notification disabled for this message." };
 
-    return apiJson({ ok: true, notification });
+    const proton = body.proton !== false && profile.role !== "client"
+      ? await sendProtonOutbound({
+        requestRow,
+        senderProfile: profile,
+        message,
+        subject: body.subject
+      })
+      : { sent: false, configured: false, reason: profile.role === "client" ? "Proton delivery is only sent for team-authored messages." : "Proton delivery disabled for this message." };
+
+    return apiJson({ ok: true, notification, proton });
   } catch (error) {
     return handleApiError(error);
   }
