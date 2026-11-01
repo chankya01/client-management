@@ -448,9 +448,7 @@ async function sendMessageNotification({ requestRow, senderProfile, message }) {
   const recipients = await requestNotificationRecipients(requestRow, senderProfile);
   if (!recipients.length) throw new Error("No email recipients were found for this message.");
   const label = String(requestRow.title || requestRow.request_number || "the request").trim();
-  const senderName = senderProfile.full_name || senderProfile.email || "someone";
-  const link = appUrl ? `\n\nOpen Clients: ${appUrl}` : "";
-  const text = `Hi,\n\n${senderName} sent a message on ${label}:\n\n${String(message || "").trim()}\n\nOpen Clients to view the full conversation:${link}`;
+  const text = String(message || "").trim();
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {

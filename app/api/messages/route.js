@@ -6,7 +6,6 @@ import {
   internalRoles,
   managementRoles,
   normalizeEmail,
-  publicAppOrigin,
   supabaseAdminFetch,
   tablePath
 } from "../_supabaseAdmin.js";
@@ -210,25 +209,6 @@ async function requestLabel(requestRow) {
   return storedNumber || requestRow?.title || "the request";
 }
 
-async function senderDisplayName(requestRow, senderProfile) {
-  if (senderProfile?.role === "client") {
-    const senderEmail = normalizeEmail(senderProfile.email);
-    const contacts = await safeFetchRows(
-      tablePath("request_client_contacts", `?select=name,email,profile_id&request_id=eq.${encodeValue(requestRow.id)}&or=(profile_id.eq.${encodeValue(senderProfile.id)},email.eq.${encodeValue(senderEmail)})&limit=1`)
-    );
-    const contactName = String(contacts?.[0]?.name || "").trim();
-    if (contactName) return contactName;
-
-    const client = await supabaseAdminFetch(
-      tablePath("clients", `?select=primary_contact_name,primary_contact_email&id=eq.${encodeValue(requestRow.client_id)}&limit=1`)
-    );
-    const primaryContactName = String(client?.[0]?.primary_contact_name || "").trim();
-    if (primaryContactName) return primaryContactName;
-  }
-
-  return senderProfile.full_name || senderProfile.email || "someone";
-}
-
 async function sendMessageNotification({ requestRow, senderProfile, message, excludedEmails = [] }) {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.NOTIFICATION_FROM || "Clients <notifications@example.com>";
@@ -245,9 +225,7 @@ async function sendMessageNotification({ requestRow, senderProfile, message, exc
   }
 
   const label = await requestLabel(requestRow);
-  const senderName = await senderDisplayName(requestRow, senderProfile);
-  const link = `\n\nOpen Clients: ${publicAppOrigin()}`;
-  const text = `Hi,\n\n${senderName} sent a message on ${label}:\n\n${String(message || "").trim()}\n\nOpen Clients to view the full conversation:${link}`;
+  const text = String(message || "").trim();
 
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
