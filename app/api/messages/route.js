@@ -193,6 +193,9 @@ async function notificationRecipients(requestRow, senderProfile, excludedEmails 
 }
 
 async function requestLabel(requestRow) {
+  const title = String(requestRow?.title || "").trim();
+  if (title) return title;
+
   const storedNumber = String(requestRow?.request_number || "").trim();
   if (/^REQ-\d{1,3}$/i.test(storedNumber)) return storedNumber.toUpperCase();
 
