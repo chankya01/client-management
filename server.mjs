@@ -830,6 +830,48 @@ async function handleApi(req, res, url) {
     return json(res, 200, { ok: true });
   }
 
+  if (clientContactMatch && method === "DELETE") {
+    const requestId = clientContactMatch[1];
+    const body = await readJson(req);
+    const contactId = String(body.contactId || "").trim();
+    if (!contactId) return json(res, 400, { error: "CC contact is required." });
+    const actor = await currentProfile(url);
+    const linkedRequest = await selectOne("requests", `?select=id,client_id&id=eq.${encode(requestId)}&limit=1`);
+    if (!linkedRequest) return json(res, 404, { error: "Request not found." });
+    if (actor.role === "client") {
+      if (actor.client_id !== linkedRequest.client_id) return json(res, 403, { error: "You do not have permission to remove CC contacts from this request." });
+      const client = await selectOne("clients", `?select=primary_contact_email&id=eq.${encode(linkedRequest.client_id)}&limit=1`);
+      const ownContact = await selectOne("request_client_contacts", `?select=id&request_id=eq.${encode(requestId)}&email=eq.${encode(normalizeEmail(actor.email))}&limit=1`);
+      if (normalizeEmail(actor.email) !== normalizeEmail(client?.primary_contact_email) && !ownContact?.id) {
+        return json(res, 403, { error: "You do not have permission to remove CC contacts from this request." });
+      }
+    }
+    const contact = await selectOne("request_client_contacts", `?select=id&request_id=eq.${encode(requestId)}&id=eq.${encode(contactId)}&limit=1`);
+    if (!contact) return json(res, 404, { error: "CC contact was not found on this request." });
+    await supabaseFetch(rest("request_client_contacts", `?id=eq.${encode(contactId)}&request_id=eq.${encode(requestId)}`), { method: "DELETE" });
+    return json(res, 200, { ok: true, removed_contact_id: contactId });
+  }
+
+  const savedClientContactMatch = path.match(/^\/client-contacts\/([^/]+)$/);
+  if (savedClientContactMatch && method === "DELETE") {
+    const contactId = savedClientContactMatch[1];
+    const contact = await selectOne("profiles", `?select=id,email,role,client_id&id=eq.${encode(contactId)}&limit=1`);
+    if (!contact || contact.role !== "client" || !contact.client_id) {
+      return json(res, 404, { error: "Saved CC contact was not found." });
+    }
+    const client = await selectOne("clients", `?select=id,primary_contact_email&id=eq.${encode(contact.client_id)}&limit=1`);
+    if (normalizeEmail(contact.email) === normalizeEmail(client?.primary_contact_email)) {
+      return json(res, 400, { error: "The primary contact cannot be removed as a CC contact." });
+    }
+    await supabaseFetch(rest("request_client_contacts", `?profile_id=eq.${encode(contact.id)}`), { method: "DELETE" });
+    await supabaseFetch(rest("request_client_contacts", `?email=eq.${encode(normalizeEmail(contact.email))}`), { method: "DELETE" });
+    await supabaseFetch(rest("profiles", `?id=eq.${encode(contact.id)}`), {
+      method: "PATCH",
+      body: JSON.stringify({ client_id: null })
+    });
+    return json(res, 200, { ok: true });
+  }
+
   const assignmentMatch = path.match(/^\/request-assignments\/([^/]+)$/);
   if (assignmentMatch && method === "PUT") {
     const body = await readJson(req);

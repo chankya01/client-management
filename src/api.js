@@ -251,6 +251,7 @@ let demoMessages = [
 
 let demoSignatureDocuments = [];
 let demoProposalApprovals = new Set();
+let demoRequestClientContacts = [];
 
 const demoRequests = [
   {
@@ -688,7 +689,7 @@ export async function loadRequestAssignments() {
 }
 
 export async function loadRequestClientContacts() {
-  if (useDemo()) return [];
+  if (useDemo()) return demoRequestClientContacts;
   try {
     return await localApi("/request-client-contacts");
   } catch (error) {
@@ -776,16 +777,18 @@ export async function addRequestClientContact(requestId, contact = {}) {
   if (!normalizedContact.email) throw new Error("Enter a CC contact email.");
 
   if (useDemo()) {
+    const contactRecord = {
+      id: `demo-cc-${Date.now()}`,
+      request_id: requestId,
+      profile_id: null,
+      name: normalizedContact.name || null,
+      email: normalizedContact.email,
+      created_at: new Date().toISOString()
+    };
+    demoRequestClientContacts.push(contactRecord);
     return {
       ok: true,
-      contact: {
-        id: `demo-cc-${Date.now()}`,
-        request_id: requestId,
-        profile_id: null,
-        name: normalizedContact.name || null,
-        email: normalizedContact.email,
-        created_at: new Date().toISOString()
-      },
+      contact: contactRecord,
       cc_contact_email: { sent: true, type: "account_setup" }
     };
   }
@@ -801,6 +804,41 @@ export async function addRequestClientContact(requestId, contact = {}) {
     method: "POST",
     body: JSON.stringify({ requestId, contact: normalizedContact })
   });
+}
+
+export async function removeRequestClientContact(requestId, contactId) {
+  if (!requestId || !contactId) throw new Error("Request and CC contact are required.");
+  if (useDemo()) {
+    const index = demoRequestClientContacts.findIndex((contact) => (
+      contact.request_id === requestId && contact.id === contactId
+    ));
+    if (index >= 0) demoRequestClientContacts.splice(index, 1);
+    return { ok: true };
+  }
+
+  if (useLocalAdminProxy()) {
+    return localApi(`/request-client-contacts/${requestId}`, {
+      method: "DELETE",
+      body: JSON.stringify({ contactId })
+    });
+  }
+
+  try {
+    return await appApi(`/request-client-contacts/${requestId}`, {
+      method: "DELETE",
+      body: JSON.stringify({ contactId })
+    });
+  } catch (error) {
+    if (!isServerRouteMissing(error) && !String(error.message || "").includes("request_client_contacts")) throw error;
+  }
+
+  const { error } = await supabase
+    .from("request_client_contacts")
+    .delete()
+    .eq("id", contactId)
+    .eq("request_id", requestId);
+  if (error) throw error;
+  return { ok: true };
 }
 
 export async function loadClients() {
@@ -853,6 +891,59 @@ export async function createClientContact({ clientId, fullName, email }) {
     method: "POST",
     body: JSON.stringify({ clientId, fullName, email: normalizedEmail })
   });
+}
+
+export async function removeClientContact(contactId) {
+  if (!contactId) throw new Error("CC contact is required.");
+  if (useDemo()) {
+    const index = demoTeam.findIndex((member) => member.id === contactId && member.role === "client");
+    if (index >= 0) demoTeam[index].client_id = null;
+    demoRequestClientContacts.splice(
+      0,
+      demoRequestClientContacts.length,
+      ...demoRequestClientContacts.filter((contact) => contact.profile_id !== contactId)
+    );
+    return { ok: true };
+  }
+
+  if (useLocalAdminProxy()) {
+    return localApi(`/client-contacts/${contactId}`, { method: "DELETE" });
+  }
+
+  try {
+    return await appApi(`/client-contacts/${contactId}`, { method: "DELETE" });
+  } catch (error) {
+    if (!isServerRouteMissing(error)) throw error;
+  }
+
+  const { data: contact, error: contactError } = await supabase
+    .from("profiles")
+    .select("id, email, role, client_id")
+    .eq("id", contactId)
+    .maybeSingle();
+  if (contactError) throw contactError;
+  if (!contact?.id || contact.role !== "client" || !contact.client_id) {
+    throw new Error("Saved CC contact was not found.");
+  }
+
+  const { error: requestContactError } = await supabase
+    .from("request_client_contacts")
+    .delete()
+    .eq("profile_id", contactId);
+  if (requestContactError) throw requestContactError;
+
+  const { error: emailContactError } = await supabase
+    .from("request_client_contacts")
+    .delete()
+    .eq("email", normalizeEmail(contact.email));
+  if (emailContactError) throw emailContactError;
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ client_id: null })
+    .eq("id", contactId);
+  if (error) throw error;
+  return { ok: true };
 }
 
 export async function loadTeam() {

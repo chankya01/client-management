@@ -26,6 +26,8 @@ import {
   loadSignatureDocuments,
   loadTeam,
   onAuthStateChange,
+  removeClientContact,
+  removeRequestClientContact,
   sendMagicLink,
   sendPasswordReset,
   setRequestClientContacts,
@@ -1516,8 +1518,11 @@ function requestCcPanel(request = state.activeRequest) {
       <div class="cc-contact-list">
         ${contacts.map((contact) => `
           <div class="cc-contact-row">
-            <strong>${escapeHtml(contact.name || contact.email)}</strong>
-            <span>${escapeHtml(contact.email)}</span>
+            <div class="cc-contact-details">
+              <strong>${escapeHtml(contact.name || contact.email)}</strong>
+              <span>${escapeHtml(contact.email)}</span>
+            </div>
+            <button class="danger-link small-action" type="button" data-remove-request-cc-contact data-request-id="${escapeHtml(request.id)}" data-contact-id="${escapeHtml(contact.id)}">Remove</button>
           </div>
         `).join("") || `<p class="helper">No CC contacts added yet.</p>`}
       </div>
@@ -1715,8 +1720,11 @@ function adminClientsPage() {
           <div class="cc-contact-list existing-cc-contacts">
             ${editingClientContacts.map((contact) => `
               <div class="cc-contact-row">
-                <strong>${escapeHtml(contact.full_name || contact.email)}</strong>
-                <span>${escapeHtml(contact.email)}</span>
+                <div class="cc-contact-details">
+                  <strong>${escapeHtml(contact.full_name || contact.email)}</strong>
+                  <span>${escapeHtml(contact.email)}</span>
+                </div>
+                <button class="danger-link small-action" type="button" data-remove-client-contact data-contact-id="${escapeHtml(contact.id)}" data-contact-name="${escapeHtml(contact.full_name || contact.email)}">Remove</button>
               </div>
             `).join("") || `<p class="helper">No CC contacts added for this organization yet.</p>`}
           </div>
@@ -1777,9 +1785,12 @@ function adminClientDetailPage() {
         <section class="card">
           <p class="section-label">CC Contacts</p>
           ${contacts.map((contact) => `
-            <div class="list-row">
-              <strong>${escapeHtml(contact.full_name || contact.email)}</strong>
-              <span>${escapeHtml(contact.email)}</span>
+            <div class="list-row cc-contact-row">
+              <div>
+                <strong>${escapeHtml(contact.full_name || contact.email)}</strong>
+                <span>${escapeHtml(contact.email)}</span>
+              </div>
+              <button class="danger-link small-action" type="button" data-remove-client-contact data-contact-id="${escapeHtml(contact.id)}" data-contact-name="${escapeHtml(contact.full_name || contact.email)}">Remove</button>
             </div>
           `).join("") || `<p class="helper">No CC contacts added for this organization yet.</p>`}
         </section>
@@ -4844,6 +4855,55 @@ function attachEvents() {
           render();
         } catch (error) {
           showAppError(error, "Add request CC contact");
+        }
+      });
+    });
+  });
+
+  document.querySelectorAll("[data-remove-request-cc-contact]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const requestId = button.dataset.requestId;
+      const contactId = button.dataset.contactId;
+      if (!requestId || !contactId) return;
+      if (!window.confirm("Remove this CC contact from the request?")) return;
+
+      await withActionLock(`remove-request-cc-${contactId}`, button, async () => {
+        try {
+          await removeRequestClientContact(requestId, contactId);
+          state.requestClientContacts = await loadRequestClientContacts();
+          showToast("CC contact removed from this request.");
+          render();
+        } catch (error) {
+          showAppError(error, "Remove request CC contact");
+        }
+      });
+    });
+  });
+
+  document.querySelectorAll("[data-remove-client-contact]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!canManageClients()) {
+        showToast("Only owner/admin can remove saved CC contacts.");
+        return;
+      }
+      const contactId = button.dataset.contactId;
+      if (!contactId) return;
+      const contactName = button.dataset.contactName || "this CC contact";
+      if (!window.confirm(`Remove ${contactName} from this organization and its request CC lists?`)) return;
+
+      await withActionLock(`remove-client-contact-${contactId}`, button, async () => {
+        try {
+          await removeClientContact(contactId);
+          state.clientContacts = await loadClientContacts();
+          state.requestClientContacts = await loadRequestClientContacts();
+          showToast("CC contact removed.");
+          render();
+        } catch (error) {
+          showAppError(error, "Remove CC contact");
         }
       });
     });

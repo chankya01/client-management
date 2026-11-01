@@ -298,3 +298,37 @@ export async function POST(request, { params }) {
     return handleApiError(error);
   }
 }
+
+export async function DELETE(request, { params }) {
+  try {
+    const actor = await currentProfile(request);
+    const requestId = String(params.requestId || "").trim();
+    const body = await request.json().catch(() => ({}));
+    const contactId = String(body.contactId || "").trim();
+    if (!requestId || !contactId) return apiJson({ error: "Request and CC contact are required." }, 400);
+
+    const linkedRequest = await selectOne(
+      "requests",
+      `?select=id,client_id&id=eq.${encodeValue(requestId)}&limit=1`
+    );
+    if (!linkedRequest?.id) return apiJson({ error: "Request not found." }, 404);
+
+    const canAccessRequest = await requestIsAccessibleToProfile(linkedRequest, actor);
+    if (!canAccessRequest) return apiJson({ error: "You do not have permission to remove CC contacts from this request." }, 403);
+
+    const contact = await selectOne(
+      "request_client_contacts",
+      `?select=id,request_id,profile_id,name,email&request_id=eq.${encodeValue(requestId)}&id=eq.${encodeValue(contactId)}&limit=1`
+    );
+    if (!contact?.id) return apiJson({ error: "CC contact was not found on this request." }, 404);
+
+    await supabaseAdminFetch(
+      tablePath("request_client_contacts", `?id=eq.${encodeValue(contact.id)}&request_id=eq.${encodeValue(requestId)}`),
+      { method: "DELETE" }
+    );
+
+    return apiJson({ ok: true, removed_contact_id: contact.id });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}

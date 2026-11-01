@@ -621,7 +621,9 @@ h2 {
 
 .cc-contact-row {
   display: grid;
-  gap: 2px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
   border-top: 2px solid var(--line);
   padding-top: 10px;
 }
@@ -635,6 +637,12 @@ h2 {
   color: var(--muted);
   font-size: 14px;
   overflow-wrap: anywhere;
+}
+
+.cc-contact-details {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
 }
 
 .mini-form {
