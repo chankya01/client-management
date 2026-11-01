@@ -1,4 +1,4 @@
-import { appConfig } from "./config.js";
+import { appConfig, canonicalAppUrl } from "./config.js";
 import { isSupabaseConfigured, supabase } from "./supabase.js";
 
 const demoIds = {
@@ -41,6 +41,14 @@ const demoAdminProfile = {
 
 function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
+}
+
+function publicAppOrigin() {
+  if (typeof window === "undefined") return canonicalAppUrl;
+  const configured = import.meta.env?.VITE_PUBLIC_APP_URL;
+  if (configured) return String(configured).replace(/\/+$/, "");
+  if (window.location.hostname.endsWith(".vercel.app")) return canonicalAppUrl;
+  return window.location.origin;
 }
 
 function normalizeRequestStatus(status) {
@@ -375,7 +383,7 @@ export async function sendMagicLink(email) {
     return demoSession();
   }
 
-  const redirectTo = window.location.origin;
+  const redirectTo = publicAppOrigin();
   const { error } = await supabase.auth.signInWithOtp({
     email,
     options: {
@@ -418,7 +426,7 @@ export async function sendPasswordReset(email) {
   }
 
   const { error } = await supabase.auth.resetPasswordForEmail(normalizeEmail(email), {
-    redirectTo: `${window.location.origin}?mode=password-reset&type=recovery`
+    redirectTo: `${publicAppOrigin()}?mode=password-reset&type=recovery`
   });
   if (error) throw error;
 }
@@ -1600,7 +1608,7 @@ export async function createSignatureDocument({
           role: requiresSignature && (recipient.role === "signer" || index === 0) ? "signer" : "viewer",
           status: "sent",
           signing_token: signingToken,
-          signing_url: `${window.location.origin}/?sign=${signingToken}`
+          signing_url: `${publicAppOrigin()}/?sign=${signingToken}`
         };
       })
     };

@@ -6,6 +6,7 @@ import {
   internalRoles,
   managementRoles,
   normalizeEmail,
+  publicAppOrigin,
   supabaseAdminFetch,
   tablePath
 } from "../_supabaseAdmin.js";
@@ -228,7 +229,6 @@ async function senderDisplayName(requestRow, senderProfile) {
 async function sendMessageNotification({ requestRow, senderProfile, excludedEmails = [] }) {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.NOTIFICATION_FROM || "Clients <notifications@example.com>";
-  const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "";
   if (!apiKey) {
     throw new Error("RESEND_API_KEY is not configured. Message was not sent.");
   }
@@ -243,7 +243,7 @@ async function sendMessageNotification({ requestRow, senderProfile, excludedEmai
 
   const label = await requestLabel(requestRow);
   const senderName = await senderDisplayName(requestRow, senderProfile);
-  const link = appUrl ? `\n\nOpen Clients: ${appUrl}` : "";
+  const link = `\n\nOpen Clients: ${publicAppOrigin()}`;
   const text = `Hi,\n\nThere is an update on ${label} from ${senderName}. Please sign in to view it.${link}`;
 
   const response = await fetch("https://api.resend.com/emails", {

@@ -9,3 +9,8 @@ export const appConfig = {
   localClientPorts: ["8001", "3001"],
   demoMode: false
 };
+
+// Canonical public host used for links in production. Vercel preview URLs are
+// still useful for testing, but client-facing email and signing links should
+// consistently point at the branded production domain.
+export const canonicalAppUrl = "https://clients.accessible.org";

@@ -5,6 +5,7 @@ import http from "node:http";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
 const env = loadEnv();
+const canonicalAppUrl = "https://clients.accessible.org";
 const port = Number(env.PORT || 8000);
 const supabaseUrl = env.SUPABASE_URL || env.VITE_SUPABASE_URL;
 const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
@@ -16,7 +17,11 @@ const clientContactName = env.CLIENT_CONTACT_NAME || "Test Client User";
 const defaultTempPassword = env.DEFAULT_TEMP_PASSWORD || "RequestManagement@123";
 const resendApiKey = env.RESEND_API_KEY;
 const notificationFrom = env.NOTIFICATION_FROM || "Clients <notifications@example.com>";
-const appUrl = env.APP_URL || env.NEXT_PUBLIC_APP_URL || "";
+const configuredAppUrl = env.PUBLIC_APP_URL || env.APP_URL || env.NEXT_PUBLIC_APP_URL || "";
+const isProductionDeployment = env.VERCEL_ENV === "production" || env.NODE_ENV === "production";
+const appUrl = configuredAppUrl && !(isProductionDeployment && /\.vercel\.app\b/i.test(configuredAppUrl))
+  ? configuredAppUrl.replace(/\/+$/, "")
+  : (isProductionDeployment ? canonicalAppUrl : "");
 
 if (!supabaseUrl || !serviceRoleKey) {
   console.warn("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY. /api calls will fail until .env is configured.");

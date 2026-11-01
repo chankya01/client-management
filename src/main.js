@@ -96,6 +96,7 @@ const state = {
   editingTeamId: null,
   clientFormOpen: false,
   requestFormOpen: false,
+  proposalFormOpen: false,
   teamFormOpen: false,
   showPasswordForm: false,
   authView: isPasswordRecoveryFlow() ? "reset-password" : "signin",
@@ -769,6 +770,23 @@ function clearRequestDraft() {
   state.requestDraft = {};
   state.requestClientSelection = null;
   state.skipRequestDraftCapture = true;
+}
+
+function hasSignatureDraft() {
+  const draft = state.signatureDraft || {};
+  return Boolean(
+    String(draft.clientId || "").trim()
+    || String(draft.requestId || "").trim()
+    || String(draft.agreementPrompt || "").trim()
+    || String(draft.proposalComposerDraft || "").trim()
+    || draft.proposalGenerated
+    || (draft.proposalMessages || []).length
+  );
+}
+
+function clearSignatureDraft() {
+  state.signatureDraft = {};
+  state.signatureClientSelection = null;
 }
 
 function teamDraftValue(field, fallback = "") {
@@ -2443,7 +2461,7 @@ function sentProposalsCard(documents) {
   return `
     <section class="card sent-proposals-card">
       <div class="section-heading-row">
-        <p class="section-label sent-proposals-title">Sent Proposals</p>
+        <p class="section-label sent-proposals-title">Proposal List</p>
       </div>
       <p class="helper">Select a proposal file name to open the full proposal screen.</p>
       <div class="sent-proposals-dropdown" role="list">
@@ -3004,15 +3022,21 @@ function signatureDocumentsPage() {
 
   const clients = clientOptionsForDocuments();
   const draft = state.signatureDraft || {};
+  const showProposalForm = Boolean(state.proposalFormOpen || hasSignatureDraft());
   const initialClientId = draft.clientId || state.signatureClientSelection || "";
   const clientRequests = requestsForClient(initialClientId);
   const selectedRequest = clientRequests.find((request) => request.id === draft.requestId) || null;
 
   return `
     <section class="${isInternal() ? "admin-page" : "page"}">
-      <h1>Proposals</h1>
-      <p class="subtitle">Build a client-facing proposal from a short conversation, review it, and send it for signature.</p>
-      ${isInternal() ? `
+      <div class="admin-heading">
+        <div>
+          <h1>Proposals</h1>
+          <p class="subtitle">Build a client-facing proposal from a short conversation, review it, and send it for signature.</p>
+        </div>
+        ${isInternal() ? `<button class="primary" type="button" data-show-proposal-form>Add Proposal</button>` : ""}
+      </div>
+      ${isInternal() && showProposalForm ? `
         <form class="proposal-builder" id="signatureDocumentForm">
           <div class="proposal-builder-selection">
           <div class="form-grid">
@@ -3043,6 +3067,7 @@ function signatureDocumentsPage() {
           </section>
           <div class="signature-form-actions">
             <button class="primary" type="submit" ${draft.proposalGenerated ? "" : "disabled"}>Send proposal</button>
+            <button class="secondary" type="button" data-cancel-proposal-form>Close</button>
           </div>
         </form>
       ` : ""}
@@ -4174,6 +4199,22 @@ function attachEvents() {
     });
   });
 
+  document.querySelectorAll("[data-show-proposal-form]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.proposalFormOpen = true;
+      render();
+      document.querySelector("[data-signature-client-select]")?.focus();
+    });
+  });
+
+  document.querySelectorAll("[data-cancel-proposal-form]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.proposalFormOpen = false;
+      clearSignatureDraft();
+      render();
+    });
+  });
+
   document.querySelectorAll("[data-show-team-form]").forEach((button) => {
     button.addEventListener("click", () => {
       state.teamFormOpen = true;
@@ -4418,6 +4459,7 @@ function attachEvents() {
         }))
       };
       state.signatureClientSelection = request.client_id;
+      state.proposalFormOpen = true;
       state.proposalViewer = null;
       state.page = "admin-documents";
       render();
@@ -4615,7 +4657,8 @@ function attachEvents() {
           state.signatureDocuments = await loadSignatureDocuments();
           state.messagesByRequest[request.id] = await loadMessages(request.id);
           if (state.activeRequest?.id === request.id) state.messages = state.messagesByRequest[request.id];
-          state.signatureDraft = {};
+          state.proposalFormOpen = false;
+          clearSignatureDraft();
           form.reset();
           const failedEmail = (createdDocument.email_results || []).find((result) => result && result.sent === false);
           const messageWarning = createdDocument.message_result?.created === false ? " Message entry was not created." : "";
@@ -5393,6 +5436,7 @@ function resetSessionState() {
   state.editingTeamId = null;
   state.clientFormOpen = false;
   state.requestFormOpen = false;
+  state.proposalFormOpen = false;
   state.teamFormOpen = false;
   state.showPasswordForm = false;
   state.authView = "signin";

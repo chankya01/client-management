@@ -5,6 +5,7 @@ import {
   handleApiError,
   internalRoles,
   normalizeEmail,
+  publicAppOrigin,
   supabaseAdminFetch,
   tablePath
 } from "../../_supabaseAdmin.js";
@@ -290,7 +291,7 @@ export async function POST(request, { params }) {
       const senderId = payload.document.uploaded_by
         || (await profileForRecipientEmail(payload.recipient.email))?.id;
       if (!senderId) throw new Error("No sender profile is available for the agreement message.");
-      const signedAgreementUrl = new URL(`/sign/${payload.recipient.signing_token}`, request.url).toString();
+      const signedAgreementUrl = `${publicAppOrigin(request)}/sign/${payload.recipient.signing_token}`;
       await supabaseAdminFetch(tablePath("request_messages"), {
         method: "POST",
         body: JSON.stringify({

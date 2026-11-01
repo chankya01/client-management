@@ -8,6 +8,7 @@ import {
   internalRoles,
   managementRoles,
   normalizeEmail,
+  publicAppOrigin,
   sendSignatureRequestEmail,
   supabaseAdminFetch,
   tablePath,
@@ -194,7 +195,7 @@ async function documentsForProfile(profile, origin) {
 export async function GET(request) {
   try {
     const profile = await currentProfile(request);
-    const origin = new URL(request.url).origin;
+    const origin = publicAppOrigin(request);
     return apiJson(await documentsForProfile(profile, origin));
   } catch (error) {
     return handleApiError(error);
@@ -282,7 +283,7 @@ export async function POST(request) {
       })
     });
 
-    const origin = new URL(request.url).origin;
+    const origin = publicAppOrigin(request);
     const emailResults = await Promise.all((recipientRows || []).map((recipient) => (
       sendSignatureRequestEmail({
         email: recipient.email,

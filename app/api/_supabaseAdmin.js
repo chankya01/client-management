@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { appConfig } from "../../src/config.js";
+import { appConfig, canonicalAppUrl } from "../../src/config.js";
 
 const supabaseUrl = process.env.SUPABASE_URL
   || process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -18,7 +18,24 @@ const anonKey = process.env.SUPABASE_ANON_KEY
 
 const resendApiKey = process.env.RESEND_API_KEY;
 const notificationFrom = process.env.NOTIFICATION_FROM || "Clients <notifications@example.com>";
-const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "";
+const configuredAppUrl = process.env.PUBLIC_APP_URL
+  || process.env.APP_URL
+  || process.env.NEXT_PUBLIC_APP_URL
+  || "";
+const isProductionDeployment = process.env.VERCEL_ENV === "production" || process.env.NODE_ENV === "production";
+const appUrl = configuredAppUrl && !(isProductionDeployment && /.vercel\.app\b/i.test(configuredAppUrl))
+  ? configuredAppUrl.replace(/\/+$/, "")
+  : (isProductionDeployment ? canonicalAppUrl : "");
+
+export function publicAppOrigin(request) {
+  if (appUrl) return appUrl;
+  try {
+    if (request?.url) return new URL(request.url).origin;
+  } catch {
+    // Fall through to the canonical host when no request origin is available.
+  }
+  return canonicalAppUrl;
+}
 
 export const managementRoles = new Set(["owner", "project_manager"]);
 export const internalRoles = new Set(["owner", "project_manager", "developer", "reviewer", "assignee"]);
