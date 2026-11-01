@@ -17,13 +17,13 @@ Content-Type: application/json
   "messageId": "bridge-message-id",
   "threadId": "bridge-thread-id",
   "from": "client@example.com",
-  "subject": "Re: REQ-12 PDF remediation",
+  "subject": "Re: PDF remediation",
   "text": "The requested files are attached.",
   "receivedAt": "2026-10-30T10:30:00.000Z"
 }
 ```
 
-The app matches the request number in the subject first (`REQ-12`). If it is absent, it matches the sender to the client's primary email or a request contact. The message is inserted into that request's conversation and the external message ID prevents duplicates. Addresses found in `From`, `To`, and `CC` are automatically added to that request's client contacts (excluding the primary contact and the configured Proton mailbox), so an additional person can participate without a separate approval step.
+The app first matches a reply to an already-imported email thread using `threadId`. For a new thread, it matches the sender to the client's primary email or a request contact when that sender belongs to exactly one request. A subject is optional; a request number such as `REQ-12` can still be used when available. If the sender has multiple requests and the email is a brand-new thread, the worker must provide a request-specific reply address or another routing signal because the app cannot safely guess the destination. The message is inserted into that request's conversation and the external message ID prevents duplicates. Addresses found in `From`, `To`, and `CC` are automatically added to that request's client contacts (excluding the primary contact and the configured Proton mailbox), so an additional person can participate without a separate approval step.
 
 Run `sql/2026-10-30-proton-mail-integration.sql` before enabling the worker.
 

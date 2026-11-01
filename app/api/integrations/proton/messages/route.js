@@ -105,7 +105,26 @@ async function requestsForSender(sender) {
     .filter((request, index, rows) => rows.findIndex((candidate) => candidate.id === request.id) === index);
 }
 
-async function resolveRequest(subject, sender) {
+async function requestForThread(threadId) {
+  const value = String(threadId || "").trim();
+  if (!value) return null;
+
+  const messages = await supabaseAdminFetch(
+    tablePath("request_messages", `?select=request_id&external_thread_id=eq.${encodeValue(value)}&order=created_at.desc&limit=1`)
+  );
+  const requestId = messages?.[0]?.request_id;
+  if (!requestId) return null;
+
+  const requests = await supabaseAdminFetch(
+    tablePath("requests", `?select=id,request_number,title,client_id&id=eq.${encodeValue(requestId)}&limit=1`)
+  );
+  return requests?.[0] || null;
+}
+
+async function resolveRequest(subject, sender, threadId) {
+  const threadRequest = await requestForThread(threadId);
+  if (threadRequest) return threadRequest;
+
   const { requestNumber, requestId } = requestReference(subject);
   if (requestId) {
     const rows = await supabaseAdminFetch(
@@ -123,9 +142,9 @@ async function resolveRequest(subject, sender) {
   const candidates = await requestsForSender(sender);
   if (candidates.length === 1) return candidates[0];
   if (!candidates.length) {
-    throw new Error("No request matched this Proton message. Include the request number (for example, REQ-12) in the subject or link the sender to a request contact.");
+    throw new Error("No request matched this Proton message. The sender must be linked to a request, or the email must be a reply in an existing conversation thread.");
   }
-  throw new Error("More than one request matches this Proton sender. Include the request number (for example, REQ-12) in the subject.");
+  throw new Error("More than one request matches this Proton sender. Reply in the existing email thread or use a request-specific reply address.");
 }
 
 async function senderCanUseRequest(requestRow, sender) {
@@ -203,7 +222,7 @@ export async function POST(request) {
     const toAddresses = addressRecords(payload.to || payload.toAddresses || payload.recipient);
     const ccAddresses = addressRecords(payload.cc || payload.ccAddresses);
 
-    if (!sender || !subject || !body) return apiJson({ error: "from, subject, and a non-empty message body are required." }, 400);
+    if (!sender || !body) return apiJson({ error: "from and a non-empty message body are required." }, 400);
     if (!externalMessageId) return apiJson({ error: "messageId is required so Proton messages can be de-duplicated." }, 400);
 
     const existing = await supabaseAdminFetch(
@@ -211,7 +230,7 @@ export async function POST(request) {
     );
     if (existing?.[0]) return apiJson({ ok: true, duplicate: true, messageId: existing[0].id, requestId: existing[0].request_id });
 
-    const requestRow = await resolveRequest(subject, sender);
+    const requestRow = await resolveRequest(subject, sender, externalThreadId);
     const matchedByRequestReference = Boolean(requestReference(subject).requestNumber || requestReference(subject).requestId || externalThreadId);
     if (!matchedByRequestReference && !(await senderCanUseRequest(requestRow, sender))) {
       throw new Error("The Proton sender is not linked to the request named in the subject.");
