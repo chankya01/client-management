@@ -29,6 +29,34 @@ function emailAddress(value) {
   return normalizeEmail(bracketed?.[1] || text.replace(/^.*?\s+/, ""));
 }
 
+function addressRecord(value) {
+  if (value && typeof value === "object") {
+    const email = emailAddress(value);
+    return { email, name: String(value.name || value.displayName || "").trim() };
+  }
+  const text = String(value || "").trim();
+  const bracketed = text.match(/^(.*?)\s*<([^>]+)>$/);
+  return {
+    email: normalizeEmail(bracketed?.[2] || text),
+    name: String(bracketed?.[1] || "").replace(/^"|"$/g, "").trim()
+  };
+}
+
+function addressRecords(value) {
+  if (Array.isArray(value)) return value.flatMap(addressRecords);
+  if (value && typeof value === "object") return [addressRecord(value)];
+  return String(value || "")
+    .split(/[;,]/)
+    .map((item) => addressRecord(item))
+    .filter((item) => item.email);
+}
+
+function headerValue(payload, names) {
+  const headers = payload?.headers && typeof payload.headers === "object" ? payload.headers : {};
+  const normalized = Object.fromEntries(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value]));
+  return names.map((name) => normalized[name]).find((value) => value) || "";
+}
+
 function cleanBody(payload) {
   const plain = payload.text || payload.textPlain || payload.text_plain || payload.body || "";
   if (String(plain).trim()) return String(plain).trim();
@@ -117,16 +145,63 @@ async function senderCanUseRequest(requestRow, sender) {
   }
 }
 
+async function addDiscoveredContacts(requestRow, addresses) {
+  const clients = await supabaseAdminFetch(
+    tablePath("clients", `?select=primary_contact_email&id=eq.${encodeValue(requestRow.client_id)}&limit=1`)
+  );
+  const primaryEmail = normalizeEmail(clients?.[0]?.primary_contact_email);
+  const configuredMailbox = normalizeEmail(process.env.PROTON_MAIL_ADDRESS || process.env.PROTON_MAIL_FROM || "");
+  const uniqueAddresses = new Map();
+  (addresses || []).forEach((address) => {
+    const email = normalizeEmail(address.email);
+    if (!email || email === primaryEmail || email === configuredMailbox) return;
+    if (!uniqueAddresses.has(email)) uniqueAddresses.set(email, {
+      email,
+      name: String(address.name || "").trim() || null
+    });
+  });
+  if (!uniqueAddresses.size) return [];
+
+  const emails = [...uniqueAddresses.keys()];
+  let profiles = [];
+  try {
+    profiles = await supabaseAdminFetch(
+      tablePath("profiles", `?select=id,email&email=${inFilter(emails)}`)
+    );
+  } catch {
+    profiles = [];
+  }
+  const profileByEmail = Object.fromEntries((profiles || []).map((profile) => [normalizeEmail(profile.email), profile.id]));
+
+  const rows = [...uniqueAddresses.values()].map((contact) => ({
+    request_id: requestRow.id,
+    profile_id: profileByEmail[contact.email] || null,
+    name: contact.name,
+    email: contact.email
+  }));
+  const inserted = await supabaseAdminFetch(tablePath("request_client_contacts"), {
+    method: "POST",
+    headers: {
+      Prefer: "resolution=ignore-duplicates,return=representation"
+    },
+    body: JSON.stringify(rows)
+  });
+  return inserted || [];
+}
+
 export async function POST(request) {
   try {
     if (!authorized(request)) return apiJson({ error: "Invalid Proton webhook secret." }, 401);
 
     const payload = await request.json();
-    const sender = emailAddress(payload.from || payload.sender || payload.senderEmail);
+    const senderRecord = addressRecord(payload.from || payload.sender || payload.senderEmail);
+    const sender = senderRecord.email;
     const subject = String(payload.subject || "").trim();
     const body = cleanBody(payload);
-    const externalMessageId = String(payload.messageId || payload.message_id || payload.id || "").trim();
-    const externalThreadId = String(payload.threadId || payload.thread_id || payload.inReplyTo || payload.in_reply_to || "").trim();
+    const externalMessageId = String(payload.messageId || payload.message_id || payload.id || headerValue(payload, ["message-id"]) || "").trim();
+    const externalThreadId = String(payload.threadId || payload.thread_id || payload.inReplyTo || payload.in_reply_to || headerValue(payload, ["in-reply-to", "references"]) || "").trim();
+    const toAddresses = addressRecords(payload.to || payload.toAddresses || payload.recipient);
+    const ccAddresses = addressRecords(payload.cc || payload.ccAddresses);
 
     if (!sender || !subject || !body) return apiJson({ error: "from, subject, and a non-empty message body are required." }, 400);
     if (!externalMessageId) return apiJson({ error: "messageId is required so Proton messages can be de-duplicated." }, 400);
@@ -137,9 +212,11 @@ export async function POST(request) {
     if (existing?.[0]) return apiJson({ ok: true, duplicate: true, messageId: existing[0].id, requestId: existing[0].request_id });
 
     const requestRow = await resolveRequest(subject, sender);
-    if (!(await senderCanUseRequest(requestRow, sender))) {
+    const matchedByRequestReference = Boolean(requestReference(subject).requestNumber || requestReference(subject).requestId || externalThreadId);
+    if (!matchedByRequestReference && !(await senderCanUseRequest(requestRow, sender))) {
       throw new Error("The Proton sender is not linked to the request named in the subject.");
     }
+    await addDiscoveredContacts(requestRow, [senderRecord, ...toAddresses, ...ccAddresses]);
     const profiles = await supabaseAdminFetch(
       tablePath("profiles", `?select=id,full_name,email,role&email=eq.${encodeValue(sender)}&limit=1`)
     );

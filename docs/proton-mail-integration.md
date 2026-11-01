@@ -23,7 +23,7 @@ Content-Type: application/json
 }
 ```
 
-The app matches the request number in the subject first (`REQ-12`). If it is absent, it matches the sender to the client's primary email or a request contact. The message is inserted into that request's conversation and the external message ID prevents duplicates.
+The app matches the request number in the subject first (`REQ-12`). If it is absent, it matches the sender to the client's primary email or a request contact. The message is inserted into that request's conversation and the external message ID prevents duplicates. Addresses found in `From`, `To`, and `CC` are automatically added to that request's client contacts (excluding the primary contact and the configured Proton mailbox), so an additional person can participate without a separate approval step.
 
 Run `sql/2026-10-30-proton-mail-integration.sql` before enabling the worker.
 
