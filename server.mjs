@@ -438,7 +438,7 @@ async function requestNotificationRecipients(requestRow, senderProfile) {
   ], senderProfile.email);
 }
 
-async function sendMessageNotification({ requestRow, senderProfile }) {
+async function sendMessageNotification({ requestRow, senderProfile, message }) {
   if (!resendApiKey) {
     throw new Error("RESEND_API_KEY is not configured. Message was not sent.");
   }
@@ -450,7 +450,7 @@ async function sendMessageNotification({ requestRow, senderProfile }) {
   const label = requestRow.request_number || requestRow.title || "the request";
   const senderName = senderProfile.full_name || senderProfile.email || "someone";
   const link = appUrl ? `\n\nOpen Clients: ${appUrl}` : "";
-  const text = `Hi,\n\nThere is an update on ${label} from ${senderName}. Please sign in to view it.${link}`;
+  const text = `Hi,\n\n${senderName} sent a message on ${label}:\n\n${String(message || "").trim()}\n\nOpen Clients to view the full conversation:${link}`;
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -1081,7 +1081,7 @@ async function handleApi(req, res, url) {
       })
     });
     const notification = body.notify !== false
-      ? await sendMessageNotification({ requestRow: request, senderProfile: profile })
+      ? await sendMessageNotification({ requestRow: request, senderProfile: profile, message: body.message })
       : { sent: false, reason: "Notification disabled for this message." };
     return json(res, 200, { ok: true, notification });
   }

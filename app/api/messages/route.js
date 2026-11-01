@@ -226,7 +226,7 @@ async function senderDisplayName(requestRow, senderProfile) {
   return senderProfile.full_name || senderProfile.email || "someone";
 }
 
-async function sendMessageNotification({ requestRow, senderProfile, excludedEmails = [] }) {
+async function sendMessageNotification({ requestRow, senderProfile, message, excludedEmails = [] }) {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.NOTIFICATION_FROM || "Clients <notifications@example.com>";
   if (!apiKey) {
@@ -244,7 +244,7 @@ async function sendMessageNotification({ requestRow, senderProfile, excludedEmai
   const label = await requestLabel(requestRow);
   const senderName = await senderDisplayName(requestRow, senderProfile);
   const link = `\n\nOpen Clients: ${publicAppOrigin()}`;
-  const text = `Hi,\n\nThere is an update on ${label} from ${senderName}. Please sign in to view it.${link}`;
+  const text = `Hi,\n\n${senderName} sent a message on ${label}:\n\n${String(message || "").trim()}\n\nOpen Clients to view the full conversation:${link}`;
 
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -385,7 +385,7 @@ export async function POST(request) {
     });
 
     const notification = body.notify !== false
-      ? await sendMessageNotification({ requestRow, senderProfile: profile, excludedEmails: body.excludeEmails || [] })
+      ? await sendMessageNotification({ requestRow, senderProfile: profile, message, excludedEmails: body.excludeEmails || [] })
       : { sent: false, reason: "Notification disabled for this message." };
 
     const proton = body.proton !== false && profile.role !== "client"

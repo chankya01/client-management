@@ -5260,7 +5260,8 @@ function attachEvents() {
   if (form) {
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
-      if (event.currentTarget.dataset.submitting === "true") return;
+      const messageForm = event.currentTarget;
+      if (messageForm.dataset.submitting === "true") return;
       const message = document.getElementById("messageText").value.trim();
       const file = document.getElementById("attachmentInput").files[0];
 
@@ -5269,20 +5270,20 @@ function attachEvents() {
         return;
       }
 
-      await withActionLock(`message-${state.activeRequest.id}`, event.currentTarget, async () => {
+      await withActionLock(`message-${state.activeRequest.id}`, messageForm, async () => {
         try {
-          event.currentTarget.dataset.submitting = "true";
+          messageForm.dataset.submitting = "true";
           if (message) await createMessage(state.activeRequest.id, state.profile.id, message);
           if (file) await uploadRequestAttachment({ request: state.activeRequest, profile: state.profile, file });
           clearMessageDraft(state.activeRequest.id);
-          event.currentTarget.reset();
+          messageForm.reset();
           await refreshActiveMessages({ markRead: true });
           showToast(message ? "Message sent." : "Attachment uploaded.");
           render();
         } catch (error) {
           showAppError(error, "Send client message");
         } finally {
-          delete event.currentTarget.dataset.submitting;
+          delete messageForm.dataset.submitting;
         }
       });
     });
@@ -5292,7 +5293,8 @@ function attachEvents() {
   if (internalMessageForm) {
     internalMessageForm.addEventListener("submit", async (event) => {
       event.preventDefault();
-      if (event.currentTarget.dataset.submitting === "true") return;
+      const messageForm = event.currentTarget;
+      if (messageForm.dataset.submitting === "true") return;
       const message = document.getElementById("internalMessageText").value.trim();
       const file = document.getElementById("internalAttachmentInput").files[0];
 
@@ -5301,20 +5303,20 @@ function attachEvents() {
         return;
       }
 
-      await withActionLock(`internal-message-${state.activeRequest.id}`, event.currentTarget, async () => {
+      await withActionLock(`internal-message-${state.activeRequest.id}`, messageForm, async () => {
         try {
-          event.currentTarget.dataset.submitting = "true";
+          messageForm.dataset.submitting = "true";
           if (message) await createMessage(state.activeRequest.id, state.profile.id, message);
           if (file) await uploadRequestAttachment({ request: state.activeRequest, profile: state.profile, file });
           clearMessageDraft(state.activeRequest.id);
-          event.currentTarget.reset();
+          messageForm.reset();
           await refreshActiveMessages({ markRead: true });
           showToast(message ? "Message sent." : "Attachment uploaded.");
           render();
         } catch (error) {
           showAppError(error, "Send internal message");
         } finally {
-          delete event.currentTarget.dataset.submitting;
+          delete messageForm.dataset.submitting;
         }
       });
     });
