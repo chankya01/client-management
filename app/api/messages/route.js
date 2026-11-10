@@ -373,6 +373,10 @@ export async function POST(request) {
       ? await sendMessageNotification({ requestRow, senderProfile: profile, message, excludedEmails: body.excludeEmails || [] })
       : { sent: false, reason: proton.configured ? "Proton email delivery used." : "Notification disabled for this message." };
 
+    if (proton.configured && !proton.sent) {
+      return apiJson({ ok: false, proton, notification }, 502);
+    }
+
     return apiJson({ ok: true, notification, proton });
   } catch (error) {
     return handleApiError(error);
