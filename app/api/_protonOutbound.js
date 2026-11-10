@@ -62,6 +62,12 @@ async function notificationRecipients(requestRow, senderProfile) {
   ], senderProfile.email);
 }
 
+function requestThreadId(requestRow) {
+  const value = String(requestRow?.id || requestRow?.request_number || "request")
+    .replace(/[^a-zA-Z0-9._-]/g, "-");
+  return `<clients-request-${value}@accessible.org>`;
+}
+
 export async function sendProtonOutbound({ requestRow, senderProfile, message, subject, recipients: explicitRecipients }) {
   const endpoint = String(process.env.PROTON_MAIL_OUTBOUND_WEBHOOK_URL || "").trim();
   if (!endpoint) return { sent: false, configured: false, reason: "Proton outbound worker is not configured." };
@@ -76,6 +82,7 @@ export async function sendProtonOutbound({ requestRow, senderProfile, message, s
 
   const requestNumber = String(requestRow.request_number || requestRow.id);
   const cleanSubject = String(subject || requestRow.title || "Request").trim();
+  const threadId = requestThreadId(requestRow);
   const response = await fetch(endpoint, {
     method: "POST",
     headers: {
@@ -90,7 +97,13 @@ export async function sendProtonOutbound({ requestRow, senderProfile, message, s
       requestId: requestRow.id,
       requestNumber,
       sentAt: new Date().toISOString(),
-      sender: senderProfile.email
+      sender: senderProfile.email,
+      // The worker must copy these values to SMTP In-Reply-To and References
+      // headers. A stable request root keeps proposal, status, and message
+      // emails in one conversation even when the subject is unchanged.
+      threadId,
+      inReplyTo: threadId,
+      references: threadId
     })
   });
 
