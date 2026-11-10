@@ -286,7 +286,9 @@ async function sendProtonOutbound({ requestRow, senderProfile, message, subject 
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-Proton-Webhook-Secret": secret
+      // The Lightsail worker protects /send with the same Bearer token
+      // convention used by its local and public API checks.
+      Authorization: `Bearer ${secret}`
     },
     body: JSON.stringify({
       from: process.env.PROTON_MAIL_FROM || "",
