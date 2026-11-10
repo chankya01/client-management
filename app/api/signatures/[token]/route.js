@@ -1,9 +1,7 @@
 import {
   apiJson,
-  currentProfile,
   encodeValue,
   handleApiError,
-  internalRoles,
   normalizeEmail,
   publicAppOrigin,
   supabaseAdminFetch,
@@ -139,27 +137,10 @@ async function profileForRecipientEmail(email) {
 }
 
 async function requireMatchingPortalSessionIfNeeded(request, recipient) {
-  const profile = await profileForRecipientEmail(recipient.email);
-  if (!profile?.id) return null;
-
-  let signedInProfile = null;
-  try {
-    signedInProfile = await currentProfile(request);
-  } catch (error) {
-    const authError = new Error("Please sign in with the recipient portal account before opening this agreement.");
-    authError.status = error.status === 401 || error.status === 403 ? error.status : 401;
-    throw authError;
-  }
-
-  if (internalRoles.has(signedInProfile.role)) return signedInProfile;
-
-  if (normalizeEmail(signedInProfile.email) !== normalizeEmail(recipient.email)) {
-    const error = new Error("This signing link belongs to a different recipient account. Please sign in with the matching recipient email.");
-    error.status = 403;
-    throw error;
-  }
-
-  return signedInProfile;
+  // The opaque signing token is the recipient's authorization. Client portal
+  // access is optional, so proposal recipients can open and sign directly
+  // from the emailed link without creating or using a portal account.
+  return null;
 }
 
 function cleanSignatureFields(body) {
