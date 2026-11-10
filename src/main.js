@@ -45,6 +45,9 @@ import {
 
 const root = document.getElementById("root");
 const APP_NAME = "Clients";
+// Client access is intentionally paused while email is the supported client
+// communication channel. Re-enable this flag when the client portal is needed.
+const CLIENT_PORTAL_ENABLED = false;
 
 function signatureTokenFromUrl() {
   if (typeof window === "undefined") return "";
@@ -57,6 +60,7 @@ function signatureTokenFromUrl() {
 const state = {
   session: null,
   profile: null,
+  clientPortalDisabled: false,
   requests: [],
   activeRequest: null,
   messages: [],
@@ -1123,6 +1127,8 @@ async function boot() {
 
 async function loadPortalData() {
   state.profile = await loadProfile();
+  state.clientPortalDisabled = state.profile?.role === "client" && !CLIENT_PORTAL_ENABLED;
+  if (state.clientPortalDisabled) return;
   const [
     loadedRequests,
     requestAssignments,
@@ -1411,6 +1417,21 @@ function navHtml() {
         </nav>
       </div>
     </header>
+  `;
+}
+
+function renderClientPortalDisabled() {
+  return `
+    <main class="signin-shell">
+      <section class="signin-card">
+        ${brandLogo("signin")}
+        <h1>Email communication is enabled</h1>
+        <p class="helper">The client portal is temporarily paused. Please use your email conversation with Accessible.org for messages and replies.</p>
+        <p class="helper">Your account and request history remain safely stored.</p>
+        <button class="secondary" type="button" data-action="logout">Sign Out</button>
+      </section>
+      ${toastHtml()}
+    </main>
   `;
 }
 
@@ -3967,6 +3988,12 @@ function render() {
     return;
   }
 
+  if (state.clientPortalDisabled) {
+    root.innerHTML = renderClientPortalDisabled();
+    attachEvents();
+    return;
+  }
+
   if (state.loadError) {
     root.innerHTML = `
       <main class="signin-shell">
@@ -4833,7 +4860,7 @@ function attachEvents() {
                 requestId,
                 state.profile.id,
                 `${state.profile.full_name || "A client contact"} added ${displayName} as a CC contact.`,
-                { excludeEmails: [contactEmail] }
+                { notify: false, excludeEmails: [contactEmail] }
               );
               if (state.activeRequest?.id === requestId) {
                 await refreshActiveMessages({ markRead: true });
@@ -5024,6 +5051,7 @@ function attachEvents() {
             });
             if (updateMessage) {
               await createMessage(state.editingRequestId, state.profile.id, updateMessage, {
+                notify: false,
                 excludeEmails: addedCcEmails
               });
             }
@@ -5461,6 +5489,7 @@ async function handleLogout() {
 function resetSessionState() {
   state.session = null;
   state.profile = null;
+  state.clientPortalDisabled = false;
   state.requests = [];
   state.activeRequest = null;
   state.messages = [];

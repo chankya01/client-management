@@ -358,14 +358,18 @@ export async function POST(request) {
       })
     });
 
-    const proton = body.proton !== false && profile.role !== "client"
+    // `notify: false` is used for system/activity entries (request edits,
+    // service setup, and contact changes). Only actual composed messages
+    // should leave the portal through Proton or the legacy notifier.
+    const shouldNotify = body.notify !== false;
+    const proton = body.proton !== false && shouldNotify && profile.role !== "client"
       ? await sendProtonOutbound({
         requestRow,
         senderProfile: profile,
         message,
         subject: body.subject
       })
-      : { sent: false, configured: false, reason: profile.role === "client" ? "Proton delivery is only sent for team-authored messages." : "Proton delivery disabled for this message." };
+      : { sent: false, configured: false, reason: profile.role === "client" ? "Proton delivery is only sent for team-authored messages." : "Email delivery disabled for this activity entry." };
 
     // Proton is the canonical delivery path when configured; avoid sending a
     // duplicate generic notification through the legacy Resend/Onchange path.
