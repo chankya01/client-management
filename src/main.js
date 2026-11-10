@@ -5301,12 +5301,17 @@ function attachEvents() {
       await withActionLock(`message-${state.activeRequest.id}`, messageForm, async () => {
         try {
           messageForm.dataset.submitting = "true";
-          if (message) await createMessage(state.activeRequest.id, state.profile.id, message);
+          const messageResult = message
+            ? await createMessage(state.activeRequest.id, state.profile.id, message)
+            : null;
           if (file) await uploadRequestAttachment({ request: state.activeRequest, profile: state.profile, file });
           clearMessageDraft(state.activeRequest.id);
           messageForm.reset();
           await refreshActiveMessages({ markRead: true });
-          showToast(message ? "Message sent." : "Attachment uploaded.");
+          const deliveryWarning = messageResult?.deliveryWarning;
+          showToast(deliveryWarning
+            ? `Message saved, but email delivery was not confirmed: ${deliveryWarning}`
+            : (message ? "Message sent." : "Attachment uploaded."));
           render();
         } catch (error) {
           showAppError(error, "Send client message");
@@ -5334,12 +5339,17 @@ function attachEvents() {
       await withActionLock(`internal-message-${state.activeRequest.id}`, messageForm, async () => {
         try {
           messageForm.dataset.submitting = "true";
-          if (message) await createMessage(state.activeRequest.id, state.profile.id, message);
+          const messageResult = message
+            ? await createMessage(state.activeRequest.id, state.profile.id, message)
+            : null;
           if (file) await uploadRequestAttachment({ request: state.activeRequest, profile: state.profile, file });
           clearMessageDraft(state.activeRequest.id);
           messageForm.reset();
           await refreshActiveMessages({ markRead: true });
-          showToast(message ? "Message sent." : "Attachment uploaded.");
+          const deliveryWarning = messageResult?.deliveryWarning;
+          showToast(deliveryWarning
+            ? `Message saved, but email delivery was not confirmed: ${deliveryWarning}`
+            : (message ? "Message sent." : "Attachment uploaded."));
           render();
         } catch (error) {
           showAppError(error, "Send internal message");

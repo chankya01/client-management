@@ -332,11 +332,21 @@ export async function POST(request) {
       ? await sendMessageNotification({ requestRow, senderProfile: profile, message, excludedEmails: body.excludeEmails || [] })
       : { sent: false, reason: proton.configured ? "Proton email delivery used." : "Notification disabled for this message." };
 
+    // The database message is already saved at this point. Do not turn a
+    // transient SMTP/worker problem into a failed form submission: that makes
+    // users resend the same message and creates duplicates. Return 202 so the
+    // UI can clear the composer while showing the delivery warning.
     if (proton.configured && !proton.sent) {
-      return apiJson({ ok: false, proton, notification }, 502);
+      return apiJson({
+        ok: true,
+        messageSaved: true,
+        deliveryWarning: proton.reason || "Message saved, but email delivery was not confirmed.",
+        notification,
+        proton
+      }, 202);
     }
 
-    return apiJson({ ok: true, notification, proton });
+    return apiJson({ ok: true, messageSaved: true, notification, proton });
   } catch (error) {
     return handleApiError(error);
   }

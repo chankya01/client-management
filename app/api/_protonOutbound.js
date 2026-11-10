@@ -83,29 +83,59 @@ export async function sendProtonOutbound({ requestRow, senderProfile, message, s
   const requestNumber = String(requestRow.request_number || requestRow.id);
   const cleanSubject = String(subject || requestRow.title || "Request").trim();
   const threadId = requestThreadId(requestRow);
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${secret}`
-    },
-    body: JSON.stringify({
-      from: process.env.PROTON_MAIL_FROM || "",
-      to: recipients.map((recipient) => recipient.email),
-      subject: cleanSubject,
-      text: message,
-      requestId: requestRow.id,
-      requestNumber,
-      sentAt: new Date().toISOString(),
-      sender: senderProfile.email,
-      // The worker must copy these values to SMTP In-Reply-To and References
-      // headers. A stable request root keeps proposal, status, and message
-      // emails in one conversation even when the subject is unchanged.
-      threadId,
-      inReplyTo: threadId,
-      references: threadId
-    })
+  const payload = JSON.stringify({
+    from: process.env.PROTON_MAIL_FROM || "",
+    to: recipients.map((recipient) => recipient.email),
+    subject: cleanSubject,
+    text: message,
+    requestId: requestRow.id,
+    requestNumber,
+    sentAt: new Date().toISOString(),
+    sender: senderProfile.email,
+    // The worker must copy these values to SMTP In-Reply-To and References
+    // headers. A stable request root keeps proposal, status, and message
+    // emails in one conversation even when the subject is unchanged.
+    threadId,
+    inReplyTo: threadId,
+    references: threadId
   });
+
+  // A slow or briefly unavailable Lightsail worker should not leave the
+  // portal button spinning forever. Retry one transient failure, then return
+  // a structured delivery result so the message can remain saved in the
+  // conversation without users accidentally sending duplicates.
+  const timeoutMs = Math.max(3000, Number(process.env.PROTON_MAIL_OUTBOUND_TIMEOUT_MS || 8000));
+  let response;
+  let lastError;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${secret}`
+        },
+        body: payload,
+        signal: controller.signal
+      });
+      if (response.ok || response.status < 500 || attempt === 1) break;
+    } catch (error) {
+      lastError = error;
+      if (attempt === 1) break;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  if (!response) {
+    const reason = lastError?.name === "AbortError"
+      ? `Proton worker timed out after ${timeoutMs}ms.`
+      : lastError?.message || "Proton worker could not be reached.";
+    console.warn("[Clients] Proton outbound worker unavailable", reason);
+    return { sent: false, configured: true, reason };
+  }
 
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
