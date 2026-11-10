@@ -1838,7 +1838,7 @@ function adminRequestsPage() {
             <label class="field"><span>Organization</span><input name="organizationName" value="${escapeHtml(requestDraftValue("organizationName", leadClient?.name || ""))}" required /></label>
             <label class="field"><span>Primary Contact</span><input name="contactName" value="${escapeHtml(requestDraftValue("contactName", leadClient?.primary_contact_name || ""))}" required /></label>
             <label class="field"><span>Primary Contact Email</span><input name="contactEmail" type="email" value="${escapeHtml(requestDraftValue("contactEmail", leadClient?.primary_contact_email || ""))}" required /></label>
-            <label class="field"><span>Title</span><input name="title" value="${escapeHtml(requestDraftValue("title", editingRequest?.title || ""))}" required /></label>
+            <label class="field"><span>Request / Email Subject</span><input name="title" value="${escapeHtml(requestDraftValue("title", editingRequest?.title || ""))}" required /></label>
             <label class="field wide"><span>Description</span><input name="description" value="${escapeHtml(requestDraftValue("description", editingRequest?.description || ""))}" /></label>
             ${ccContactCheckboxes(selectedClientId, selectedCcContacts)}
             ${serviceCheckboxes(selectedServicesText)}

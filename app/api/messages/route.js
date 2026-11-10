@@ -255,20 +255,10 @@ async function sendMessageNotification({ requestRow, senderProfile, message, exc
   };
 }
 
-async function protonClientRecipients(requestRow) {
-  const [clients, contacts] = await Promise.all([
-    supabaseAdminFetch(
-      tablePath("clients", `?select=primary_contact_name,primary_contact_email&id=eq.${encodeValue(requestRow.client_id)}&limit=1`)
-    ),
-    safeFetchRows(
-      tablePath("request_client_contacts", `?select=name,email&request_id=eq.${encodeValue(requestRow.id)}`)
-    )
-  ]);
-  const client = clients?.[0] || {};
-  return uniqueRecipients([
-    { name: client.primary_contact_name, email: client.primary_contact_email },
-    ...(contacts || [])
-  ], "");
+async function protonClientRecipients(requestRow, senderProfile) {
+  // Keep Proton recipients aligned with portal notifications: the client,
+  // request contacts, admins, and assigned team members, excluding the sender.
+  return notificationRecipients(requestRow, senderProfile);
 }
 
 async function sendProtonOutbound({ requestRow, senderProfile, message, subject }) {
@@ -278,10 +268,11 @@ async function sendProtonOutbound({ requestRow, senderProfile, message, subject 
   const secret = String(process.env.PROTON_MAIL_OUTBOUND_WEBHOOK_SECRET || "").trim();
   if (!secret) return { sent: false, configured: true, reason: "PROTON_MAIL_OUTBOUND_WEBHOOK_SECRET is not configured." };
 
-  const recipients = await protonClientRecipients(requestRow);
-  if (!recipients.length) return { sent: false, configured: true, reason: "No client email recipients were found for this request." };
+  const recipients = await protonClientRecipients(requestRow, senderProfile);
+  if (!recipients.length) return { sent: false, configured: true, reason: "No email recipients were found for this request." };
 
   const requestNumber = String(requestRow.request_number || requestRow.id);
+  const cleanSubject = String(subject || requestRow.title || "Request").trim();
   const response = await fetch(endpoint, {
     method: "POST",
     headers: {
@@ -293,7 +284,7 @@ async function sendProtonOutbound({ requestRow, senderProfile, message, subject 
     body: JSON.stringify({
       from: process.env.PROTON_MAIL_FROM || "",
       to: recipients.map((recipient) => recipient.email),
-      subject: subject || `Re: ${requestNumber} ${requestRow.title || "Request"}`,
+      subject: cleanSubject,
       text: message,
       requestId: requestRow.id,
       requestNumber,
@@ -367,10 +358,6 @@ export async function POST(request) {
       })
     });
 
-    const notification = body.notify !== false
-      ? await sendMessageNotification({ requestRow, senderProfile: profile, message, excludedEmails: body.excludeEmails || [] })
-      : { sent: false, reason: "Notification disabled for this message." };
-
     const proton = body.proton !== false && profile.role !== "client"
       ? await sendProtonOutbound({
         requestRow,
@@ -379,6 +366,12 @@ export async function POST(request) {
         subject: body.subject
       })
       : { sent: false, configured: false, reason: profile.role === "client" ? "Proton delivery is only sent for team-authored messages." : "Proton delivery disabled for this message." };
+
+    // Proton is the canonical delivery path when configured; avoid sending a
+    // duplicate generic notification through the legacy Resend/Onchange path.
+    const notification = body.notify !== false && !proton.configured
+      ? await sendMessageNotification({ requestRow, senderProfile: profile, message, excludedEmails: body.excludeEmails || [] })
+      : { sent: false, reason: proton.configured ? "Proton email delivery used." : "Notification disabled for this message." };
 
     return apiJson({ ok: true, notification, proton });
   } catch (error) {

@@ -73,9 +73,15 @@ function cleanBody(payload) {
 
 function requestReference(subject) {
   const value = String(subject || "");
-  const requestNumber = value.match(/\bREQ-\d{1,6}\b/i)?.[0]?.toUpperCase() || null;
+  const requestNumber = value.match(/\bREQ-\d{1,20}\b/i)?.[0]?.toUpperCase() || null;
   const requestId = value.match(/\b[0-9a-f]{8}-[0-9a-f-]{27,}\b/i)?.[0] || null;
   return { requestNumber, requestId };
+}
+
+function subjectTitle(subject) {
+  return String(subject || "")
+    .replace(/^(?:(?:re|fw|fwd)\s*:\s*)+/i, "")
+    .trim();
 }
 
 async function requestsForSender(sender) {
@@ -137,6 +143,19 @@ async function resolveRequest(subject, sender, threadId) {
       tablePath("requests", `?select=id,request_number,title,client_id&request_number=eq.${encodeValue(requestNumber)}&limit=1`)
     );
     if (rows?.[0]) return rows[0];
+  }
+
+  // Outbound mail uses the request title as its clean, human-readable
+  // subject. Match that subject before falling back to sender-only routing.
+  const title = subjectTitle(subject);
+  if (title) {
+    const rows = await supabaseAdminFetch(
+      tablePath("requests", `?select=id,request_number,title,client_id&title=eq.${encodeValue(title)}&order=created_at.desc`)
+    );
+    if (rows?.length === 1) return rows[0];
+    if (rows?.length > 1) {
+      throw new Error("More than one request uses this email subject. Use a unique subject for each request.");
+    }
   }
 
   const candidates = await requestsForSender(sender);
