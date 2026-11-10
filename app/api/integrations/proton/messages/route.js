@@ -57,18 +57,38 @@ function headerValue(payload, names) {
   return names.map((name) => normalized[name]).find((value) => value) || "";
 }
 
+function stripQuotedReply(value) {
+  const lines = String(value || "")
+    .replace(/\r\n?/g, "\n")
+    .split("\n");
+
+  // Mail clients append the previous messages after a marker such as
+  // “On ... wrote:” or “-----Original Message-----”. Keep only the new
+  // content so an inbound reply is stored as one new portal message.
+  const quoteStart = lines.findIndex((line, index) => {
+    if (!line.trim()) return false;
+    if (/^\s*On\s+.+\bwrote:\s*$/i.test(line)) return true;
+    if (/^\s*-{2,}\s*Original Message\s*-{2,}\s*$/i.test(line)) return true;
+    return index > 0 && /^\s*>/.test(line);
+  });
+  const ownLines = quoteStart >= 0 ? lines.slice(0, quoteStart) : lines;
+  return ownLines.join("\n").replace(/[ \t]+\n/g, "\n").trim();
+}
+
 function cleanBody(payload) {
   const plain = payload.text || payload.textPlain || payload.text_plain || payload.body || "";
-  if (String(plain).trim()) return String(plain).trim();
-  const html = String(payload.html || payload.textHtml || payload.text_html || "");
-  return html
+  if (String(plain).trim()) return stripQuotedReply(plain);
+  const html = String(payload.html || payload.textHtml || payload.text_html || "")
+    // Gmail and many other clients wrap quoted history in these elements.
+    .replace(/<blockquote[\s\S]*?<\/blockquote>/gi, "")
+    .replace(/<div[^>]*class=["'][^"']*gmail_quote[^"']*["'][^>]*>[\s\S]*?<\/div>/gi, "");
+  return stripQuotedReply(html
     .replace(/<br\s*\/?>(?=\s*)/gi, "\n")
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/gi, " ")
     .replace(/&amp;/gi, "&")
     .replace(/\s+\n/g, "\n")
-    .replace(/\n\s+/g, "\n")
-    .trim();
+    .replace(/\n\s+/g, "\n"));
 }
 
 function requestReference(subject) {
