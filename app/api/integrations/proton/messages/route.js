@@ -105,9 +105,18 @@ function subjectTitle(subject) {
 }
 
 async function requestsForSender(sender) {
-  const clients = await supabaseAdminFetch(
+  const senderProfiles = await supabaseAdminFetch(
+    tablePath("profiles", `?select=client_id&email=eq.${encodeValue(sender)}&role=eq.client&client_id=not.is.null`)
+  );
+  const profileClientIds = [...new Set((senderProfiles || []).map((profile) => profile.client_id).filter(Boolean))];
+  const clientsByEmail = await supabaseAdminFetch(
     tablePath("clients", `?select=id&primary_contact_email=eq.${encodeValue(sender)}`)
   );
+  const clientsByProfile = profileClientIds.length
+    ? await supabaseAdminFetch(tablePath("clients", `?select=id&id=${inFilter(profileClientIds)}`))
+    : [];
+  const clients = [...(clientsByEmail || []), ...(clientsByProfile || [])]
+    .filter((client, index, rows) => rows.findIndex((candidate) => candidate.id === client.id) === index);
   const clientIds = (clients || []).map((client) => client.id).filter(Boolean);
   const clientRequests = clientIds.length
     ? await supabaseAdminFetch(tablePath("requests", `?select=id,request_number,title,client_id&client_id=${inFilter(clientIds)}&order=created_at.desc`))
@@ -191,6 +200,11 @@ async function senderCanUseRequest(requestRow, sender) {
     tablePath("clients", `?select=primary_contact_email&id=eq.${encodeValue(requestRow.client_id)}&limit=1`)
   );
   if (normalizeEmail(clients?.[0]?.primary_contact_email) === sender) return true;
+
+  const senderProfiles = await supabaseAdminFetch(
+    tablePath("profiles", `?select=id&email=eq.${encodeValue(sender)}&role=eq.client&client_id=eq.${encodeValue(requestRow.client_id)}&limit=1`)
+  );
+  if (senderProfiles?.length) return true;
 
   try {
     const contacts = await supabaseAdminFetch(

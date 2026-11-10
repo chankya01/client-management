@@ -14,6 +14,7 @@ import {
   tablePath,
   visibleRequestIdsForClientProfile
 } from "../_supabaseAdmin.js";
+import { sendProtonOutbound } from "../_protonOutbound.js";
 
 async function visibleRequestIds(profile) {
   if (managementRoles.has(profile.role)) {
@@ -284,15 +285,34 @@ export async function POST(request) {
     });
 
     const origin = publicAppOrigin(request);
-    const emailResults = await Promise.all((recipientRows || []).map((recipient) => (
-      sendSignatureRequestEmail({
-        email: recipient.email,
-        name: recipient.name,
-        documentTitle: document.title,
-        signingUrl: `${origin}/sign/${recipient.signing_token}`,
-        requiresSignature: requiresSignature && recipient.role === "signer"
-      })
-    )));
+    const requestRows = await supabaseAdminFetch(
+      tablePath("requests", `?select=id,request_number,title,client_id&id=eq.${encodeValue(requestId)}&limit=1`)
+    );
+    const requestRow = requestRows?.[0];
+    const emailResults = await Promise.all((recipientRows || []).map(async (recipient) => {
+      const signingUrl = `${origin}/sign/${recipient.signing_token}`;
+      const emailText = `Hi ${recipient.name || "there"},\n\nA proposal is ready for your review: ${document.title || "Accessibility Services Proposal"}.\n\nOpen the proposal here:\n${signingUrl}\n\nYou can reply to this email to continue the same conversation.`;
+      const protonResult = requestRow
+        ? await sendProtonOutbound({
+          requestRow,
+          senderProfile: profile,
+          recipients: [{ email: recipient.email, name: recipient.name }],
+          subject: requestRow.title || document.title,
+          message: emailText
+        })
+        : { sent: false, configured: false, reason: "Request could not be loaded for email delivery." };
+      if (protonResult.configured) return { ...protonResult, transport: "proton" };
+      return {
+        ...(await sendSignatureRequestEmail({
+          email: recipient.email,
+          name: recipient.name,
+          documentTitle: requestRow?.title || document.title,
+          signingUrl,
+          requiresSignature: requiresSignature && recipient.role === "signer"
+        })),
+        transport: "resend-fallback"
+      };
+    }));
 
     let messageResult = { created: false };
     try {
@@ -305,7 +325,7 @@ export async function POST(request) {
         body: JSON.stringify({
           request_id: requestId,
           sender_id: profile.id,
-          message: `${requiresSignature ? "Proposal sent for review" : "Proposal shared"}: ${document.title || "Accessibility Services Proposal"}.\n${proposalLinks ? `Open proposal:\n${proposalLinks}` : "Recipients received their private link by email."}`,
+          message: `${requiresSignature ? "Proposal ready for review" : "Proposal shared"}: ${document.title || "Accessibility Services Proposal"}.\n${proposalLinks ? `Open proposal:\n${proposalLinks}` : "Recipients received their private link by email."}`,
           is_internal: false
         })
       });

@@ -2757,6 +2757,13 @@ a {
   margin-bottom: 18px;
 }
 
+/* The drawing panel has a display rule, so the native hidden attribute needs
+   an explicit override when the typing tab is selected. */
+.signature-drawing-panel[hidden],
+[data-signature-mode][hidden] {
+  display: none !important;
+}
+
 .field-label {
   font-weight: 800;
 }

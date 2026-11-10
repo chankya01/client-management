@@ -1708,7 +1708,7 @@ export async function createSignatureDocument({
       id: crypto.randomUUID(),
       request_id: request.id,
       sender_id: profile.id,
-      message: `${requiresSignature ? "Proposal sent for review" : "Proposal shared"}: ${document.title}.\nOpen proposal: ${document.recipients[0]?.signing_url || ""}`,
+        message: `${requiresSignature ? "Proposal ready for review" : "Proposal shared"}: ${document.title}.\nOpen proposal: ${document.recipients[0]?.signing_url || ""}`,
       is_internal: false,
       created_at: new Date().toISOString(),
       profiles: { full_name: profile.full_name, role: profile.role }

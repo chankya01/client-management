@@ -10,6 +10,7 @@ import {
   tablePath
 } from "../_supabaseAdmin.js";
 import { appConfig } from "../../../src/config.js";
+import { sendProtonOutbound } from "../_protonOutbound.js";
 
 function senderIdsFromMessages(messages) {
   return [...new Set((messages || []).map((message) => message.sender_id).filter(Boolean))];
@@ -253,52 +254,6 @@ async function sendMessageNotification({ requestRow, senderProfile, message, exc
     id: payload?.id || null,
     recipients: recipients.map((recipient) => recipient.email)
   };
-}
-
-async function protonClientRecipients(requestRow, senderProfile) {
-  // Keep Proton recipients aligned with portal notifications: the client,
-  // request contacts, admins, and assigned team members, excluding the sender.
-  return notificationRecipients(requestRow, senderProfile);
-}
-
-async function sendProtonOutbound({ requestRow, senderProfile, message, subject }) {
-  const endpoint = String(process.env.PROTON_MAIL_OUTBOUND_WEBHOOK_URL || "").trim();
-  if (!endpoint) return { sent: false, configured: false, reason: "Proton outbound worker is not configured." };
-
-  const secret = String(process.env.PROTON_MAIL_OUTBOUND_WEBHOOK_SECRET || "").trim();
-  if (!secret) return { sent: false, configured: true, reason: "PROTON_MAIL_OUTBOUND_WEBHOOK_SECRET is not configured." };
-
-  const recipients = await protonClientRecipients(requestRow, senderProfile);
-  if (!recipients.length) return { sent: false, configured: true, reason: "No email recipients were found for this request." };
-
-  const requestNumber = String(requestRow.request_number || requestRow.id);
-  const cleanSubject = String(subject || requestRow.title || "Request").trim();
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      // The Lightsail worker protects /send with the same Bearer token
-      // convention used by its local and public API checks.
-      Authorization: `Bearer ${secret}`
-    },
-    body: JSON.stringify({
-      from: process.env.PROTON_MAIL_FROM || "",
-      to: recipients.map((recipient) => recipient.email),
-      subject: cleanSubject,
-      text: message,
-      requestId: requestRow.id,
-      requestNumber,
-      sentAt: new Date().toISOString(),
-      sender: senderProfile.email
-    })
-  });
-
-  if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    console.warn("[Clients] Proton outbound worker failed", detail);
-    return { sent: false, configured: true, reason: detail || `Proton worker returned ${response.status}.` };
-  }
-  return { sent: true, configured: true, recipients: recipients.map((recipient) => recipient.email) };
 }
 
 export async function GET(request) {

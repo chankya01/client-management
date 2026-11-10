@@ -7,6 +7,7 @@ import {
   supabaseAdminFetch,
   tablePath
 } from "../../_supabaseAdmin.js";
+import { sendProtonOutbound } from "../../_protonOutbound.js";
 
 function defaultAgreement(document) {
   return {
@@ -247,6 +248,10 @@ export async function POST(request, { params }) {
     );
     const signerRecipients = (recipients || []).filter((recipient) => recipient.role === "signer" && recipient.status !== "declined");
     const allSigned = signerRecipients.length > 0 && signerRecipients.every((recipient) => recipient.status === "signed");
+    const requestRowsForSignature = await supabaseAdminFetch(
+      tablePath("requests", `?select=id,request_number,title,client_id&id=eq.${encodeValue(payload.document.request_id)}&limit=1`)
+    );
+    const requestRowForSignature = requestRowsForSignature?.[0];
     await supabaseAdminFetch(tablePath("signature_documents", `?id=eq.${encodeValue(payload.document.id)}`), {
       method: "PATCH",
       body: JSON.stringify({
@@ -265,28 +270,51 @@ export async function POST(request, { params }) {
           event_note: "All required recipients signed the agreement."
         })
       });
+      if (requestRowForSignature?.client_id) {
+        await supabaseAdminFetch(
+          tablePath("clients", `?id=eq.${encodeValue(requestRowForSignature.client_id)}`),
+          { method: "PATCH", body: JSON.stringify({ status: "signed" }) }
+        );
+      }
     }
 
     let signedMessageCreated = false;
+    const signedAgreementUrl = `${publicAppOrigin(request)}/sign/${payload.recipient.signing_token}`;
+    const signedMessage = allSigned
+      ? `Agreement signed by ${payload.recipient.name || payload.recipient.email}: ${payload.document.title || "Accessibility Services Proposal"}. Signed at: ${now}. The signed agreement is ready to download.\nOpen signed agreement: ${signedAgreementUrl}`
+      : `Agreement signed by ${payload.recipient.name || payload.recipient.email}: ${payload.document.title || "Accessibility Services Proposal"}`;
     try {
       const senderId = payload.document.uploaded_by
         || (await profileForRecipientEmail(payload.recipient.email))?.id;
       if (!senderId) throw new Error("No sender profile is available for the agreement message.");
-      const signedAgreementUrl = `${publicAppOrigin(request)}/sign/${payload.recipient.signing_token}`;
       await supabaseAdminFetch(tablePath("request_messages"), {
         method: "POST",
         body: JSON.stringify({
           request_id: payload.document.request_id,
           sender_id: senderId,
-          message: allSigned
-            ? `Agreement signed by ${payload.recipient.name || payload.recipient.email}: ${payload.document.title || "Accessibility Services Proposal"}. Signed at: ${now}. The signed agreement is ready to download.\nOpen signed agreement: ${signedAgreementUrl}`
-            : `Agreement signed by ${payload.recipient.name || payload.recipient.email}: ${payload.document.title || "Accessibility Services Proposal"}`,
+          message: signedMessage,
           is_internal: false
         })
       });
       signedMessageCreated = true;
     } catch (messageError) {
       console.warn("[Clients] Agreement message entry failed", messageError);
+    }
+
+    try {
+      const senderProfiles = payload.document.uploaded_by
+        ? await supabaseAdminFetch(tablePath("profiles", `?select=id,full_name,email,role&id=eq.${encodeValue(payload.document.uploaded_by)}&limit=1`))
+        : [];
+      if (requestRowForSignature && senderProfiles?.[0]) {
+        await sendProtonOutbound({
+          requestRow: requestRowForSignature,
+          senderProfile: senderProfiles[0],
+          subject: requestRowForSignature.title || payload.document.title,
+          message: signedMessage
+        });
+      }
+    } catch (emailError) {
+      console.warn("[Clients] Agreement signed email failed", emailError);
     }
 
     return apiJson({ signed: true, completed: allSigned, signedMessageCreated });

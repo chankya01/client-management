@@ -423,11 +423,7 @@ export async function sendSignatureRequestEmail({ email, name, documentTitle, si
   }
 
   const greeting = name ? `Hi ${name},` : "Hi,";
-  const actionText = requiresSignature
-    ? "You have a proposal to review in Clients. Approve it to unlock signing."
-    : "A proposal has been shared with you in Clients";
-  const linkText = requiresSignature ? "Open your secure proposal link" : "Open your secure proposal link";
-  const text = `${greeting}\n\n${actionText}: ${documentTitle || "Document"}.\n\n${linkText}:\n${signingUrl}\n\nIf you were not expecting this, you can ignore this email.`;
+  const text = `${greeting}\n\nA proposal is ready for your review: ${documentTitle || "Document"}.\n\nOpen the proposal here:\n${signingUrl}\n\nYou can reply to this email to continue the same conversation.`;
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
