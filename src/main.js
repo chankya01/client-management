@@ -725,6 +725,17 @@ function clearMessageDraft(requestId) {
   delete state.messageDrafts[requestId];
 }
 
+function clearMessageComposer(form, requestId) {
+  clearMessageDraft(requestId);
+  // HTMLFormElement.reset() restores the textarea's defaultValue. Because the
+  // draft is rendered into that default value, reset() alone puts a sent
+  // message straight back into the composer. Clear the live control after
+  // resetting so the next render cannot capture the old text again.
+  form?.reset();
+  const textarea = form?.querySelector("textarea[data-message-draft]");
+  if (textarea) textarea.value = "";
+}
+
 function clientDraftValue(field, fallback = "") {
   return state.clientDraft[field] ?? fallback ?? "";
 }
@@ -5305,8 +5316,7 @@ function attachEvents() {
             ? await createMessage(state.activeRequest.id, state.profile.id, message)
             : null;
           if (file) await uploadRequestAttachment({ request: state.activeRequest, profile: state.profile, file });
-          clearMessageDraft(state.activeRequest.id);
-          messageForm.reset();
+          clearMessageComposer(messageForm, state.activeRequest.id);
           await refreshActiveMessages({ markRead: true });
           const deliveryWarning = messageResult?.deliveryWarning;
           showToast(deliveryWarning
@@ -5343,8 +5353,7 @@ function attachEvents() {
             ? await createMessage(state.activeRequest.id, state.profile.id, message)
             : null;
           if (file) await uploadRequestAttachment({ request: state.activeRequest, profile: state.profile, file });
-          clearMessageDraft(state.activeRequest.id);
-          messageForm.reset();
+          clearMessageComposer(messageForm, state.activeRequest.id);
           await refreshActiveMessages({ markRead: true });
           const deliveryWarning = messageResult?.deliveryWarning;
           showToast(deliveryWarning

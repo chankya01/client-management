@@ -96,6 +96,7 @@ export async function sendProtonOutbound({ requestRow, senderProfile, message, s
     // headers. A stable request root keeps proposal, status, and message
     // emails in one conversation even when the subject is unchanged.
     threadId,
+    messageId: threadId,
     inReplyTo: threadId,
     references: threadId
   });
