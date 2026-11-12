@@ -101,6 +101,8 @@ function requestReference(subject) {
 function subjectTitle(subject) {
   return String(subject || "")
     .replace(/^(?:(?:re|fw|fwd)\s*:\s*)+/i, "")
+    // Proton may expose the conversation count as a leading `[N]` token.
+    .replace(/^(?:\[\s*\d+\s*\]\s*)+/i, "")
     .trim();
 }
 
