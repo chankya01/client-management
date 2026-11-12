@@ -289,6 +289,32 @@ export async function POST(request) {
       tablePath("requests", `?select=id,request_number,title,client_id&id=eq.${encodeValue(requestId)}&limit=1`)
     );
     const requestRow = requestRows?.[0];
+
+    // Record the proposal activity before sending mail so the outbound
+    // message ID can be attached to this conversation entry. Later replies
+    // can then use the real Proton Message-ID for threading.
+    let messageResult = { created: false };
+    try {
+      const proposalLinks = (recipientRows || [])
+        .filter((recipient) => recipient.signing_token)
+        .map((recipient) => `${recipient.name || recipient.email}: ${origin}/sign/${recipient.signing_token}`)
+        .join("\n");
+      const messageRows = await supabaseAdminFetch(tablePath("request_messages"), {
+        method: "POST",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify({
+          request_id: requestId,
+          sender_id: profile.id,
+          message: `${requiresSignature ? "Proposal ready for review" : "Proposal shared"}: ${document.title || "Accessibility Services Proposal"}.\n${proposalLinks ? `Open proposal:\n${proposalLinks}` : "Recipients received their private link by email."}`,
+          is_internal: false
+        })
+      });
+      messageResult = { created: true, id: messageRows?.[0]?.id || null };
+    } catch (messageError) {
+      console.warn("[Clients] Signature document message entry failed", messageError);
+      messageResult = { created: false, reason: messageError?.message || "Message entry could not be created." };
+    }
+
     const emailResults = await Promise.all((recipientRows || []).map(async (recipient) => {
       const signingUrl = `${origin}/sign/${recipient.signing_token}`;
       const emailText = `Hi ${recipient.name || "there"},\n\nA proposal is ready for your review: ${document.title || "Accessibility Services Proposal"}.\n\nOpen the proposal here:\n${signingUrl}\n\nYou can reply to this email to continue the same conversation.`;
@@ -298,7 +324,8 @@ export async function POST(request) {
           senderProfile: profile,
           recipients: [{ email: recipient.email, name: recipient.name }],
           subject: requestRow.title || document.title,
-          message: emailText
+          message: emailText,
+          messageRowId: messageResult.id
         })
         : { sent: false, configured: false, reason: "Request could not be loaded for email delivery." };
       if (protonResult.configured) return { ...protonResult, transport: "proton" };
@@ -313,27 +340,6 @@ export async function POST(request) {
         transport: "resend-fallback"
       };
     }));
-
-    let messageResult = { created: false };
-    try {
-      const proposalLinks = (recipientRows || [])
-        .filter((recipient) => recipient.signing_token)
-        .map((recipient) => `${recipient.name || recipient.email}: ${origin}/sign/${recipient.signing_token}`)
-        .join("\n");
-      await supabaseAdminFetch(tablePath("request_messages"), {
-        method: "POST",
-        body: JSON.stringify({
-          request_id: requestId,
-          sender_id: profile.id,
-          message: `${requiresSignature ? "Proposal ready for review" : "Proposal shared"}: ${document.title || "Accessibility Services Proposal"}.\n${proposalLinks ? `Open proposal:\n${proposalLinks}` : "Recipients received their private link by email."}`,
-          is_internal: false
-        })
-      });
-      messageResult = { created: true };
-    } catch (messageError) {
-      console.warn("[Clients] Signature document message entry failed", messageError);
-      messageResult = { created: false, reason: messageError?.message || "Message entry could not be created." };
-    }
 
     return apiJson({
       ...document,

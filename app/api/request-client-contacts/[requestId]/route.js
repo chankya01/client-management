@@ -8,8 +8,6 @@ import {
   normalizeEmail,
   requireProfileRole,
   selectOne,
-  sendAccountSetupEmail,
-  sendRequestAccessEmail,
   supabaseAdminFetch,
   tablePath
 } from "../../_supabaseAdmin.js";
@@ -97,29 +95,12 @@ async function requestIsAccessibleToProfile(linkedRequest, profile) {
 }
 
 async function sendContactAccessEmail({ contact, linkedRequest, alreadyOnRequest, needsSetup }) {
-  const requestLabel = linkedRequest.request_number || linkedRequest.title || "this request";
-  const emailResult = needsSetup
-    ? await sendAccountSetupEmail({
-      email: contact.email,
-      name: contact.name,
-      reason: `You have been CC’d on ${requestLabel} in Clients. Please set up your account to view request updates and messages.`
-    })
-    : await sendRequestAccessEmail({
-      email: contact.email,
-      name: contact.name,
-      requestLabel
-    });
-
-  if (!emailResult.sent) {
-    const action = needsSetup ? "setup" : "request access";
-    const prefix = alreadyOnRequest ? "CC contact already exists, but" : "CC contact was added, but";
-    throw new Error(`${prefix} ${action} email was not sent to ${contact.email}: ${emailResult.reason || "Unknown email error."}`);
-  }
-
   return {
     email: contact.email,
-    type: needsSetup ? "account_setup" : "request_access",
-    ...emailResult
+    type: "email_only",
+    sent: false,
+    disabled: true,
+    reason: "Client portal login is disabled; communication is handled by email."
   };
 }
 
@@ -162,29 +143,19 @@ export async function PUT(request, { params }) {
     }
 
     const ccContactEmails = [];
-    const requestLabel = linkedRequest.request_number || linkedRequest.title || "this request";
     for (const contact of contacts) {
       const { needsSetup } = profileStatusByEmail.get(contact.email) || {};
       if (existingEmails.has(contact.email) && !needsSetup) continue;
-      const emailResult = needsSetup
-        ? await sendAccountSetupEmail({
-          email: contact.email,
-          name: contact.name,
-          reason: `You have been CC’d on ${requestLabel} in Clients. Please set up your account to view request updates and messages.`
-        })
-        : await sendRequestAccessEmail({
-          email: contact.email,
-          name: contact.name,
-          requestLabel
-        });
+      const emailResult = await sendContactAccessEmail({
+        contact,
+        linkedRequest,
+        alreadyOnRequest: existingEmails.has(contact.email),
+        needsSetup
+      });
       ccContactEmails.push({
         email: contact.email,
-        type: needsSetup ? "account_setup" : "request_access",
         ...emailResult
       });
-      if (!emailResult.sent) {
-        throw new Error(`CC contact was added, but ${needsSetup ? "setup" : "request access"} email was not sent to ${contact.email}: ${emailResult.reason || "Unknown email error."}`);
-      }
     }
 
     await supabaseAdminFetch(tablePath("request_client_contacts", `?request_id=eq.${encodeValue(requestId)}`), {

@@ -736,6 +736,26 @@ function clearMessageComposer(form, requestId) {
   if (textarea) textarea.value = "";
 }
 
+function addOptimisticMessage(requestId, message, isInternal = false) {
+  if (!requestId || !message || !state.profile) return;
+  const optimisticMessage = {
+    id: `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    request_id: requestId,
+    sender_id: state.profile.id,
+    message,
+    is_internal: isInternal,
+    created_at: new Date().toISOString(),
+    profiles: {
+      full_name: state.profile.full_name || state.profile.email || "You",
+      role: state.profile.role
+    }
+  };
+  const existing = state.messagesByRequest[requestId] || state.messages || [];
+  const nextMessages = [...existing, optimisticMessage];
+  state.messagesByRequest[requestId] = nextMessages;
+  if (state.activeRequest?.id === requestId) state.messages = nextMessages;
+}
+
 function clientDraftValue(field, fallback = "") {
   return state.clientDraft[field] ?? fallback ?? "";
 }
@@ -4785,7 +4805,7 @@ function attachEvents() {
           state.clientFormOpen = false;
           if (createdClient?.account_setup_email?.sent) {
             showToast(ccEmail ? "Client and CC contact created. Invite emails sent." : "Client created and invite email sent.");
-          } else if (createdClient?.account_setup_email?.reason) {
+          } else if (createdClient?.account_setup_email?.reason && !createdClient.account_setup_email.disabled) {
             showToast(`Client created, but invite email was not sent: ${createdClient.account_setup_email.reason}`);
           } else {
             showToast(ccEmail ? "Client and CC contact created." : "Client created.");
@@ -5316,8 +5336,16 @@ function attachEvents() {
             ? await createMessage(state.activeRequest.id, state.profile.id, message)
             : null;
           if (file) await uploadRequestAttachment({ request: state.activeRequest, profile: state.profile, file });
+          if (message) addOptimisticMessage(state.activeRequest.id, message, false);
           clearMessageComposer(messageForm, state.activeRequest.id);
-          await refreshActiveMessages({ markRead: true });
+          try {
+            await refreshActiveMessages({ markRead: true });
+          } catch (refreshError) {
+            // The write and email may have succeeded even when the follow-up
+            // read is temporarily unavailable. Keep the optimistic message
+            // visible and let polling reconcile it later.
+            console.warn(`[${APP_NAME}] Message refresh after send failed`, refreshError);
+          }
           const deliveryWarning = messageResult?.deliveryWarning;
           showToast(deliveryWarning
             ? `Message saved, but email delivery was not confirmed: ${deliveryWarning}`
@@ -5353,8 +5381,13 @@ function attachEvents() {
             ? await createMessage(state.activeRequest.id, state.profile.id, message)
             : null;
           if (file) await uploadRequestAttachment({ request: state.activeRequest, profile: state.profile, file });
+          if (message) addOptimisticMessage(state.activeRequest.id, message, true);
           clearMessageComposer(messageForm, state.activeRequest.id);
-          await refreshActiveMessages({ markRead: true });
+          try {
+            await refreshActiveMessages({ markRead: true });
+          } catch (refreshError) {
+            console.warn(`[${APP_NAME}] Internal message refresh after send failed`, refreshError);
+          }
           const deliveryWarning = messageResult?.deliveryWarning;
           showToast(deliveryWarning
             ? `Message saved, but email delivery was not confirmed: ${deliveryWarning}`

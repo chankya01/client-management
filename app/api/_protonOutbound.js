@@ -68,7 +68,32 @@ function requestThreadId(requestRow) {
   return `<clients-request-${value}@accessible.org>`;
 }
 
-export async function sendProtonOutbound({ requestRow, senderProfile, message, subject, recipients: explicitRecipients }) {
+async function previousThreadMessage(requestRow) {
+  try {
+    const rows = await supabaseAdminFetch(
+      tablePath(
+        "request_messages",
+        `?select=external_message_id,external_thread_id&request_id=eq.${encodeValue(requestRow.id)}&external_message_id=not.is.null&order=created_at.desc&limit=1`
+      )
+    );
+    return rows?.[0] || null;
+  } catch (error) {
+    // Older projects may not have the Proton metadata columns yet. The
+    // stable request root still gives those projects deterministic headers.
+    if (String(error.message || "").includes("external_message_id")) return null;
+    throw error;
+  }
+}
+
+function outboundMessageId(threadId, hasParent) {
+  if (!hasParent) return threadId;
+  const randomPart = typeof globalThis.crypto?.randomUUID === "function"
+    ? globalThis.crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `<clients-message-${randomPart}@accessible.org>`;
+}
+
+export async function sendProtonOutbound({ requestRow, senderProfile, message, subject, recipients: explicitRecipients, messageRowId }) {
   const endpoint = String(process.env.PROTON_MAIL_OUTBOUND_WEBHOOK_URL || "").trim();
   if (!endpoint) return { sent: false, configured: false, reason: "Proton outbound worker is not configured." };
 
@@ -82,7 +107,14 @@ export async function sendProtonOutbound({ requestRow, senderProfile, message, s
 
   const requestNumber = String(requestRow.request_number || requestRow.id);
   const cleanSubject = String(subject || requestRow.title || "Request").trim();
-  const threadId = requestThreadId(requestRow);
+  const fallbackThreadId = requestThreadId(requestRow);
+  const previous = await previousThreadMessage(requestRow);
+  const threadId = previous?.external_thread_id || fallbackThreadId;
+  const inReplyTo = previous?.external_message_id || "";
+  const references = [previous?.external_thread_id, previous?.external_message_id]
+    .filter(Boolean)
+    .join(" ") || "";
+  const messageId = outboundMessageId(threadId, Boolean(previous?.external_message_id));
   const payload = JSON.stringify({
     from: process.env.PROTON_MAIL_FROM || "",
     to: recipients.map((recipient) => recipient.email),
@@ -96,9 +128,9 @@ export async function sendProtonOutbound({ requestRow, senderProfile, message, s
     // headers. A stable request root keeps proposal, status, and message
     // emails in one conversation even when the subject is unchanged.
     threadId,
-    messageId: threadId,
-    inReplyTo: threadId,
-    references: threadId
+    messageId,
+    inReplyTo,
+    references
   });
 
   // A slow or briefly unavailable Lightsail worker should not leave the
@@ -143,5 +175,31 @@ export async function sendProtonOutbound({ requestRow, senderProfile, message, s
     console.warn("[Clients] Proton outbound worker failed", detail);
     return { sent: false, configured: true, reason: detail || `Proton worker returned ${response.status}.` };
   }
-  return { sent: true, configured: true, recipients: recipients.map((recipient) => recipient.email) };
+
+  if (messageRowId) {
+    try {
+      await supabaseAdminFetch(tablePath("request_messages", `?id=eq.${encodeValue(messageRowId)}`), {
+        method: "PATCH",
+        body: JSON.stringify({
+          external_message_id: messageId,
+          external_thread_id: threadId,
+          external_subject: cleanSubject,
+          external_sender_email: senderProfile.email,
+          source: "proton_outbound"
+        })
+      });
+    } catch (error) {
+      // Delivery succeeded; metadata persistence must not turn it into a
+      // failed send. The next message can fall back to the stable root.
+      console.warn("[Clients] Proton outbound metadata could not be saved", error);
+    }
+  }
+
+  return {
+    sent: true,
+    configured: true,
+    messageId,
+    threadId,
+    recipients: recipients.map((recipient) => recipient.email)
+  };
 }

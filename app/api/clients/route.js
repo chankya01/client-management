@@ -7,7 +7,6 @@ import {
   normalizeEmail,
   requireProfileRole,
   selectOne,
-  sendAccountSetupEmail,
   supabaseAdminFetch,
   tablePath
 } from "../_supabaseAdmin.js";
@@ -79,15 +78,13 @@ export async function POST(request) {
       });
     }
 
-    const accountSetupEmail = await sendAccountSetupEmail({
-      email,
-      name: contactName,
-      reason: `You have been added to Clients for ${name}. Please create your password to view requests and messages.`
-    });
-
     return apiJson({
       ...client,
-      account_setup_email: accountSetupEmail
+      account_setup_email: {
+        sent: false,
+        disabled: true,
+        reason: "Client portal login is disabled; communication is handled by email."
+      }
     });
   } catch (error) {
     return handleApiError(error);

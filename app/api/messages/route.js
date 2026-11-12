@@ -303,7 +303,8 @@ export async function POST(request) {
     const canAccess = await requestIsVisibleToProfile(requestRow, profile);
     if (!canAccess) return apiJson({ error: "This request is not linked to your account." }, 403);
 
-    await supabaseAdminFetch(tablePath("request_messages"), {
+    const messageRows = await supabaseAdminFetch(tablePath("request_messages"), {
+      headers: { Prefer: "return=representation" },
       method: "POST",
       body: JSON.stringify({
         request_id: requestId,
@@ -322,7 +323,8 @@ export async function POST(request) {
         requestRow,
         senderProfile: profile,
         message,
-        subject: body.subject
+        subject: body.subject,
+        messageRowId: messageRows?.[0]?.id
       })
       : { sent: false, configured: false, reason: profile.role === "client" ? "Proton delivery is only sent for team-authored messages." : "Email delivery disabled for this activity entry." };
 

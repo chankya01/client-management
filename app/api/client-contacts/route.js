@@ -7,7 +7,6 @@ import {
   normalizeEmail,
   requireProfileRole,
   selectOne,
-  sendAccountSetupEmail,
   supabaseAdminFetch,
   tablePath
 } from "../_supabaseAdmin.js";
@@ -97,21 +96,13 @@ export async function POST(request) {
       profile = rows?.[0] || null;
     }
 
-    const accountSetupEmail = needsSetup
-      ? await sendAccountSetupEmail({
-        email,
-        name: fullName,
-        reason: `You have been added as a contact for ${client.name} in Clients. Please set up your account to view request updates and messages.`
-      })
-      : { sent: false, reason: "Contact already has an active account." };
-
-    if (needsSetup && !accountSetupEmail.sent) {
-      throw new Error(`Contact was created, but setup email was not sent to ${email}: ${accountSetupEmail.reason || "Unknown email error."}`);
-    }
-
     return apiJson({
       ...profile,
-      account_setup_email: accountSetupEmail
+      account_setup_email: {
+        sent: false,
+        disabled: true,
+        reason: "Client portal login is disabled; communication is handled by email."
+      }
     });
   } catch (error) {
     return handleApiError(error);
