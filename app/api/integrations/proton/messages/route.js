@@ -162,6 +162,13 @@ async function resolveRequest(subject, sender, threadId) {
   const threadRequest = await requestForThread(threadId);
   if (threadRequest) return threadRequest;
 
+  // Inbound replies are primarily identified by the sender's email address.
+  // Mail clients may rewrite subjects with prefixes, counters, or forwarded
+  // text, so do not require an exact subject match when the sender belongs to
+  // exactly one request.
+  const senderCandidates = await requestsForSender(sender);
+  if (senderCandidates.length === 1) return senderCandidates[0];
+
   const { requestNumber, requestId } = requestReference(subject);
   if (requestId) {
     const rows = await supabaseAdminFetch(
@@ -189,9 +196,7 @@ async function resolveRequest(subject, sender, threadId) {
     }
   }
 
-  const candidates = await requestsForSender(sender);
-  if (candidates.length === 1) return candidates[0];
-  if (!candidates.length) {
+  if (!senderCandidates.length) {
     throw new Error("No request matched this Proton message. The sender must be linked to a request, or the email must be a reply in an existing conversation thread.");
   }
   throw new Error("More than one request matches this Proton sender. Reply in the existing email thread or use a request-specific reply address.");
