@@ -88,6 +88,7 @@ const state = {
   skipRequestDraftCapture: false,
   skipTeamDraftCapture: false,
   skipProfileDraftCapture: false,
+  skipMessageDraftCapture: false,
   ccContactDrafts: {},
   signatureDraft: {},
   pendingActions: new Set(),
@@ -405,7 +406,7 @@ function friendlyErrorMessage(error) {
     return "Permission issue: your account is not allowed to perform this action yet. Please ask an admin to check access policies.";
   }
   if (lower.includes("invalid login credentials")) return "Invalid email or password.";
-  if (lower.includes("failed to fetch") || lower.includes("network")) {
+  if (lower.includes("failed to fetch") || lower.includes("load failed") || lower.includes("network")) {
     return "Network error. Please check your connection and try again.";
   }
   return message;
@@ -727,6 +728,10 @@ function clearMessageDraft(requestId) {
 
 function clearMessageComposer(form, requestId) {
   clearMessageDraft(requestId);
+  // A background message poll can render while the send request is in flight.
+  // Prevent that render from capturing the just-sent text back into state.
+  state.messageDrafts[requestId] = "";
+  state.skipMessageDraftCapture = true;
   // HTMLFormElement.reset() restores the textarea's defaultValue. Because the
   // draft is rendered into that default value, reset() alone puts a sent
   // message straight back into the composer. Clear the live control after
@@ -916,15 +921,18 @@ function captureUnsavedFormDrafts() {
     };
   });
 
-  document.querySelectorAll("[data-message-draft]").forEach((textarea) => {
-    const requestId = textarea.dataset.messageDraft;
-    if (requestId) state.messageDrafts[requestId] = textarea.value;
-  });
+  if (!state.skipMessageDraftCapture) {
+    document.querySelectorAll("[data-message-draft]").forEach((textarea) => {
+      const requestId = textarea.dataset.messageDraft;
+      if (requestId) state.messageDrafts[requestId] = textarea.value;
+    });
+  }
 
   state.skipClientDraftCapture = false;
   state.skipRequestDraftCapture = false;
   state.skipTeamDraftCapture = false;
   state.skipProfileDraftCapture = false;
+  state.skipMessageDraftCapture = false;
 }
 
 function ccContactDraft(requestId) {
@@ -5567,6 +5575,7 @@ function resetSessionState() {
   state.skipRequestDraftCapture = false;
   state.skipTeamDraftCapture = false;
   state.skipProfileDraftCapture = false;
+  state.skipMessageDraftCapture = false;
   state.ccContactDrafts = {};
   state.signatureDraft = {};
   state.pendingActions = new Set();
