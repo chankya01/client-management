@@ -91,21 +91,6 @@ function cleanBody(payload) {
     .replace(/\n\s+/g, "\n"));
 }
 
-function requestReference(subject) {
-  const value = String(subject || "");
-  const requestNumber = value.match(/\bREQ-\d{1,20}\b/i)?.[0]?.toUpperCase() || null;
-  const requestId = value.match(/\b[0-9a-f]{8}-[0-9a-f-]{27,}\b/i)?.[0] || null;
-  return { requestNumber, requestId };
-}
-
-function subjectTitle(subject) {
-  return String(subject || "")
-    .replace(/^(?:(?:re|fw|fwd)\s*:\s*)+/i, "")
-    // Proton may expose the conversation count as a leading `[N]` token.
-    .replace(/^(?:\[\s*\d+\s*\]\s*)+/i, "")
-    .trim();
-}
-
 async function requestsForSender(sender) {
   const senderProfiles = await supabaseAdminFetch(
     tablePath("profiles", `?select=client_id&email=eq.${encodeValue(sender)}&role=eq.client&client_id=not.is.null`)
@@ -142,86 +127,16 @@ async function requestsForSender(sender) {
     .filter((request, index, rows) => rows.findIndex((candidate) => candidate.id === request.id) === index);
 }
 
-async function requestForThread(threadId) {
-  const value = String(threadId || "").trim();
-  if (!value) return null;
-
-  const messages = await supabaseAdminFetch(
-    tablePath("request_messages", `?select=request_id&external_thread_id=eq.${encodeValue(value)}&order=created_at.desc&limit=1`)
-  );
-  const requestId = messages?.[0]?.request_id;
-  if (!requestId) return null;
-
-  const requests = await supabaseAdminFetch(
-    tablePath("requests", `?select=id,request_number,title,client_id&id=eq.${encodeValue(requestId)}&limit=1`)
-  );
-  return requests?.[0] || null;
-}
-
-async function resolveRequest(subject, sender, threadId) {
-  const threadRequest = await requestForThread(threadId);
-  if (threadRequest) return threadRequest;
-
-  // Inbound replies are primarily identified by the sender's email address.
-  // Mail clients may rewrite subjects with prefixes, counters, or forwarded
-  // text, so do not require an exact subject match when the sender belongs to
-  // exactly one request.
+async function resolveRequest(sender) {
+  // The sender's linked client/request is the only routing key. Email
+  // subjects and provider thread IDs are presentation metadata and can be
+  // rewritten by Gmail, Proton, forwarding, or conversation counters.
   const senderCandidates = await requestsForSender(sender);
   if (senderCandidates.length === 1) return senderCandidates[0];
-
-  const { requestNumber, requestId } = requestReference(subject);
-  if (requestId) {
-    const rows = await supabaseAdminFetch(
-      tablePath("requests", `?select=id,request_number,title,client_id&id=eq.${encodeValue(requestId)}&limit=1`)
-    );
-    if (rows?.[0]) return rows[0];
-  }
-  if (requestNumber) {
-    const rows = await supabaseAdminFetch(
-      tablePath("requests", `?select=id,request_number,title,client_id&request_number=eq.${encodeValue(requestNumber)}&limit=1`)
-    );
-    if (rows?.[0]) return rows[0];
-  }
-
-  // Outbound mail uses the request title as its clean, human-readable
-  // subject. Match that subject before falling back to sender-only routing.
-  const title = subjectTitle(subject);
-  if (title) {
-    const rows = await supabaseAdminFetch(
-      tablePath("requests", `?select=id,request_number,title,client_id&title=eq.${encodeValue(title)}&order=created_at.desc`)
-    );
-    if (rows?.length === 1) return rows[0];
-    if (rows?.length > 1) {
-      throw new Error("More than one request uses this email subject. Use a unique subject for each request.");
-    }
-  }
-
   if (!senderCandidates.length) {
-    throw new Error("No request matched this Proton message. The sender must be linked to a request, or the email must be a reply in an existing conversation thread.");
+    throw new Error("No request matched this Proton message. The sender email must be linked to a client/request.");
   }
-  throw new Error("More than one request matches this Proton sender. Reply in the existing email thread or use a request-specific reply address.");
-}
-
-async function senderCanUseRequest(requestRow, sender) {
-  const clients = await supabaseAdminFetch(
-    tablePath("clients", `?select=primary_contact_email&id=eq.${encodeValue(requestRow.client_id)}&limit=1`)
-  );
-  if (normalizeEmail(clients?.[0]?.primary_contact_email) === sender) return true;
-
-  const senderProfiles = await supabaseAdminFetch(
-    tablePath("profiles", `?select=id&email=eq.${encodeValue(sender)}&role=eq.client&client_id=eq.${encodeValue(requestRow.client_id)}&limit=1`)
-  );
-  if (senderProfiles?.length) return true;
-
-  try {
-    const contacts = await supabaseAdminFetch(
-      tablePath("request_client_contacts", `?select=id&request_id=eq.${encodeValue(requestRow.id)}&email=eq.${encodeValue(sender)}&limit=1`)
-    );
-    return Boolean(contacts?.length);
-  } catch (error) {
-    if (!String(error.message || "").includes("request_client_contacts")) throw error;
-    return false;
-  }
+  throw new Error("More than one request matches this sender email. Each client email must have one request.");
 }
 
 async function addDiscoveredContacts(requestRow, addresses) {
@@ -290,11 +205,7 @@ export async function POST(request) {
     );
     if (existing?.[0]) return apiJson({ ok: true, duplicate: true, messageId: existing[0].id, requestId: existing[0].request_id });
 
-    const requestRow = await resolveRequest(subject, sender, externalThreadId);
-    const matchedByRequestReference = Boolean(requestReference(subject).requestNumber || requestReference(subject).requestId || externalThreadId);
-    if (!matchedByRequestReference && !(await senderCanUseRequest(requestRow, sender))) {
-      throw new Error("The Proton sender is not linked to the request named in the subject.");
-    }
+    const requestRow = await resolveRequest(sender);
     await addDiscoveredContacts(requestRow, [senderRecord, ...toAddresses, ...ccAddresses]);
     const profiles = await supabaseAdminFetch(
       tablePath("profiles", `?select=id,full_name,email,role&email=eq.${encodeValue(sender)}&limit=1`)
