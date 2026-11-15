@@ -1,6 +1,7 @@
 import {
   apiJson,
   encodeValue,
+  createAuthUser,
   handleApiError,
   inFilter,
   normalizeEmail,
@@ -102,80 +103,105 @@ function cleanBody(payload) {
     .replace(/\n\s+/g, "\n"));
 }
 
-function requestReference(subject) {
-  return String(subject || "").match(/\bREQ-\d+\b/i)?.[0]?.toUpperCase() || null;
-}
-
 function normalizedReceivedAt(value) {
   const timestamp = Date.parse(String(value || ""));
   return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : new Date().toISOString();
 }
 
-function predatesRequest(requestRow, receivedAt) {
-  const createdAt = Date.parse(String(requestRow?.created_at || ""));
-  const messageAt = Date.parse(String(receivedAt || ""));
-  if (!Number.isFinite(createdAt) || !Number.isFinite(messageAt)) return false;
-  return messageAt + 5 * 60 * 1000 < createdAt;
+function normalizeSubject(value) {
+  return String(value || "")
+    .replace(/\r\n?/g, " ")
+    .replace(/^(?:(?:re|fw|fwd)\s*:\s*)+/i, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLocaleLowerCase();
 }
 
-async function requestsForSender(sender) {
-  const senderProfiles = await supabaseAdminFetch(
-    tablePath("profiles", `?select=client_id&email=eq.${encodeValue(sender)}&role=eq.client&client_id=not.is.null`)
-  );
-  const profileClientIds = [...new Set((senderProfiles || []).map((profile) => profile.client_id).filter(Boolean))];
-  const clientsByEmail = await supabaseAdminFetch(
-    tablePath("clients", `?select=id&primary_contact_email=eq.${encodeValue(sender)}`)
-  );
-  const clientsByProfile = profileClientIds.length
-    ? await supabaseAdminFetch(tablePath("clients", `?select=id&id=${inFilter(profileClientIds)}`))
-    : [];
-  const clients = [...(clientsByEmail || []), ...(clientsByProfile || [])]
-    .filter((client, index, rows) => rows.findIndex((candidate) => candidate.id === client.id) === index);
-  const clientIds = (clients || []).map((client) => client.id).filter(Boolean);
-  const clientRequests = clientIds.length
-    ? await supabaseAdminFetch(tablePath("requests", `?select=id,request_number,title,client_id,created_at&client_id=${inFilter(clientIds)}&order=created_at.desc`))
-    : [];
-
-  // Do not route by arbitrary CC/contact addresses. The inbound mailbox
-  // receives unrelated messages with many CC recipients; only the client's
-  // primary address (or a linked client profile) identifies client mail.
-  return [...(clientRequests || [])]
-    .filter((request, index, rows) => rows.findIndex((candidate) => candidate.id === request.id) === index);
+function normalizeTag(value) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/\s*-\s*/g, "-");
 }
 
-async function senderCanUseRequest(requestRow, sender, senderCandidates = []) {
-  if ((senderCandidates || []).some((request) => request.id === requestRow.id)) return true;
-
-  // Team members may reply from their own mailbox. A request token in the
-  // subject is accepted only for an authenticated internal profile.
-  const internalProfiles = await supabaseAdminFetch(
-    tablePath("profiles", `?select=id&email=eq.${encodeValue(sender)}&role=in.(owner,admin,project_manager)&limit=1`)
-  );
-  return Boolean(internalProfiles?.length);
+function subjectTags(value) {
+  return [...String(value || "").matchAll(/\[([^\]]+)\]/g)]
+    .map((match) => normalizeTag(match[1]))
+    .filter(Boolean);
 }
 
-async function resolveRequest(sender, subject, receivedAt) {
-  // Client mail is routed by the linked sender. Team mail can use the stable
-  // request code in the subject; provider thread IDs are never used for
-  // routing because Gmail, Proton, and forwarding can rewrite them.
-  const senderCandidates = await requestsForSender(sender);
+function subjectsMatch(requestRow, subject) {
+  const company = String(requestRow?.client_name || "").replace(/[\[\]]/g, "").trim();
+  const requestNumber = String(requestRow?.request_number || "").trim();
+  if (!company || !/^REQ\s*-\s*\d+$/i.test(requestNumber)) return false;
 
-  const requestNumber = requestReference(subject);
-  if (requestNumber) {
-    const rows = await supabaseAdminFetch(
-      tablePath("requests", `?select=id,request_number,title,client_id,created_at&request_number=eq.${encodeValue(requestNumber)}&limit=1`)
-    );
-    if (rows?.[0] && !predatesRequest(rows[0], receivedAt) && await senderCanUseRequest(rows[0], sender, senderCandidates)) return rows[0];
+  // Only the stable bracket tags route mail. The free-form subject may be
+  // changed by a client, prefixed with Re/Fw, or decorated with a provider
+  // counter such as [3] or [4].
+  const tags = new Set(subjectTags(subject));
+  return tags.has(normalizeTag(company)) && tags.has(normalizeTag(requestNumber));
+}
+
+async function resolveRequestsByTags(subject) {
+  if (!String(subject || "").trim()) return [];
+
+  const requests = await supabaseAdminFetch(
+    tablePath("requests", "?select=id,request_number,title,client_id,created_at&order=created_at.desc")
+  );
+  const requestRows = requests || [];
+  const clientIds = [...new Set(requestRows.map((requestRow) => requestRow.client_id).filter(Boolean))];
+  if (!clientIds.length) return [];
+
+  const clients = await supabaseAdminFetch(
+    tablePath("clients", `?select=id,name,primary_contact_email&id=${inFilter(clientIds)}`)
+  );
+  const clientById = Object.fromEntries((clients || []).map((client) => [client.id, client]));
+
+  return requestRows.map((requestRow) => {
+    const client = clientById[requestRow.client_id] || {};
+    return {
+      ...requestRow,
+      client_name: client.name || "",
+    };
+  }).filter((requestRow) => subjectsMatch(requestRow, subject));
+}
+
+async function ensureInboundProfile(email, name, clientId) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return null;
+
+  const existing = await supabaseAdminFetch(
+    tablePath("profiles", `?select=id,full_name,email,role,client_id&email=eq.${encodeValue(normalizedEmail)}&limit=1`)
+  );
+  const profile = existing?.[0];
+  if (profile?.id) {
+    if (profile.role === "client" && profile.client_id && profile.client_id !== clientId) return null;
+    if (profile.role === "client" && !profile.client_id) {
+      const rows = await supabaseAdminFetch(
+        tablePath("profiles", `?id=eq.${encodeValue(profile.id)}&select=id,full_name,email,role,client_id`),
+        { method: "PATCH", body: JSON.stringify({ client_id: clientId }) }
+      );
+      return rows?.[0] || { ...profile, client_id: clientId };
+    }
+    return profile;
   }
 
-  if (senderCandidates.length === 1 && !predatesRequest(senderCandidates[0], receivedAt)) {
-    return senderCandidates[0];
-  }
-
-  if (!senderCandidates.length || (senderCandidates.length === 1 && predatesRequest(senderCandidates[0], receivedAt))) {
-    throw new Error("No request matched this Proton message. Link the sender to a client/request or include a valid request code such as [REQ-1].");
-  }
-  throw new Error("More than one request matches this sender email. Include the request code, for example [REQ-1].");
+  const authUser = await createAuthUser(normalizedEmail, name || normalizedEmail);
+  const rows = await supabaseAdminFetch(tablePath("profiles"), {
+    method: "POST",
+    body: JSON.stringify({
+      id: authUser.id,
+      full_name: name || normalizedEmail,
+      email: normalizedEmail,
+      role: "client",
+      client_id: clientId,
+      job_title: "Client contact",
+      is_active: true,
+      must_change_password: true
+    })
+  });
+  return rows?.[0] || null;
 }
 
 async function addDiscoveredContacts(requestRow, addresses) {
@@ -193,22 +219,32 @@ async function addDiscoveredContacts(requestRow, addresses) {
       name: String(address.name || "").trim() || null
     });
   });
-  if (!uniqueAddresses.size) return [];
+  if (!uniqueAddresses.size) return { contacts: [], profiles: {} };
 
   const emails = [...uniqueAddresses.keys()];
-  let profiles = [];
-  try {
-    profiles = await supabaseAdminFetch(
-      tablePath("profiles", `?select=id,email&email=${inFilter(emails)}`)
-    );
-  } catch {
-    profiles = [];
+  let profiles = await supabaseAdminFetch(
+    tablePath("profiles", `?select=id,email,full_name,role,client_id&email=${inFilter(emails)}`)
+  );
+  const profileByEmail = Object.fromEntries((profiles || []).map((profile) => [normalizeEmail(profile.email), profile]));
+
+  // A newly introduced CC participant becomes a request contact immediately.
+  // Existing team profiles are reused; unknown client-side addresses get the
+  // same lightweight client profile used by the manual CC-contact flow.
+  for (const contact of uniqueAddresses.values()) {
+    if (profileByEmail[contact.email]) continue;
+    try {
+      const profile = await ensureInboundProfile(contact.email, contact.name, requestRow.client_id);
+      if (profile?.id) profileByEmail[contact.email] = profile;
+    } catch (error) {
+      // A malformed/foreign CC address must not prevent the actual message
+      // from being imported. It simply will not be added as a portal contact.
+      console.warn("[Clients] Could not prepare inbound CC contact", contact.email, error.message);
+    }
   }
-  const profileByEmail = Object.fromEntries((profiles || []).map((profile) => [normalizeEmail(profile.email), profile.id]));
 
   const rows = [...uniqueAddresses.values()].map((contact) => ({
     request_id: requestRow.id,
-    profile_id: profileByEmail[contact.email] || null,
+    profile_id: profileByEmail[contact.email]?.id || null,
     name: contact.name,
     email: contact.email
   }));
@@ -220,11 +256,13 @@ async function addDiscoveredContacts(requestRow, addresses) {
       },
       body: JSON.stringify(rows)
     });
-    return inserted || [];
+    return { contacts: inserted || [], profiles: profileByEmail };
   } catch (error) {
     // A previously discovered CC/contact must never prevent the message
     // itself from being imported.
-    if (/duplicate key|already exists|unique constraint/i.test(String(error.message || ""))) return [];
+    if (/duplicate key|already exists|unique constraint/i.test(String(error.message || ""))) {
+      return { contacts: [], profiles: profileByEmail };
+    }
     throw error;
   }
 }
@@ -241,20 +279,42 @@ export async function POST(request) {
     const receivedAt = normalizedReceivedAt(payload.receivedAt || payload.received_at || payload.date);
     const externalMessageId = String(payload.messageId || payload.message_id || payload.id || headerValue(payload, ["message-id"]) || "").trim();
     const externalThreadId = String(payload.threadId || payload.thread_id || payload.inReplyTo || payload.in_reply_to || headerValue(payload, ["in-reply-to", "references"]) || "").trim();
-    if (!sender || !body) return apiJson({ error: "from and a non-empty message body are required." }, 400);
-    if (!externalMessageId) return apiJson({ error: "messageId is required so Proton messages can be de-duplicated." }, 400);
+    // The inbound worker marks a message as processed whenever this endpoint
+    // returns 2xx. Ignore malformed/unrelated mail with a successful response
+    // so one bad mailbox item cannot be retried forever and consume origin
+    // transfer.
+    if (!sender || !body || !externalMessageId) {
+      return apiJson({ ok: true, ignored: true, reason: "Missing sender, body, or messageId." });
+    }
 
     const existing = await supabaseAdminFetch(
       tablePath("request_messages", `?select=id,request_id&external_message_id=eq.${encodeValue(externalMessageId)}&limit=1`)
     );
     if (existing?.[0]) return apiJson({ ok: true, duplicate: true, messageId: existing[0].id, requestId: existing[0].request_id });
 
-    const requestRow = await resolveRequest(sender, subject, receivedAt);
-    const profiles = await supabaseAdminFetch(
-      tablePath("profiles", `?select=id,full_name,email,role&email=eq.${encodeValue(sender)}&limit=1`)
-    );
-    const senderProfile = profiles?.[0];
-    if (!senderProfile?.id) throw new Error(`No signed-in client profile is linked to ${sender}. Link the sender before importing Proton messages.`);
+    const requestMatches = await resolveRequestsByTags(subject);
+    if (requestMatches.length !== 1) {
+      return apiJson({
+        ok: true,
+        ignored: true,
+        reason: "The email subject does not contain exactly one existing client/company request tag pair."
+      });
+    }
+    const requestRow = requestMatches[0];
+    const discovered = await addDiscoveredContacts(requestRow, [
+      senderRecord,
+      ...addressRecords(payload.to),
+      ...addressRecords(payload.cc)
+    ]);
+    const senderProfile = discovered.profiles[sender]
+      || await ensureInboundProfile(sender, senderRecord.name, requestRow.client_id);
+    if (!senderProfile?.id) {
+      return apiJson({
+        ok: true,
+        ignored: true,
+        reason: "The sender could not be linked to this client request."
+      });
+    }
 
     const rows = await supabaseAdminFetch(tablePath("request_messages"), {
       method: "POST",
