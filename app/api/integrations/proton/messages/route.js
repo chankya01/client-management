@@ -106,6 +106,18 @@ function requestReference(subject) {
   return String(subject || "").match(/\bREQ-\d+\b/i)?.[0]?.toUpperCase() || null;
 }
 
+function normalizedReceivedAt(value) {
+  const timestamp = Date.parse(String(value || ""));
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : new Date().toISOString();
+}
+
+function predatesRequest(requestRow, receivedAt) {
+  const createdAt = Date.parse(String(requestRow?.created_at || ""));
+  const messageAt = Date.parse(String(receivedAt || ""));
+  if (!Number.isFinite(createdAt) || !Number.isFinite(messageAt)) return false;
+  return messageAt + 5 * 60 * 1000 < createdAt;
+}
+
 async function requestsForSender(sender) {
   const senderProfiles = await supabaseAdminFetch(
     tablePath("profiles", `?select=client_id&email=eq.${encodeValue(sender)}&role=eq.client&client_id=not.is.null`)
@@ -121,7 +133,7 @@ async function requestsForSender(sender) {
     .filter((client, index, rows) => rows.findIndex((candidate) => candidate.id === client.id) === index);
   const clientIds = (clients || []).map((client) => client.id).filter(Boolean);
   const clientRequests = clientIds.length
-    ? await supabaseAdminFetch(tablePath("requests", `?select=id,request_number,title,client_id&client_id=${inFilter(clientIds)}&order=created_at.desc`))
+    ? await supabaseAdminFetch(tablePath("requests", `?select=id,request_number,title,client_id,created_at&client_id=${inFilter(clientIds)}&order=created_at.desc`))
     : [];
 
   // Do not route by arbitrary CC/contact addresses. The inbound mailbox
@@ -142,22 +154,25 @@ async function senderCanUseRequest(requestRow, sender, senderCandidates = []) {
   return Boolean(internalProfiles?.length);
 }
 
-async function resolveRequest(sender, subject) {
-  // The sender's linked client/request is the only routing key. Email
-  // subjects and provider thread IDs are presentation metadata and can be
-  // rewritten by Gmail, Proton, forwarding, or conversation counters.
+async function resolveRequest(sender, subject, receivedAt) {
+  // Client mail is routed by the linked sender. Team mail can use the stable
+  // request code in the subject; provider thread IDs are never used for
+  // routing because Gmail, Proton, and forwarding can rewrite them.
   const senderCandidates = await requestsForSender(sender);
-  if (senderCandidates.length === 1) return senderCandidates[0];
 
   const requestNumber = requestReference(subject);
   if (requestNumber) {
     const rows = await supabaseAdminFetch(
-      tablePath("requests", `?select=id,request_number,title,client_id&request_number=eq.${encodeValue(requestNumber)}&limit=1`)
+      tablePath("requests", `?select=id,request_number,title,client_id,created_at&request_number=eq.${encodeValue(requestNumber)}&limit=1`)
     );
-    if (rows?.[0] && await senderCanUseRequest(rows[0], sender, senderCandidates)) return rows[0];
+    if (rows?.[0] && !predatesRequest(rows[0], receivedAt) && await senderCanUseRequest(rows[0], sender, senderCandidates)) return rows[0];
   }
 
-  if (!senderCandidates.length) {
+  if (senderCandidates.length === 1 && !predatesRequest(senderCandidates[0], receivedAt)) {
+    return senderCandidates[0];
+  }
+
+  if (!senderCandidates.length || (senderCandidates.length === 1 && predatesRequest(senderCandidates[0], receivedAt))) {
     throw new Error("No request matched this Proton message. Link the sender to a client/request or include a valid request code such as [REQ-1].");
   }
   throw new Error("More than one request matches this sender email. Include the request code, for example [REQ-1].");
@@ -223,6 +238,7 @@ export async function POST(request) {
     const sender = senderRecord.email;
     const subject = String(payload.subject || "").trim();
     const body = cleanBody(payload);
+    const receivedAt = normalizedReceivedAt(payload.receivedAt || payload.received_at || payload.date);
     const externalMessageId = String(payload.messageId || payload.message_id || payload.id || headerValue(payload, ["message-id"]) || "").trim();
     const externalThreadId = String(payload.threadId || payload.thread_id || payload.inReplyTo || payload.in_reply_to || headerValue(payload, ["in-reply-to", "references"]) || "").trim();
     if (!sender || !body) return apiJson({ error: "from and a non-empty message body are required." }, 400);
@@ -233,7 +249,7 @@ export async function POST(request) {
     );
     if (existing?.[0]) return apiJson({ ok: true, duplicate: true, messageId: existing[0].id, requestId: existing[0].request_id });
 
-    const requestRow = await resolveRequest(sender, subject);
+    const requestRow = await resolveRequest(sender, subject, receivedAt);
     const profiles = await supabaseAdminFetch(
       tablePath("profiles", `?select=id,full_name,email,role&email=eq.${encodeValue(sender)}&limit=1`)
     );
@@ -252,6 +268,7 @@ export async function POST(request) {
         external_thread_id: externalThreadId || null,
         external_subject: subject,
         external_sender_email: sender,
+        created_at: receivedAt,
         source: "proton"
       })
     });

@@ -1097,12 +1097,13 @@ export async function deleteClient(clientId) {
   if (error) throw error;
 }
 
-async function nextStoredRequestNumber() {
-  const { data, error } = await supabase.rpc("next_request_number");
-  if (error) {
-    throw new Error(`Request numbering is not configured. Run the request-number migration in Supabase first. ${error.message}`);
-  }
-  return String(data || "").trim();
+async function nextStoredRequestNumber(clientId) {
+  const { data, error } = await supabase
+    .from("requests")
+    .select("request_number")
+    .eq("client_id", clientId);
+  if (error) throw error;
+  return nextGlobalRequestNumber(data ?? []);
 }
 
 export async function createRequest({ clientId, title, description, serviceType, dueDate, ownerId, status }) {
@@ -1132,7 +1133,7 @@ export async function createRequest({ clientId, title, description, serviceType,
     return request;
   }
 
-  const requestNumber = await nextStoredRequestNumber();
+  const requestNumber = await nextStoredRequestNumber(clientId);
   const { data, error } = await supabase
     .from("requests")
     .insert({
@@ -1155,7 +1156,7 @@ export async function createRequest({ clientId, title, description, serviceType,
       const retry = await supabase
         .from("requests")
         .insert({
-          request_number: await nextStoredRequestNumber(),
+          request_number: await nextStoredRequestNumber(clientId),
           client_id: clientId,
           title,
           description,
