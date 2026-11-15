@@ -124,21 +124,10 @@ async function requestsForSender(sender) {
     ? await supabaseAdminFetch(tablePath("requests", `?select=id,request_number,title,client_id&client_id=${inFilter(clientIds)}&order=created_at.desc`))
     : [];
 
-  let contactRows = [];
-  try {
-    contactRows = await supabaseAdminFetch(
-      tablePath("request_client_contacts", `?select=request_id,email&email=eq.${encodeValue(sender)}`)
-    );
-  } catch (error) {
-    if (!String(error.message || "").includes("request_client_contacts")) throw error;
-  }
-
-  const contactRequestIds = [...new Set((contactRows || []).map((row) => row.request_id).filter(Boolean))];
-  const contactRequests = contactRequestIds.length
-    ? await supabaseAdminFetch(tablePath("requests", `?select=id,request_number,title,client_id&id=${inFilter(contactRequestIds)}&order=created_at.desc`))
-    : [];
-
-  return [...(clientRequests || []), ...(contactRequests || [])]
+  // Do not route by arbitrary CC/contact addresses. The inbound mailbox
+  // receives unrelated messages with many CC recipients; only the client's
+  // primary address (or a linked client profile) identifies client mail.
+  return [...(clientRequests || [])]
     .filter((request, index, rows) => rows.findIndex((candidate) => candidate.id === request.id) === index);
 }
 
@@ -236,9 +225,6 @@ export async function POST(request) {
     const body = cleanBody(payload);
     const externalMessageId = String(payload.messageId || payload.message_id || payload.id || headerValue(payload, ["message-id"]) || "").trim();
     const externalThreadId = String(payload.threadId || payload.thread_id || payload.inReplyTo || payload.in_reply_to || headerValue(payload, ["in-reply-to", "references"]) || "").trim();
-    const toAddresses = addressRecords(payload.to || payload.toAddresses || payload.recipient);
-    const ccAddresses = addressRecords(payload.cc || payload.ccAddresses);
-
     if (!sender || !body) return apiJson({ error: "from and a non-empty message body are required." }, 400);
     if (!externalMessageId) return apiJson({ error: "messageId is required so Proton messages can be de-duplicated." }, 400);
 
@@ -248,7 +234,6 @@ export async function POST(request) {
     if (existing?.[0]) return apiJson({ ok: true, duplicate: true, messageId: existing[0].id, requestId: existing[0].request_id });
 
     const requestRow = await resolveRequest(sender, subject);
-    await addDiscoveredContacts(requestRow, [senderRecord, ...toAddresses, ...ccAddresses]);
     const profiles = await supabaseAdminFetch(
       tablePath("profiles", `?select=id,full_name,email,role&email=eq.${encodeValue(sender)}&limit=1`)
     );
