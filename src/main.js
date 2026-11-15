@@ -1931,6 +1931,7 @@ function adminRequestRows(requests, { source = "requests" } = {}) {
       <div>
         <strong class="request-client-line">${escapeHtml(clientName(request.client_id))}</strong>
         <span class="request-contact-line">${escapeHtml(clientContactLine(request.client_id))}</span>
+        <span class="request-number-line">${escapeHtml(displayRequestNumber(request))}</span>
         <span class="request-title-line">
           <span>${escapeHtml(request.title || "Untitled work")}</span>
           <span class="request-status-text">${escapeHtml(lifecycleStageLabel(request))}</span>
@@ -1960,7 +1961,7 @@ function adminRequestDetailPage() {
         <div>
           <p class="section-label green">${escapeHtml(lifecycleStageLabel(request))}</p>
           <h1>${escapeHtml(request.title)}</h1>
-          <p class="subtitle">${escapeHtml(clientName(request.client_id))} · ${escapeHtml(request.service_type || "Service")}</p>
+          <p class="subtitle">${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(clientName(request.client_id))} · ${escapeHtml(request.service_type || "Service")}</p>
         </div>
         <div class="row-actions">
           ${canManageRequests() ? `<button class="secondary" data-edit-request="${request.id}">Edit Lead</button>` : ""}
@@ -1971,6 +1972,7 @@ function adminRequestDetailPage() {
         <section class="card">
           <p class="section-label">Request Details</p>
           ${accountRow("Client", clientName(request.client_id))}
+          ${accountRow("Request Code", displayRequestNumber(request))}
           ${accountRow("Stage", lifecycleStageLabel(request))}
           ${accountRow("Tagged Team", assignedPeopleText(request.id))}
           ${accountRow("Due Date", formatDate(request.due_date))}
@@ -2005,7 +2007,7 @@ function adminMessagesPage() {
       <div class="admin-heading">
         <div>
           <h1>Message Management</h1>
-          <p class="subtitle">${escapeHtml(request.title)} · ${escapeHtml(clientName(request.client_id))} · ${escapeHtml(lifecycleStageLabel(request))}</p>
+          <p class="subtitle">${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(request.title)} · ${escapeHtml(clientName(request.client_id))} · ${escapeHtml(lifecycleStageLabel(request))}</p>
         </div>
       </div>
       <div class="message-layout">
@@ -2015,6 +2017,7 @@ function adminMessagesPage() {
             <button type="button" class="${item.id === request.id ? "active" : ""}" data-admin-message-request="${item.id}">
               <span>
                 <strong>${escapeHtml(clientName(item.client_id))}</strong>
+                <span>${escapeHtml(displayRequestNumber(item))}</span>
                 <span>${escapeHtml(item.title)} · ${escapeHtml(lifecycleStageLabel(item))}</span>
                 <span>${escapeHtml(clientName(item.client_id))}</span>
               </span>
@@ -3159,7 +3162,7 @@ function historyPage() {
 function clientRequestCards(requests) {
   return requests.map((request) => `
     <section class="card history-card clickable-row" data-client-open-request="${request.id}">
-      <h2>${escapeHtml(request.title)} ${requestUnreadBadge(request.id)}</h2>
+      <h2>${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(request.title)} ${requestUnreadBadge(request.id)}</h2>
       <p>${escapeHtml(request.description || "Request linked to this client account.")}</p>
       <div class="deliverable-row request-card-meta">
           <span>${escapeHtml(request.title || request.service_type || "Accessibility Service")}</span>

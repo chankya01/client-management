@@ -1212,6 +1212,14 @@ h2 {
   margin-bottom: 4px;
 }
 
+.request-number-line {
+  color: var(--purple, #5b21b6);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .02em;
+  margin-bottom: 4px;
+}
+
 .request-title-line {
   align-items: center;
   display: flex;
