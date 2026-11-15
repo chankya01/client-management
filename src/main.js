@@ -28,7 +28,6 @@ import {
   onAuthStateChange,
   removeClientContact,
   removeRequestClientContact,
-  sendMagicLink,
   sendPasswordReset,
   setRequestClientContacts,
   setRequestAssignments,
@@ -1234,7 +1233,7 @@ function renderSignIn() {
       <form class="signin-card" id="signinForm">
         ${brandLogo("signin")}
         <h1>Sign In</h1>
-        <p class="helper">Use your email and password, or request a secure magic link.</p>
+        <p class="helper">Use your email and password to sign in.</p>
           <label class="field">
             <span>Email Address</span>
             <input name="email" type="email" autocomplete="email" required />
@@ -1249,7 +1248,6 @@ function renderSignIn() {
           </label>
         <button class="primary" type="submit">Sign In</button>
         <div class="signin-actions">
-          <button class="link-button" type="button" data-action="magic-link">Email me a magic link</button>
           <button class="link-button" type="button" data-action="forgot-password">Forgot Password?</button>
         </div>
       </form>
@@ -1280,22 +1278,6 @@ function attachSignInEvents() {
   document.querySelector("[data-action='forgot-password']")?.addEventListener("click", () => {
     state.authView = "forgot-password";
     render();
-  });
-
-  document.querySelector("[data-action='magic-link']")?.addEventListener("click", async () => {
-    const form = document.getElementById("signinForm");
-    const email = String(new FormData(form).get("email") || "").trim();
-    if (!email) {
-      showToast("Enter your email address first.");
-      form?.querySelector("[name='email']")?.focus();
-      return;
-    }
-    try {
-      await sendMagicLink(email);
-      showToast("Magic link sent. Check your email to sign in.");
-    } catch (error) {
-      showAppError(error, "Send magic link");
-    }
   });
 
   attachPasswordToggles();
@@ -2139,7 +2121,6 @@ function adminSettingsPage() {
               <button class="primary" type="submit">Update Profile</button>
             </form>
           </section>
-          <p class="helper settings-magic-link-note">Use the secure magic link from the sign-in screen to access this workspace without a stored password workflow.</p>
         </div>
       </section>
     `;

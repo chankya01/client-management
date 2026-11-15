@@ -2,7 +2,6 @@
 
 This is a Next.js app for the request/client management portal:
 
-- Supabase magic-link sign-in
 - Supabase email/password sign-in
 - Client-scoped request dashboard
 - Request messages
@@ -64,7 +63,7 @@ Then open:
 http://127.0.0.1:3000/
 ```
 
-Localhost runs in admin test mode when `localAdminMode` and `localSupabaseAdminProxy` are true in `src/config.js`. This lets you test the owner/admin UI without repeated magic-link login while the local server writes to Supabase.
+Localhost runs in admin test mode when `localAdminMode` and `localSupabaseAdminProxy` are true in `src/config.js`. This lets you test the owner/admin UI without signing in repeatedly while the local server writes to Supabase.
 
 For client testing, open two more terminals.
 
@@ -113,7 +112,6 @@ The production sign-in screen supports:
 
 - Email + password login
 - Forgot password email
-- Optional magic-link fallback
 - Change password from the Account page
 
 When the local/server backend creates a client or team member, it creates or updates the matching Supabase Auth user and `public.profiles` row. New users can sign in with:

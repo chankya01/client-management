@@ -378,22 +378,6 @@ export async function getSession() {
   return data.session;
 }
 
-export async function sendMagicLink(email) {
-  if (isLocalAdminMode() || useDemo()) {
-    localStorage.setItem("requestManagementDemoEmail", normalizeEmail(email));
-    return demoSession();
-  }
-
-  const redirectTo = publicAppOrigin();
-  const { error } = await supabase.auth.signInWithOtp({
-    email,
-    options: {
-      emailRedirectTo: redirectTo
-    }
-  });
-  if (error) throw error;
-}
-
 export async function signInWithPassword(email, password) {
   if (useLocalAdminProxy()) {
     const data = await localApi("/auth/password", {
