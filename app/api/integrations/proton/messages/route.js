@@ -66,10 +66,21 @@ function stripQuotedReply(value) {
   // “On ... wrote:” or “-----Original Message-----”. Keep only the new
   // content so an inbound reply is stored as one new portal message.
   const quoteStart = lines.findIndex((line, index) => {
-    if (!line.trim()) return false;
-    if (/^\s*On\s+.+\bwrote:\s*$/i.test(line)) return true;
-    if (/^\s*-{2,}\s*Original Message\s*-{2,}\s*$/i.test(line)) return true;
-    return index > 0 && /^\s*>/.test(line);
+    const normalized = line.replace(/\u00a0/g, " ").trim();
+    if (!normalized) return false;
+    if (/^\s*-{2,}\s*Original Message\s*-{2,}\s*$/i.test(normalized)) return true;
+    if (index > 0 && /^\s*>/.test(line)) return true;
+
+    // Gmail sometimes wraps the attribution header across two lines, e.g.
+    // `On ... <support@example.com` followed by `> wrote:`.
+    if (/^On\b/i.test(normalized)) {
+      const header = lines
+        .slice(index, index + 4)
+        .map((part) => part.replace(/\u00a0/g, " ").trim())
+        .join(" ");
+      if (/\bwrote:\s*$/i.test(header)) return true;
+    }
+    return false;
   });
   const ownLines = quoteStart >= 0 ? lines.slice(0, quoteStart) : lines;
   return ownLines.join("\n").replace(/[ \t]+\n/g, "\n").trim();
@@ -173,14 +184,21 @@ async function addDiscoveredContacts(requestRow, addresses) {
     name: contact.name,
     email: contact.email
   }));
-  const inserted = await supabaseAdminFetch(tablePath("request_client_contacts"), {
-    method: "POST",
-    headers: {
-      Prefer: "resolution=ignore-duplicates,return=representation"
-    },
-    body: JSON.stringify(rows)
-  });
-  return inserted || [];
+  try {
+    const inserted = await supabaseAdminFetch(tablePath("request_client_contacts"), {
+      method: "POST",
+      headers: {
+        Prefer: "resolution=ignore-duplicates,return=representation"
+      },
+      body: JSON.stringify(rows)
+    });
+    return inserted || [];
+  } catch (error) {
+    // A previously discovered CC/contact must never prevent the message
+    // itself from being imported.
+    if (/duplicate key|already exists|unique constraint/i.test(String(error.message || ""))) return [];
+    throw error;
+  }
 }
 
 export async function POST(request) {
