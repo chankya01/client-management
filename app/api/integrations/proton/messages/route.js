@@ -102,6 +102,10 @@ function cleanBody(payload) {
     .replace(/\n\s+/g, "\n"));
 }
 
+function requestReference(subject) {
+  return String(subject || "").match(/\bREQ-\d+\b/i)?.[0]?.toUpperCase() || null;
+}
+
 async function requestsForSender(sender) {
   const senderProfiles = await supabaseAdminFetch(
     tablePath("profiles", `?select=client_id&email=eq.${encodeValue(sender)}&role=eq.client&client_id=not.is.null`)
@@ -138,16 +142,36 @@ async function requestsForSender(sender) {
     .filter((request, index, rows) => rows.findIndex((candidate) => candidate.id === request.id) === index);
 }
 
-async function resolveRequest(sender) {
+async function senderCanUseRequest(requestRow, sender, senderCandidates = []) {
+  if ((senderCandidates || []).some((request) => request.id === requestRow.id)) return true;
+
+  // Team members may reply from their own mailbox. A request token in the
+  // subject is accepted only for an authenticated internal profile.
+  const internalProfiles = await supabaseAdminFetch(
+    tablePath("profiles", `?select=id&email=eq.${encodeValue(sender)}&role=in.(owner,admin,project_manager)&limit=1`)
+  );
+  return Boolean(internalProfiles?.length);
+}
+
+async function resolveRequest(sender, subject) {
   // The sender's linked client/request is the only routing key. Email
   // subjects and provider thread IDs are presentation metadata and can be
   // rewritten by Gmail, Proton, forwarding, or conversation counters.
   const senderCandidates = await requestsForSender(sender);
   if (senderCandidates.length === 1) return senderCandidates[0];
-  if (!senderCandidates.length) {
-    throw new Error("No request matched this Proton message. The sender email must be linked to a client/request.");
+
+  const requestNumber = requestReference(subject);
+  if (requestNumber) {
+    const rows = await supabaseAdminFetch(
+      tablePath("requests", `?select=id,request_number,title,client_id&request_number=eq.${encodeValue(requestNumber)}&limit=1`)
+    );
+    if (rows?.[0] && await senderCanUseRequest(rows[0], sender, senderCandidates)) return rows[0];
   }
-  throw new Error("More than one request matches this sender email. Each client email must have one request.");
+
+  if (!senderCandidates.length) {
+    throw new Error("No request matched this Proton message. Link the sender to a client/request or include a valid request code such as [REQ-1].");
+  }
+  throw new Error("More than one request matches this sender email. Include the request code, for example [REQ-1].");
 }
 
 async function addDiscoveredContacts(requestRow, addresses) {
@@ -223,7 +247,7 @@ export async function POST(request) {
     );
     if (existing?.[0]) return apiJson({ ok: true, duplicate: true, messageId: existing[0].id, requestId: existing[0].request_id });
 
-    const requestRow = await resolveRequest(sender);
+    const requestRow = await resolveRequest(sender, subject);
     await addDiscoveredContacts(requestRow, [senderRecord, ...toAddresses, ...ccAddresses]);
     const profiles = await supabaseAdminFetch(
       tablePath("profiles", `?select=id,full_name,email,role&email=eq.${encodeValue(sender)}&limit=1`)

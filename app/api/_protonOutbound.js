@@ -68,6 +68,31 @@ function requestThreadId(requestRow) {
   return `<clients-request-${value}@accessible.org>`;
 }
 
+async function requestCompanyName(requestRow) {
+  if (requestRow?.client_name) return String(requestRow.client_name).trim();
+  if (!requestRow?.client_id) return "";
+  try {
+    const rows = await supabaseAdminFetch(
+      tablePath("clients", `?select=name&id=eq.${encodeValue(requestRow.client_id)}&limit=1`)
+    );
+    return String(rows?.[0]?.name || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+async function requestSubject(requestRow, subject) {
+  const title = String(subject || requestRow?.title || "Request").trim();
+  const requestNumber = String(requestRow?.request_number || "").trim();
+  const company = (await requestCompanyName(requestRow)).replace(/[\[\]]/g, "").trim();
+  const prefix = [company && `[${company}]`, requestNumber && `[${requestNumber}]`]
+    .filter(Boolean)
+    .join(" ");
+  if (!prefix) return title;
+  if (requestNumber && title.includes(`[${requestNumber}]`)) return title;
+  return `${prefix} ${title}`.trim();
+}
+
 async function previousThreadMessage(requestRow) {
   try {
     const rows = await supabaseAdminFetch(
@@ -106,7 +131,7 @@ export async function sendProtonOutbound({ requestRow, senderProfile, message, s
   if (!recipients.length) return { sent: false, configured: true, reason: "No email recipients were found for this request." };
 
   const requestNumber = String(requestRow.request_number || requestRow.id);
-  const cleanSubject = String(subject || requestRow.title || "Request").trim();
+  const cleanSubject = await requestSubject(requestRow, subject);
   const fallbackThreadId = requestThreadId(requestRow);
   const previous = await previousThreadMessage(requestRow);
   const threadId = previous?.external_thread_id || fallbackThreadId;

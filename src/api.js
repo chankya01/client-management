@@ -1097,8 +1097,12 @@ export async function deleteClient(clientId) {
   if (error) throw error;
 }
 
-function uniqueStoredRequestNumber() {
-  return `REQ-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+async function nextStoredRequestNumber() {
+  const { data, error } = await supabase.rpc("next_request_number");
+  if (error) {
+    throw new Error(`Request numbering is not configured. Run the request-number migration in Supabase first. ${error.message}`);
+  }
+  return String(data || "").trim();
 }
 
 export async function createRequest({ clientId, title, description, serviceType, dueDate, ownerId, status }) {
@@ -1113,7 +1117,7 @@ export async function createRequest({ clientId, title, description, serviceType,
   if (useDemo()) {
     const request = {
       id: crypto.randomUUID(),
-      request_number: nextClientRequestNumber(demoRequests, clientId),
+      request_number: nextGlobalRequestNumber(demoRequests),
       client_id: clientId,
       title,
       description,
@@ -1128,7 +1132,7 @@ export async function createRequest({ clientId, title, description, serviceType,
     return request;
   }
 
-  const requestNumber = uniqueStoredRequestNumber();
+  const requestNumber = await nextStoredRequestNumber();
   const { data, error } = await supabase
     .from("requests")
     .insert({
@@ -1151,7 +1155,7 @@ export async function createRequest({ clientId, title, description, serviceType,
       const retry = await supabase
         .from("requests")
         .insert({
-          request_number: uniqueStoredRequestNumber(),
+          request_number: await nextStoredRequestNumber(),
           client_id: clientId,
           title,
           description,
@@ -1248,24 +1252,13 @@ export async function setRequestAssignments(requestId, profileIds = [], assigned
   throw profileOnly.error;
 }
 
-function nextClientRequestNumber(requests, clientId) {
+function nextGlobalRequestNumber(requests) {
   const maxNumber = (requests || [])
-    .filter((request) => request.client_id === clientId)
     .map((request) => String(request.request_number || "").match(/^REQ-(\d+)$/i)?.[1])
     .filter(Boolean)
     .map(Number)
     .reduce((max, number) => Math.max(max, number), 0);
   return `REQ-${maxNumber + 1}`;
-}
-
-async function nextSupabaseClientRequestNumber(clientId) {
-  const { data, error } = await supabase
-    .from("requests")
-    .select("request_number")
-    .eq("client_id", clientId);
-
-  if (error) throw error;
-  return nextClientRequestNumber(data ?? [], clientId);
 }
 
 export async function updateRequest(requestId, { clientId, title, description, serviceType, dueDate, status }) {
