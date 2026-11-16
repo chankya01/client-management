@@ -167,6 +167,26 @@ async function resolveRequestsByTags(subject) {
   }).filter((requestRow) => subjectsMatch(requestRow, subject));
 }
 
+async function requestInboundSenderEmails(requestRow) {
+  const [clients, contacts] = await Promise.all([
+    supabaseAdminFetch(
+      tablePath("clients", `?select=primary_contact_email&id=eq.${encodeValue(requestRow.client_id)}&limit=1`)
+    ),
+    supabaseAdminFetch(
+      tablePath("request_client_contacts", `?select=email&request_id=eq.${encodeValue(requestRow.id)}`)
+    )
+  ]);
+
+  const configuredMailbox = normalizeEmail(
+    process.env.PROTON_MAIL_ADDRESS || process.env.PROTON_MAIL_FROM || ""
+  );
+  return new Set([
+    normalizeEmail(clients?.[0]?.primary_contact_email),
+    configuredMailbox,
+    ...(contacts || []).map((contact) => normalizeEmail(contact.email))
+  ].filter(Boolean));
+}
+
 async function ensureInboundProfile(email, name, clientId) {
   const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail) return null;
@@ -301,6 +321,15 @@ export async function POST(request) {
       });
     }
     const requestRow = requestMatches[0];
+    const allowedSenderEmails = await requestInboundSenderEmails(requestRow);
+    if (!allowedSenderEmails.has(sender)) {
+      return apiJson({
+        ok: true,
+        ignored: true,
+        reason: "The sender is not the client, an approved request contact, or the configured mailbox."
+      });
+    }
+
     const discovered = await addDiscoveredContacts(requestRow, [
       senderRecord,
       ...addressRecords(payload.cc)

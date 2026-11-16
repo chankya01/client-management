@@ -61,17 +61,29 @@ export async function POST(request) {
       clearTimeout(timeout);
     }
 
+    const responseText = await response.text().catch(() => "");
+    let workerPayload = null;
+    try {
+      workerPayload = responseText ? JSON.parse(responseText) : null;
+    } catch {
+      workerPayload = null;
+    }
+
     if (!response.ok) {
-      const detail = await response.text().catch(() => "");
       return apiJson({
         ok: false,
         requested: false,
         configured: true,
-        reason: detail || `The Proton refresh worker returned ${response.status}.`
+        reason: responseText || `The Proton refresh worker returned ${response.status}.`
       }, 502);
     }
 
-    return apiJson({ ok: true, requested: true, configured: true });
+    return apiJson({
+      ok: true,
+      requested: true,
+      configured: true,
+      worker: workerPayload
+    });
   } catch (error) {
     if (error?.name === "AbortError") {
       return apiJson({

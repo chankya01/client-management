@@ -5674,11 +5674,18 @@ function attachEvents() {
             console.warn(`[${APP_NAME}] Proton sync trigger failed`, syncError);
           }
           if (syncResult?.requested) {
-            // Give the worker a short moment to finish its IMAP read and write
-            // before the portal reloads the conversation rows.
-            await new Promise((resolve) => window.setTimeout(resolve, 750));
+            // The worker may acknowledge a queued refresh before its IMAP pass
+            // finishes. Re-read briefly so a newly imported message appears
+            // without requiring a second manual click.
+            for (let attempt = 0; attempt < 5; attempt += 1) {
+              const beforeLatest = messageCreatedAt(state.messagesByRequest[requestId] || []);
+              await new Promise((resolve) => window.setTimeout(resolve, attempt === 0 ? 750 : 1000));
+              await refreshActiveMessages({ markRead: attempt === 0 });
+              const afterLatest = messageCreatedAt(state.messages);
+              if (afterLatest && afterLatest !== beforeLatest) break;
+            }
           }
-          await refreshActiveMessages({ markRead: true });
+          if (!syncResult?.requested) await refreshActiveMessages({ markRead: true });
           showToast(syncResult?.requested
             ? "Proton sync requested and messages refreshed."
             : "Messages refreshed, but immediate Proton sync is not configured yet.");
