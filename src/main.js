@@ -987,7 +987,9 @@ async function setActiveRequest(requestId, { page, markRead = false } = {}) {
   state.selectedRequestId = state.activeRequest?.id || null;
   rememberActiveRequest();
   if (state.activeRequest && pageNeedsMessages(targetPage)) {
-    state.messages = state.messagesByRequest[state.activeRequest.id] || await loadMessages(state.activeRequest.id);
+    const cachedMessages = state.messagesByRequest[state.activeRequest.id];
+    const hasFullMessages = cachedMessages?.every((message) => Object.prototype.hasOwnProperty.call(message, "message"));
+    state.messages = hasFullMessages ? cachedMessages : await loadMessages(state.activeRequest.id);
     state.messagesByRequest[state.activeRequest.id] = state.messages;
   } else {
     state.messages = state.activeRequest ? (state.messagesByRequest[state.activeRequest.id] || []) : [];
