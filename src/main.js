@@ -1093,7 +1093,7 @@ function playMessageNotificationSound() {
       oscillator.frequency.setValueAtTime(880, now);
       oscillator.frequency.setValueAtTime(660, now + 0.12);
       gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.exponentialRampToValueAtTime(0.12, now + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.22, now + 0.02);
       gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
       oscillator.connect(gain);
       gain.connect(context.destination);
@@ -5681,7 +5681,7 @@ function attachEvents() {
           await refreshActiveMessages({ markRead: true });
           showToast(syncResult?.requested
             ? "Proton sync requested and messages refreshed."
-            : "Messages refreshed. The Proton worker will import new mail on its next poll.");
+            : "Messages refreshed, but immediate Proton sync is not configured yet.");
           scrollConversationToEnd({ behavior: "auto" });
         } catch (error) {
           showAppError(error, "Refresh messages");
@@ -5697,6 +5697,9 @@ function attachEvents() {
       if (state.messageSoundEnabled) {
         const context = messageAudioContextInstance();
         if (context?.state === "suspended") await context.resume().catch(() => {});
+        // Play a short test chime so the user can confirm browser volume and
+        // the audio permission before waiting for an inbound message.
+        playMessageNotificationSound();
         showToast("New-message sound enabled.");
       } else {
         showToast("New-message sound muted.");
