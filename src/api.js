@@ -1429,12 +1429,19 @@ export async function deleteTeamMember(memberId) {
   if (error) throw error;
 }
 
-export async function loadMessages(requestId) {
-  if (useLocalAdminProxy()) return localApi(`/messages?requestId=${encodeURIComponent(requestId)}`);
-  if (useDemo()) return demoMessages.filter((message) => message.request_id === requestId);
+export async function loadMessages(requestId, { after = "", includeAttachments = true } = {}) {
+  const query = new URLSearchParams({ requestId });
+  if (after) query.set("after", after);
+  if (!includeAttachments) query.set("includeAttachments", "false");
+  if (useLocalAdminProxy()) return localApi(`/messages?${query.toString()}`);
+  if (useDemo()) {
+    return demoMessages
+      .filter((message) => message.request_id === requestId)
+      .filter((message) => !after || new Date(message.created_at || 0).getTime() >= new Date(after).getTime());
+  }
 
   try {
-    return await appApi(`/messages?requestId=${encodeURIComponent(requestId)}`);
+    return await appApi(`/messages?${query.toString()}`);
   } catch (error) {
     if (!isServerRouteMissing(error) && !String(error.message || "").includes("Server team API is not configured")) {
       throw error;
@@ -1445,12 +1452,15 @@ export async function loadMessages(requestId) {
     .from("request_messages")
     .select("id, request_id, sender_id, message, is_internal, created_at, profiles(full_name, role)")
     .eq("request_id", requestId)
+    .gte("created_at", after || "1970-01-01T00:00:00.000Z")
     .order("created_at", { ascending: true });
 
   if (error) throw error;
 
+  const enrichedMessages = await enrichMessageProfiles(data ?? []);
+  if (!includeAttachments) return enrichedMessages;
   const attachments = await loadRequestAttachments(requestId);
-  return mergeMessagesAndAttachments(await enrichMessageProfiles(data ?? []), attachments);
+  return mergeMessagesAndAttachments(enrichedMessages, attachments);
 }
 
 async function enrichMessageProfiles(messages) {

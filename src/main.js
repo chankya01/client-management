@@ -41,6 +41,7 @@ import {
   updateTeamMember,
   uploadRequestAttachment
 } from "./api.js";
+import { supabase } from "./supabase.js";
 
 const root = document.getElementById("root");
 const APP_NAME = "Clients";
@@ -119,7 +120,9 @@ const workRoles = ["developer", "reviewer", "assignee"];
 const internalRoles = [...managementRoles, ...workRoles];
 const workPortalPages = ["admin-dashboard", "admin-requests", "admin-request-detail", "admin-messages", "admin-documents", "admin-team", "admin-settings"];
 const LOAD_TIMEOUT_MS = 20000;
-const MESSAGE_POLL_MS = 8000;
+// Realtime delivers new rows immediately. This interval is only a safety net
+// for reconnects or environments where Supabase Realtime is unavailable.
+const MESSAGE_POLL_MS = 30000;
 const UNREAD_POLL_MS = 30000;
 const UNREAD_BATCH_SIZE = 4;
 const LAST_PAGE_KEY = "requestManagementLastPage";
@@ -137,6 +140,8 @@ const serviceCatalog = [
 let loadGeneration = 0;
 let messagePollInFlight = false;
 let unreadPollInFlight = false;
+let messageRealtimeChannel = null;
+let messageRealtimeRequestId = "";
 
 function withTimeout(promise, label, ms = LOAD_TIMEOUT_MS) {
   return Promise.race([
@@ -994,6 +999,7 @@ async function setActiveRequest(requestId, { page, markRead = false } = {}) {
     state.page = page;
     rememberPage();
   }
+  syncMessageRealtimeSubscription(targetPage);
 }
 
 async function goToPage(page, { requestId, clientId, replace = false, scroll = true } = {}) {
@@ -1005,6 +1011,7 @@ async function goToPage(page, { requestId, clientId, replace = false, scroll = t
   } else if (isConversationPage(page) && state.activeRequest) {
     await setActiveRequest(state.activeRequest.id, { markRead: true });
   }
+  syncMessageRealtimeSubscription(page);
   syncBrowserHistory({ replace });
   render();
   if (scroll) {
@@ -1035,6 +1042,53 @@ async function refreshActiveMessages({ markRead = false } = {}) {
   calculateUnreadCounts();
 }
 
+function messageCreatedAt(messages = []) {
+  return messages.reduce((latest, message) => {
+    const createdAt = message.created_at || "";
+    return !latest || new Date(createdAt).getTime() > new Date(latest).getTime() ? createdAt : latest;
+  }, "");
+}
+
+function mergePolledMessages(existingMessages = [], incomingMessages = []) {
+  const messagesById = new Map(existingMessages.map((message) => [message.id, message]));
+  incomingMessages.forEach((message) => {
+    if (message?.id) messagesById.set(message.id, { ...messagesById.get(message.id), ...message });
+  });
+  return [...messagesById.values()].sort((left, right) => (
+    new Date(left.created_at || 0).getTime() - new Date(right.created_at || 0).getTime()
+  ));
+}
+
+function clearMessageRealtimeSubscription() {
+  if (messageRealtimeChannel && supabase) supabase.removeChannel(messageRealtimeChannel);
+  messageRealtimeChannel = null;
+  messageRealtimeRequestId = "";
+}
+
+function syncMessageRealtimeSubscription(page = state.page) {
+  const requestId = isConversationPage(page) ? state.activeRequest?.id : "";
+  if (!supabase || !requestId) {
+    clearMessageRealtimeSubscription();
+    return;
+  }
+  if (requestId === messageRealtimeRequestId) return;
+
+  clearMessageRealtimeSubscription();
+  messageRealtimeRequestId = requestId;
+  messageRealtimeChannel = supabase
+    .channel(`request-messages:${requestId}`)
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "request_messages", filter: `request_id=eq.${requestId}` },
+      () => pollActiveMessages()
+    )
+    .subscribe((status) => {
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        console.warn(`[${APP_NAME}] Message realtime subscription unavailable; using fallback polling.`);
+      }
+    });
+}
+
 function messageListSignature(messages = []) {
   return messages.map((message) => `${message.id}:${message.created_at || ""}`).join("|");
 }
@@ -1052,13 +1106,21 @@ async function pollActiveMessages() {
   }
   messagePollInFlight = true;
   try {
-    const previousSignature = messageListSignature(state.messagesByRequest[state.activeRequest.id] || []);
-    const messages = await loadMessages(state.activeRequest.id);
+    const requestId = state.activeRequest.id;
+    const currentMessages = state.messagesByRequest[requestId] || [];
+    const incomingMessages = await loadMessages(requestId, {
+      after: messageCreatedAt(currentMessages),
+      includeAttachments: false
+    });
+    // The timestamp filter is intentionally inclusive so rows created in the
+    // same database millisecond are not skipped. This merge removes duplicates.
+    const messages = mergePolledMessages(currentMessages, incomingMessages);
+    const previousSignature = messageListSignature(currentMessages);
     const nextSignature = messageListSignature(messages);
     if (previousSignature !== nextSignature) {
       state.messages = messages;
-      state.messagesByRequest[state.activeRequest.id] = messages;
-      markRequestRead(state.activeRequest.id);
+      state.messagesByRequest[requestId] = messages;
+      markRequestRead(requestId);
       calculateUnreadCounts();
       render();
     }
@@ -5721,6 +5783,7 @@ window.addEventListener("popstate", async () => {
     state.page = page;
     rememberPage();
   }
+  syncMessageRealtimeSubscription(page);
   render();
 });
 
@@ -5728,9 +5791,16 @@ window.setInterval(pollActiveMessages, MESSAGE_POLL_MS);
 window.setInterval(() => refreshUnreadCounts(), UNREAD_POLL_MS);
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") {
+    syncMessageRealtimeSubscription();
     pollActiveMessages();
     refreshUnreadCounts();
+  } else {
+    clearMessageRealtimeSubscription();
   }
+});
+window.addEventListener("focus", () => {
+  syncMessageRealtimeSubscription();
+  pollActiveMessages();
 });
 
 boot();

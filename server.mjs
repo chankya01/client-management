@@ -1047,14 +1047,18 @@ async function handleApi(req, res, url) {
 
   if (path === "/messages" && method === "GET") {
     const requestId = url.searchParams.get("requestId");
+    const after = url.searchParams.get("after");
+    const includeAttachments = url.searchParams.get("includeAttachments") !== "false";
     const profile = await currentProfile(url);
     if (profile.role === "client") {
       const request = await selectOne("requests", `?select=id,client_id&id=eq.${encode(requestId)}&limit=1`);
       if (!request || request.client_id !== profile.client_id) return json(res, 403, { error: "This request is not linked to the client test profile." });
     }
+    const afterFilter = after ? `&created_at=gte.${encode(after)}` : "";
     const query = "?select=id,request_id,sender_id,message,is_internal,created_at,profiles(full_name,role)"
-      + `&request_id=eq.${encode(requestId)}&order=created_at.asc`;
+      + `&request_id=eq.${encode(requestId)}${afterFilter}&order=created_at.asc`;
     const messages = await supabaseFetch(rest("request_messages", query));
+    if (!includeAttachments) return json(res, 200, messages || []);
     const attachments = await loadRequestAttachments(requestId);
     return json(res, 200, mergeMessagesAndAttachments(messages, attachments));
   }
