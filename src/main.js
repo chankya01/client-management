@@ -1522,9 +1522,20 @@ function clientContactLine(clientId) {
 function organizationContacts(clientId) {
   const client = state.clients.find((item) => item.id === clientId);
   const primaryEmail = normalizeEmail(client?.primary_contact_email);
-  return state.clientContacts
-    .filter((contact) => contact.client_id === clientId)
-    .filter((contact) => normalizeEmail(contact.email) !== primaryEmail)
+  const contacts = [
+    ...state.clientContacts.filter((contact) => contact.client_id === clientId),
+    ...state.team
+  ];
+  const uniqueContacts = new Map();
+  contacts.forEach((contact) => {
+    const email = normalizeEmail(contact.email);
+    if (!email || email === primaryEmail || uniqueContacts.has(email)) return;
+    uniqueContacts.set(email, {
+      ...contact,
+      full_name: contact.full_name || contact.name || email
+    });
+  });
+  return [...uniqueContacts.values()]
     .sort((left, right) => String(left.full_name || "").localeCompare(String(right.full_name || "")));
 }
 
@@ -1551,7 +1562,7 @@ function clientContactsForRequest(requestId) {
 }
 
 function requestCcPanel(request = state.activeRequest) {
-  if (isInternal() || !request) return "";
+  if (!request) return "";
   const contacts = clientContactsForRequest(request.id);
   const draft = ccContactDraft(request.id);
   return `
@@ -1610,7 +1621,7 @@ function ccContactCheckboxes(clientId, selectedContacts = []) {
         `).join("") || `<p class="helper">No additional contacts for ${escapeHtml(client?.name || "this organization")} yet. Add contacts from Client Management first.</p>`}
         <button class="secondary small-action" type="button" data-action="close-cc-contacts">Done</button>
       </div>
-      <small class="helper">${clientId ? "Select one or more client-side contacts for this request." : "Select a client first to choose CC contacts."}</small>
+      <small class="helper">${clientId ? "Select one or more client or team contacts for this request." : "Create the lead first, then edit it to add CC contacts."}</small>
     </div>
   `;
 }
@@ -1962,6 +1973,7 @@ function adminRequestDetailPage() {
           <p class="card-note">${escapeHtml(request.description || "No description added.")}</p>
         </section>
         ${statusTracker(request)}
+        ${requestCcPanel(request)}
         <section class="card">
           <p class="section-label">Conversation Summary</p>
           <p class="helper">Showing the latest 4 messages. Open the full conversation to see everything.</p>
@@ -1990,6 +2002,9 @@ function adminMessagesPage() {
         <div>
           <h1>Message Management</h1>
           <p class="subtitle">${escapeHtml(displayRequestNumber(request))} · ${escapeHtml(request.title)} · ${escapeHtml(clientName(request.client_id))} · ${escapeHtml(lifecycleStageLabel(request))}</p>
+        </div>
+        <div class="row-actions">
+          <button class="secondary small-action" type="button" data-action="refresh-messages">Refresh Messages</button>
         </div>
       </div>
       <div class="message-layout">
@@ -2165,6 +2180,9 @@ function messagesPage() {
         <h1>Messages</h1>
         <p class="subtitle message-subtitle">${escapeHtml(requestFromName)} · ${escapeHtml(requestTitle())}</p>
         <p class="assigned-line">Team: ${escapeHtml(assignedPeopleText(state.activeRequest.id))}</p>
+        <div class="row-actions">
+          <button class="secondary small-action" type="button" data-action="refresh-messages">Refresh Messages</button>
+        </div>
       </div>
       <div class="message-layout client-message-layout">
         ${clientRequestSwitcher()}
@@ -2202,7 +2220,7 @@ function messageCard(message) {
     ? (message.profiles?.full_name || clientPrimaryContactName(messageRequest?.client_id))
     : (message.profiles?.full_name || "Team Member");
   const attachment = message.attachment;
-  const messageText = String(message.message || "");
+  const messageText = displayMessageText(message.message);
   const isLongMessage = messageText.length > 420 || messageText.split(/\r?\n/).length > 8;
   return `
     <article class="message-card ${isClient ? "client" : "team"}">
@@ -2219,8 +2237,30 @@ function messageCard(message) {
   `;
 }
 
+function displayMessageText(value) {
+  const lines = String(value || "")
+    .replace(/\r\n?/g, "\n")
+    .split("\n");
+  const quoteStart = lines.findIndex((line, index) => {
+    const normalized = line.replace(/\u00a0/g, " ").trim();
+    if (!normalized || index === 0) return false;
+    if (/^-{2,}\s*Original Message\s*-{2,}$/i.test(normalized)) return true;
+    if (/^>/.test(normalized)) return true;
+    if (/^On\b/i.test(normalized)) {
+      const attribution = lines.slice(index, index + 4).join(" ").replace(/\u00a0/g, " ");
+      if (/\bwrote:\s*$/i.test(attribution.trim())) return true;
+    }
+    if (/^(From|Sent|Date|Subject):\s+/i.test(normalized) && index > 0) return true;
+    return false;
+  });
+  return (quoteStart >= 0 ? lines.slice(0, quoteStart) : lines)
+    .join("\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .trim();
+}
+
 function messageSummaryText(message) {
-  const text = String(message?.message || "")
+  const text = displayMessageText(message?.message)
     .replace(/https?:\/\/\S+/g, "[link]")
     .replace(/\s+/g, " ")
     .trim();
@@ -5426,6 +5466,22 @@ function attachEvents() {
       if (!text) return;
       const isCollapsed = text.classList.toggle("is-collapsed");
       button.textContent = isCollapsed ? "Show More" : "Show Less";
+    });
+  });
+
+  document.querySelectorAll("[data-action='refresh-messages']").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const requestId = state.activeRequest?.id;
+      if (!requestId) return;
+      await withActionLock("refresh-messages", button, async () => {
+        try {
+          await refreshActiveMessages({ markRead: true });
+          showToast("Messages refreshed.");
+          scrollConversationToEnd({ behavior: "auto" });
+        } catch (error) {
+          showAppError(error, "Refresh messages");
+        }
+      });
     });
   });
 

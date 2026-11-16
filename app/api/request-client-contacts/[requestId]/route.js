@@ -4,6 +4,7 @@ import {
   createAuthUser,
   encodeValue,
   handleApiError,
+  internalRoles,
   managementRoles,
   normalizeEmail,
   requireProfileRole,
@@ -46,10 +47,17 @@ async function ensureClientProfile(contact, clientId) {
     return { profile: rows?.[0] || null, needsSetup: true };
   }
 
-  if (profile.role !== "client") {
-    const error = new Error(`${contact.email} is an internal team member, so they cannot be added as a client CC contact.`);
+  if (profile.role !== "client" && !internalRoles.has(profile.role)) {
+    const error = new Error(`${contact.email} does not have a valid client or team profile.`);
     error.status = 400;
     throw error;
+  }
+
+  // Team members can be copied on a request without being attached to the
+  // client organization. They already have a managed profile and do not need
+  // a client setup flow.
+  if (internalRoles.has(profile.role)) {
+    return { profile, needsSetup: false };
   }
 
   if (profile.client_id && profile.client_id !== clientId) {

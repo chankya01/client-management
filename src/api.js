@@ -104,6 +104,7 @@ async function localApi(path, options = {}) {
   }
   const response = await fetch(`${baseUrl}${pathWithView}`, {
     ...options,
+    cache: "no-store",
     headers: {
       "Content-Type": "application/json",
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
@@ -135,6 +136,7 @@ async function appApi(path, options = {}) {
 
   const response = await fetch(`/api${path}`, {
     ...options,
+    cache: "no-store",
     headers: {
       "Content-Type": "application/json",
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
