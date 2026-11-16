@@ -154,15 +154,12 @@ async function notificationRecipients(requestRow, senderProfile, excludedEmails 
     email: normalizeEmail(email),
     name: "Admin"
   }));
-  const [admins, assignments, client, clientProfiles, requestContacts] = await Promise.all([
+  const [admins, assignments, clientProfiles, requestContacts] = await Promise.all([
     supabaseAdminFetch(
       tablePath("profiles", "?select=id,full_name,email,role&role=in.(owner,project_manager)")
     ),
     supabaseAdminFetch(
       tablePath("request_assignments", `?select=profile_id,user_id&request_id=eq.${encodeValue(requestRow.id)}`)
-    ),
-    supabaseAdminFetch(
-      tablePath("clients", `?select=primary_contact_email&id=eq.${encodeValue(requestRow.client_id)}&limit=1`)
     ),
     supabaseAdminFetch(
       tablePath("profiles", `?select=id,full_name,email,role&client_id=eq.${encodeValue(requestRow.client_id)}&role=eq.client`)
@@ -185,9 +182,10 @@ async function notificationRecipients(requestRow, senderProfile, excludedEmails 
     ...configuredAdmins,
     ...(admins || []),
     ...(assignedProfiles || []),
-    ...(clientProfiles || []).filter((profile) => (
-      normalizeEmail(profile.email) === normalizeEmail(client?.[0]?.primary_contact_email)
-    )),
+    // Include every client contact saved on the organization. The primary
+    // contact is already represented by the client row, and uniqueRecipients
+    // removes that duplicate while preserving all additional CC contacts.
+    ...(clientProfiles || []),
     ...(requestContacts || [])
   ], senderProfile.email, excludedEmails);
 }
