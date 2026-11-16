@@ -262,6 +262,7 @@ export async function GET(request) {
     const requestId = url.searchParams.get("requestId");
     const after = url.searchParams.get("after");
     const includeAttachments = url.searchParams.get("includeAttachments") !== "false";
+    const summary = url.searchParams.get("summary") === "true";
     if (!requestId) return apiJson({ error: "Request id is required." }, 400);
 
     const profile = await currentProfile(request);
@@ -276,10 +277,14 @@ export async function GET(request) {
     }
 
     const afterFilter = after ? `&created_at=gte.${encodeValue(after)}` : "";
+    const select = summary
+      ? "id,sender_id,created_at,profiles(role)"
+      : "id,request_id,sender_id,message,is_internal,created_at";
     const messages = await supabaseAdminFetch(
-      tablePath("request_messages", `?select=id,request_id,sender_id,message,is_internal,created_at&request_id=eq.${encodeValue(requestId)}${afterFilter}&order=created_at.asc`)
+      tablePath("request_messages", `?select=${select}&request_id=eq.${encodeValue(requestId)}${afterFilter}&order=created_at.asc`)
     );
     const enrichedMessages = await attachProfiles(messages || []);
+    if (summary) return apiJson(enrichedMessages);
     if (!includeAttachments) return apiJson(enrichedMessages);
     const attachments = await loadRequestAttachments(requestId);
 

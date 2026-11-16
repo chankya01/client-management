@@ -18,6 +18,7 @@ import {
   loadClosedRequests,
   loadDeliverables,
   loadMessages,
+  loadMessageSummary,
   loadProfile,
   loadRequestAssignments,
   loadRequestClientContacts,
@@ -1145,7 +1146,7 @@ async function refreshUnreadCounts({ onlyMissing = false, generation = loadGener
       const batch = requestsToLoad.slice(index, index + UNREAD_BATCH_SIZE);
       const messageEntries = await Promise.all(batch.map(async (request) => [
         request.id,
-        await loadMessages(request.id)
+        await loadMessageSummary(request.id)
       ]));
       if (generation !== loadGeneration) return;
       messageEntries.forEach(([requestId, messages]) => {

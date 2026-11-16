@@ -1463,6 +1463,32 @@ export async function loadMessages(requestId, { after = "", includeAttachments =
   return mergeMessagesAndAttachments(enrichedMessages, attachments);
 }
 
+export async function loadMessageSummary(requestId) {
+  const query = new URLSearchParams({ requestId, summary: "true" });
+  if (useLocalAdminProxy()) return localApi(`/messages?${query.toString()}`);
+  if (useDemo()) {
+    return demoMessages
+      .filter((message) => message.request_id === requestId)
+      .map(({ id, sender_id, created_at, profiles }) => ({ id, sender_id, created_at, profiles }));
+  }
+
+  try {
+    return await appApi(`/messages?${query.toString()}`);
+  } catch (error) {
+    if (!isServerRouteMissing(error) && !String(error.message || "").includes("Server team API is not configured")) {
+      throw error;
+    }
+  }
+
+  const { data, error } = await supabase
+    .from("request_messages")
+    .select("id, sender_id, created_at, profiles(role)")
+    .eq("request_id", requestId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
 async function enrichMessageProfiles(messages) {
   const missingProfileSenderIds = [...new Set(messages
     .filter((message) => message.sender_id && !message.profiles?.full_name)
