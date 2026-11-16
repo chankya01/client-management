@@ -123,7 +123,7 @@ const workPortalPages = ["admin-dashboard", "admin-requests", "admin-request-det
 const LOAD_TIMEOUT_MS = 20000;
 // Realtime delivers new rows immediately. This interval is only a safety net
 // for reconnects or environments where Supabase Realtime is unavailable.
-const MESSAGE_POLL_MS = 30000;
+const MESSAGE_POLL_MS = 60000;
 const UNREAD_POLL_MS = 30000;
 const UNREAD_BATCH_SIZE = 4;
 const LAST_PAGE_KEY = "requestManagementLastPage";
