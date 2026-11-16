@@ -1463,6 +1463,21 @@ export async function loadMessages(requestId, { after = "", includeAttachments =
   return mergeMessagesAndAttachments(enrichedMessages, attachments);
 }
 
+export async function requestProtonInboundSync(requestId = "") {
+  if (useDemo()) return { ok: true, requested: false, configured: false };
+  const payload = requestId ? { requestId } : {};
+  if (useLocalAdminProxy()) {
+    return localApi("/integrations/proton/refresh", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  }
+  return appApi("/integrations/proton/refresh", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
 export async function loadMessageSummary(requestId) {
   const query = new URLSearchParams({ requestId, summary: "true" });
   if (useLocalAdminProxy()) return localApi(`/messages?${query.toString()}`);

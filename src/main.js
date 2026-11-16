@@ -19,6 +19,7 @@ import {
   loadDeliverables,
   loadMessages,
   loadMessageSummary,
+  requestProtonInboundSync,
   loadProfile,
   loadRequestAssignments,
   loadRequestClientContacts,
@@ -82,6 +83,8 @@ const state = {
   publicProposalPage: "services",
   messageDrafts: {},
   messagePreviewOpen: {},
+  messageSoundEnabled: typeof window !== "undefined"
+    && window.localStorage.getItem("requestManagementMessageSound") === "true",
   clientDraft: {},
   requestDraft: {},
   teamDraft: {},
@@ -144,6 +147,7 @@ let messagePollInFlight = false;
 let unreadPollInFlight = false;
 let messageRealtimeChannel = null;
 let messageRealtimeRequestId = "";
+let messageAudioContext = null;
 
 function withTimeout(promise, label, ms = LOAD_TIMEOUT_MS) {
   return Promise.race([
@@ -1068,10 +1072,60 @@ function scrollConversationToEnd({ behavior = "smooth" } = {}) {
   });
 }
 
+function messageAudioContextInstance() {
+  if (messageAudioContext) return messageAudioContext;
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return null;
+  messageAudioContext = new AudioContextClass();
+  return messageAudioContext;
+}
+
+function playMessageNotificationSound() {
+  if (!state.messageSoundEnabled || typeof window === "undefined") return;
+  try {
+    const context = messageAudioContextInstance();
+    if (!context) return;
+    const start = () => {
+      const now = context.currentTime;
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(880, now);
+      oscillator.frequency.setValueAtTime(660, now + 0.12);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.12, now + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start(now);
+      oscillator.stop(now + 0.3);
+    };
+    if (context.state === "suspended") {
+      context.resume().then(start).catch(() => {});
+    } else {
+      start();
+    }
+  } catch {
+    // Notification audio is an enhancement; a browser audio policy must not
+    // interfere with message loading or rendering.
+  }
+}
+
+function notifyForNewMessages(previousMessages = [], nextMessages = []) {
+  const previousIds = new Set(previousMessages.map((message) => message.id).filter(Boolean));
+  const newInboundMessages = nextMessages.filter((message) => (
+    message?.id && !previousIds.has(message.id) && messageNeedsRead(message)
+  ));
+  if (!newInboundMessages.length) return;
+  playMessageNotificationSound();
+}
+
 async function refreshActiveMessages({ markRead = false } = {}) {
   if (!state.activeRequest) return;
+  const previousMessages = state.messagesByRequest[state.activeRequest.id] || [];
   state.messages = await loadMessages(state.activeRequest.id);
   state.messagesByRequest[state.activeRequest.id] = state.messages;
+  notifyForNewMessages(previousMessages, state.messages);
   if (markRead) markRequestRead(state.activeRequest.id);
   calculateUnreadCounts();
 }
@@ -1152,6 +1206,7 @@ async function pollActiveMessages() {
     const previousSignature = messageListSignature(currentMessages);
     const nextSignature = messageListSignature(messages);
     if (previousSignature !== nextSignature) {
+      notifyForNewMessages(currentMessages, messages);
       state.messages = messages;
       state.messagesByRequest[requestId] = messages;
       markRequestRead(requestId);
@@ -2117,6 +2172,7 @@ function adminMessagesPage() {
         </div>
         <div class="row-actions">
           <button class="secondary small-action" type="button" data-action="refresh-messages">Refresh Messages</button>
+          <button class="secondary small-action" type="button" data-action="toggle-message-sound">${state.messageSoundEnabled ? "Mute Sound" : "Enable Sound"}</button>
         </div>
       </div>
       <div class="message-layout">
@@ -2298,6 +2354,7 @@ function messagesPage() {
         <p class="assigned-line">Team: ${escapeHtml(assignedPeopleText(state.activeRequest.id))}</p>
         <div class="row-actions">
           <button class="secondary small-action" type="button" data-action="refresh-messages">Refresh Messages</button>
+          <button class="secondary small-action" type="button" data-action="toggle-message-sound">${state.messageSoundEnabled ? "Mute Sound" : "Enable Sound"}</button>
         </div>
       </div>
       <div class="message-layout client-message-layout">
@@ -5610,13 +5667,41 @@ function attachEvents() {
       if (!requestId) return;
       await withActionLock("refresh-messages", button, async () => {
         try {
+          let syncResult = null;
+          try {
+            syncResult = await requestProtonInboundSync(requestId);
+          } catch (syncError) {
+            console.warn(`[${APP_NAME}] Proton sync trigger failed`, syncError);
+          }
+          if (syncResult?.requested) {
+            // Give the worker a short moment to finish its IMAP read and write
+            // before the portal reloads the conversation rows.
+            await new Promise((resolve) => window.setTimeout(resolve, 750));
+          }
           await refreshActiveMessages({ markRead: true });
-          showToast("Messages refreshed.");
+          showToast(syncResult?.requested
+            ? "Proton sync requested and messages refreshed."
+            : "Messages refreshed. The Proton worker will import new mail on its next poll.");
           scrollConversationToEnd({ behavior: "auto" });
         } catch (error) {
           showAppError(error, "Refresh messages");
         }
       });
+    });
+  });
+
+  document.querySelectorAll("[data-action='toggle-message-sound']").forEach((button) => {
+    button.addEventListener("click", async () => {
+      state.messageSoundEnabled = !state.messageSoundEnabled;
+      window.localStorage.setItem("requestManagementMessageSound", String(state.messageSoundEnabled));
+      if (state.messageSoundEnabled) {
+        const context = messageAudioContextInstance();
+        if (context?.state === "suspended") await context.resume().catch(() => {});
+        showToast("New-message sound enabled.");
+      } else {
+        showToast("New-message sound muted.");
+      }
+      render();
     });
   });
 

@@ -27,6 +27,10 @@ The app first matches a reply to an already-imported email thread using `threadI
 
 Run `sql/2026-10-30-proton-mail-integration.sql` before enabling the worker.
 
+### Manual refresh
+
+The Refresh Messages button can ask the worker to run one immediate IMAP pass. Set `PROTON_INBOUND_REFRESH_URL` and `PROTON_INBOUND_REFRESH_SECRET` in Vercel, and expose an authenticated `POST` endpoint at that URL on the worker. The endpoint should call the same `processInbox()` function used by the 60-second background loop and return only after that pass has completed. If the URL is not configured, Refresh Messages still reloads the database but cannot pull mail out of Proton ahead of the worker's next poll.
+
 ## Outbound mail
 
 The app can forward a request conversation message to the worker with `PROTON_MAIL_OUTBOUND_WEBHOOK_URL` and `PROTON_MAIL_OUTBOUND_WEBHOOK_SECRET`. The worker sends it through Proton Mail Bridge's SMTP service. The app does not store Proton credentials and does not attempt to reach a Bridge running on a user's laptop from Vercel.
