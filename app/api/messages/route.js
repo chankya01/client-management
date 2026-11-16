@@ -10,7 +10,7 @@ import {
   tablePath
 } from "../_supabaseAdmin.js";
 import { appConfig } from "../../../src/config.js";
-import { sendProtonOutbound } from "../_protonOutbound.js";
+import { emailHtmlFromText, sendProtonOutbound } from "../_protonOutbound.js";
 
 function senderIdsFromMessages(messages) {
   return [...new Set((messages || []).map((message) => message.sender_id).filter(Boolean))];
@@ -238,7 +238,8 @@ async function sendMessageNotification({ requestRow, senderProfile, message, exc
       from,
       to: recipients.map((recipient) => recipient.email),
       subject: `Update on ${label}`,
-      text
+      text,
+      html: emailHtmlFromText(text)
     })
   });
 

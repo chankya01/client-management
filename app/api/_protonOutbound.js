@@ -7,6 +7,25 @@ import {
 } from "./_supabaseAdmin.js";
 import { appConfig } from "../../src/config.js";
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+export function emailHtmlFromText(value) {
+  const body = escapeHtml(String(value || ""))
+    .replace(/(https?:\/\/[^\s<]+?)([.,!?;:]?)(?=\s|$)/g, (_, url, punctuation) => (
+      `<a href="${url}">${url}</a>${punctuation}`
+    ))
+    .replace(/\r\n?/g, "\n")
+    .replace(/\n/g, "<br />");
+  return `<div style="font-family:Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:#111827">${body}</div>`;
+}
+
 function uniqueRecipients(recipients, senderEmail, excludedEmails = []) {
   const sender = normalizeEmail(senderEmail);
   const excluded = new Set((excludedEmails || []).map(normalizeEmail).filter(Boolean));
@@ -145,6 +164,7 @@ export async function sendProtonOutbound({ requestRow, senderProfile, message, s
     to: recipients.map((recipient) => recipient.email),
     subject: cleanSubject,
     text: message,
+    html: emailHtmlFromText(message),
     requestId: requestRow.id,
     requestNumber,
     sentAt: new Date().toISOString(),

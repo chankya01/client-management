@@ -30,3 +30,5 @@ Run `sql/2026-10-30-proton-mail-integration.sql` before enabling the worker.
 ## Outbound mail
 
 The app can forward a request conversation message to the worker with `PROTON_MAIL_OUTBOUND_WEBHOOK_URL` and `PROTON_MAIL_OUTBOUND_WEBHOOK_SECRET`. The worker sends it through Proton Mail Bridge's SMTP service. The app does not store Proton credentials and does not attempt to reach a Bridge running on a user's laptop from Vercel.
+
+The outbound payload includes both `text` and `html`. The worker should send them as a MIME `multipart/alternative` email: use `text` for the plain-text part and `html` for the HTML part. The HTML is already styled as Helvetica, 14px and converts plain `http://` and `https://` URLs into clickable links. Keeping both parts preserves readable mail clients that do not render HTML.

@@ -81,6 +81,7 @@ const state = {
   publicSignatureError: "",
   publicProposalPage: "services",
   messageDrafts: {},
+  messagePreviewOpen: {},
   clientDraft: {},
   requestDraft: {},
   teamDraft: {},
@@ -724,6 +725,36 @@ function downloadFromUrl(url, fileName = "download") {
 
 function messageDraftValue(requestId) {
   return escapeHtml(state.messageDrafts[requestId] || "");
+}
+
+function messagePreviewIsOpen(requestId) {
+  return Boolean(requestId && state.messagePreviewOpen[requestId]);
+}
+
+function messagePreviewBodyMarkup(text) {
+  const value = String(text || "").trim();
+  return value
+    ? formatMessageText(value)
+    : `<span class="message-preview-empty">Your email preview will appear here.</span>`;
+}
+
+function messagePreviewMarkup(requestId) {
+  const profile = state.profile || {};
+  const sender = profile.full_name || profile.email || "You";
+  const senderEmail = profile.email ? ` &lt;${escapeHtml(profile.email)}&gt;` : "";
+  return `
+    <div class="message-preview" data-message-preview="${escapeHtml(requestId)}">
+      <div class="message-preview-toolbar">
+        <span>Mail Preview</span>
+        <span class="message-preview-meta">Helvetica · 14px</span>
+      </div>
+      <div class="message-preview-header">
+        <strong>${escapeHtml(sender)}${senderEmail}</strong>
+        <span>${escapeHtml(requestTitle() || "Request message")}</span>
+      </div>
+      <div class="message-preview-body">${messagePreviewBodyMarkup(state.messageDrafts[requestId])}</div>
+    </div>
+  `;
 }
 
 function clearMessageDraft(requestId) {
@@ -2106,8 +2137,12 @@ function adminMessagesPage() {
         <section>
           ${requestMessages.map(messageCard).join("") || emptyMessage()}
           <form class="card composer" id="internalMessageForm">
-            <label class="section-label" for="internalMessageText">New Message</label>
+            <div class="composer-heading-row">
+              <label class="section-label" for="internalMessageText">New Message</label>
+              <button class="secondary small-action" type="button" data-action="toggle-message-preview" data-preview-request="${request.id}">${messagePreviewIsOpen(request.id) ? "Hide Preview" : "Preview"}</button>
+            </div>
             <textarea id="internalMessageText" name="message" data-message-draft="${request.id}" placeholder="Write a message to the client or project team">${messageDraftValue(request.id)}</textarea>
+            ${messagePreviewIsOpen(request.id) ? messagePreviewMarkup(request.id) : ""}
             <div class="selected-file-row" data-selected-file-for="internalAttachmentInput" hidden>
               <span data-selected-file-name></span>
               <button class="remove-file-button" type="button" data-clear-file="internalAttachmentInput" aria-label="Remove selected file">×</button>
@@ -2271,8 +2306,12 @@ function messagesPage() {
           <div class="date-row conversation-row"><span>Conversation</span></div>
           ${requestMessages.map(messageCard).join("") || emptyMessage()}
           <form class="card composer" id="messageForm">
-            <label class="section-label" for="messageText">New Message</label>
+            <div class="composer-heading-row">
+              <label class="section-label" for="messageText">New Message</label>
+              <button class="secondary small-action" type="button" data-action="toggle-message-preview" data-preview-request="${state.activeRequest.id}">${messagePreviewIsOpen(state.activeRequest.id) ? "Hide Preview" : "Preview"}</button>
+            </div>
             <textarea id="messageText" name="message" data-message-draft="${state.activeRequest.id}" placeholder="Write a message about ${escapeHtml(requestTitle())}">${messageDraftValue(state.activeRequest.id)}</textarea>
+            ${messagePreviewIsOpen(state.activeRequest.id) ? messagePreviewMarkup(state.activeRequest.id) : ""}
             <div class="selected-file-row" data-selected-file-for="attachmentInput" hidden>
               <span data-selected-file-name></span>
               <button class="remove-file-button" type="button" data-clear-file="attachmentInput" aria-label="Remove selected file">×</button>
@@ -2350,7 +2389,9 @@ function messageSummaryText(message) {
 
 function formatMessageText(text) {
   return escapeHtml(text)
-    .replace(/(https?:\/\/[^\s<]+)/g, `<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>`)
+    .replace(/(https?:\/\/[^\s<]+?)([.,!?;:]?)(?=\s|$)/g, (_, url, punctuation) => (
+      `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>${punctuation}`
+    ))
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n")
     .replace(/\n/g, "<br />");
@@ -5422,10 +5463,23 @@ function attachEvents() {
   document.querySelectorAll("[data-message-draft]").forEach((textarea) => {
     const saveMessageDraft = () => {
       state.messageDrafts[textarea.dataset.messageDraft] = textarea.value;
+      const preview = textarea.closest("form")?.querySelector("[data-message-preview] .message-preview-body");
+      if (preview) preview.innerHTML = messagePreviewBodyMarkup(textarea.value);
     };
     textarea.addEventListener("input", saveMessageDraft);
     textarea.addEventListener("change", saveMessageDraft);
     textarea.addEventListener("focusout", saveMessageDraft);
+  });
+
+  document.querySelectorAll("[data-action='toggle-message-preview']").forEach((button) => {
+    button.addEventListener("click", () => {
+      const requestId = button.dataset.previewRequest;
+      if (!requestId) return;
+      const textarea = button.closest("form")?.querySelector("[data-message-draft]");
+      if (textarea) state.messageDrafts[requestId] = textarea.value;
+      state.messagePreviewOpen[requestId] = !messagePreviewIsOpen(requestId);
+      render();
+    });
   });
 
   const form = document.getElementById("messageForm");
