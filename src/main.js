@@ -1588,9 +1588,26 @@ function organizationContacts(clientId) {
   const client = state.clients.find((item) => item.id === clientId);
   const primaryEmail = normalizeEmail(client?.primary_contact_email);
   const contacts = [
-    ...state.clientContacts.filter((contact) => contact.client_id === clientId),
+    ...clientContactsForOrganization(clientId),
     ...state.team
   ];
+  const uniqueContacts = new Map();
+  contacts.forEach((contact) => {
+    const email = normalizeEmail(contact.email);
+    if (!email || email === primaryEmail || uniqueContacts.has(email)) return;
+    uniqueContacts.set(email, {
+      ...contact,
+      full_name: contact.full_name || contact.name || email
+    });
+  });
+  return [...uniqueContacts.values()]
+    .sort((left, right) => String(left.full_name || "").localeCompare(String(right.full_name || "")));
+}
+
+function clientContactsForOrganization(clientId) {
+  const client = state.clients.find((item) => item.id === clientId);
+  const primaryEmail = normalizeEmail(client?.primary_contact_email);
+  const contacts = state.clientContacts.filter((contact) => contact.client_id === clientId);
   const uniqueContacts = new Map();
   contacts.forEach((contact) => {
     const email = normalizeEmail(contact.email);
@@ -1802,7 +1819,7 @@ function adminClientsPage() {
   const editingClient = state.clients.find((client) => client.id === state.editingClientId);
   const clientStatus = editingClient?.status || clientDraftValue("status", "signed");
   const showClientForm = Boolean(state.clientFormOpen || editingClient || hasClientDraft());
-  const editingClientContacts = editingClient ? organizationContacts(editingClient.id) : [];
+  const editingClientContacts = editingClient ? clientContactsForOrganization(editingClient.id) : [];
   const clients = state.clients;
   return `
     <section class="admin-page">
@@ -1856,7 +1873,7 @@ function adminClientsPage() {
             <div>
               <strong>${escapeHtml(client.name)}</strong>
               <span>Primary: ${escapeHtml(client.primary_contact_name || "-")} · ${escapeHtml(client.primary_contact_email || "-")}</span>
-              <span>CC Contacts: ${escapeHtml(listDisplay(organizationContacts(client.id).map((contact) => `${contact.full_name || contact.email} <${contact.email}>`), "None"))}</span>
+              <span>CC Contacts: ${escapeHtml(listDisplay(clientContactsForOrganization(client.id).map((contact) => `${contact.full_name || contact.email} <${contact.email}>`), "None"))}</span>
             </div>
             <div class="row-actions">
               <span class="status-pill">${clientStatusKey(client.status) === "signed" ? "Signed" : "Unsigned"}</span>
@@ -1874,7 +1891,7 @@ function adminClientDetailPage() {
   const client = state.clients.find((item) => item.id === state.selectedClientId) || state.clients[0];
   if (!client) return emptyCard("Client Not Found", "The selected client is no longer available.");
 
-  const contacts = organizationContacts(client.id);
+  const contacts = clientContactsForOrganization(client.id);
   const clientRequests = state.requests.filter((request) => request.client_id === client.id && isActiveClientRequest(request));
   return `
     <section class="admin-page">
