@@ -1873,7 +1873,6 @@ function adminClientsPage() {
             <div>
               <strong>${escapeHtml(client.name)}</strong>
               <span>Primary: ${escapeHtml(client.primary_contact_name || "-")} · ${escapeHtml(client.primary_contact_email || "-")}</span>
-              <span>CC Contacts: ${escapeHtml(listDisplay(clientContactsForOrganization(client.id).map((contact) => `${contact.full_name || contact.email} <${contact.email}>`), "None"))}</span>
             </div>
             <div class="row-actions">
               <span class="status-pill">${clientStatusKey(client.status) === "signed" ? "Signed" : "Unsigned"}</span>

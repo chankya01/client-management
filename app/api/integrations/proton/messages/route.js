@@ -303,7 +303,6 @@ export async function POST(request) {
     const requestRow = requestMatches[0];
     const discovered = await addDiscoveredContacts(requestRow, [
       senderRecord,
-      ...addressRecords(payload.to),
       ...addressRecords(payload.cc)
     ]);
     const senderProfile = discovered.profiles[sender]
