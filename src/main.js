@@ -245,6 +245,18 @@ function isActiveClientRequest(request) {
   return requestHasSignedAgreement(request) || ["in_progress", "validation"].includes(workflowStatusKey(request?.status));
 }
 
+function isClientLifecycleRequest(request) {
+  return requestHasSignedAgreement(request)
+    || ["signed", "payment", "in_progress", "validation", "closed"].includes(workflowStatusKey(request?.status));
+}
+
+function isClientRecord(client) {
+  if (!client?.id) return false;
+  const clientRequests = state.requests.filter((request) => request.client_id === client.id);
+  if (clientRequests.length) return clientRequests.some(isClientLifecycleRequest);
+  return clientStatusKey(client.status) === "signed";
+}
+
 function lifecycleStageLabel(request) {
   if (requestHasSignedAgreement(request)) return "Signed";
   return statusLabel(request?.status);
@@ -838,6 +850,7 @@ function hasRequestDraft() {
     || String(draft.organizationName || "").trim()
     || String(draft.contactName || "").trim()
     || String(draft.contactEmail || "").trim()
+    || String(draft.invoiceEmail || "").trim()
     || String(draft.title || "").trim()
     || String(draft.description || "").trim()
     || String(draft.dueDate || "").trim()
@@ -910,6 +923,7 @@ function requestDraftFromForm(form) {
     organizationName: String(formData.get("organizationName") || ""),
     contactName: String(formData.get("contactName") || ""),
     contactEmail: String(formData.get("contactEmail") || ""),
+    invoiceEmail: String(formData.get("invoiceEmail") || ""),
     title: String(formData.get("title") || ""),
     description: String(formData.get("description") || ""),
     dueDate: String(formData.get("dueDate") || ""),
@@ -1906,13 +1920,13 @@ function adminClientsPage() {
   const clientStatus = editingClient?.status || clientDraftValue("status", "signed");
   const showClientForm = Boolean(state.clientFormOpen || editingClient || hasClientDraft());
   const editingClientContacts = editingClient ? clientContactsForOrganization(editingClient.id) : [];
-  const clients = state.clients;
+  const clients = state.clients.filter(isClientRecord);
   return `
     <section class="admin-page">
       <div class="admin-heading">
         <div>
           <h1>Client Management</h1>
-          <p class="subtitle">Create the client company, then create requests against that client.</p>
+          <p class="subtitle">Signed organizations appear here automatically after their agreement is completed.</p>
         </div>
         ${canManageClients() ? `<button class="primary" type="button" data-show-client-form>Add Client</button>` : ""}
       </div>
@@ -1973,7 +1987,8 @@ function adminClientsPage() {
 }
 
 function adminClientDetailPage() {
-  const client = state.clients.find((item) => item.id === state.selectedClientId) || state.clients[0];
+  const visibleClients = state.clients.filter(isClientRecord);
+  const client = visibleClients.find((item) => item.id === state.selectedClientId) || visibleClients[0];
   if (!client) return emptyCard("Client Not Found", "The selected client is no longer available.");
 
   const contacts = clientContactsForOrganization(client.id);
@@ -2058,6 +2073,7 @@ function adminRequestsPage() {
             <label class="field"><span>Organization</span><input name="organizationName" value="${escapeHtml(requestDraftValue("organizationName", leadClient?.name || ""))}" required /></label>
             <label class="field"><span>Primary Contact</span><input name="contactName" value="${escapeHtml(requestDraftValue("contactName", leadClient?.primary_contact_name || ""))}" required /></label>
             <label class="field"><span>Primary Contact Email</span><input name="contactEmail" type="email" value="${escapeHtml(requestDraftValue("contactEmail", leadClient?.primary_contact_email || ""))}" required /></label>
+            ${!editingRequest ? `<label class="field"><span>Invoice Email (optional)</span><input name="invoiceEmail" type="email" value="${escapeHtml(requestDraftValue("invoiceEmail"))}" /></label>` : ""}
             <label class="field"><span>Request / Email Subject</span><input name="title" value="${escapeHtml(requestDraftValue("title", editingRequest?.title || ""))}" required /></label>
             <label class="field wide"><span>Description</span><input name="description" value="${escapeHtml(requestDraftValue("description", editingRequest?.description || ""))}" /></label>
             ${ccContactCheckboxes(selectedClientId, selectedCcContacts)}
@@ -5307,7 +5323,7 @@ function attachEvents() {
             name: values.organizationName,
             contactName: values.contactName,
             email: values.contactEmail,
-            billingEmail: values.contactEmail,
+            billingEmail: values.invoiceEmail || values.contactEmail,
             status: "unsigned"
           });
           requestPayload.clientId = createdClient.id;
