@@ -17,18 +17,24 @@ function escapeHtml(value) {
 }
 
 export function emailHtmlFromText(value) {
-  const body = escapeHtml(String(value || ""))
-    .replace(/(https?:\/\/[^\s<]+?)([.,!?;:]?)(?=\s|$)/g, (_, url, punctuation) => (
-      `<a href="${url}">${url}</a>${punctuation}`
-    ))
-    .replace(/\r\n?/g, "\n")
+  const normalized = String(value || "").replace(/\r\n?/g, "\n");
+  const body = normalized.split(/(https?:\/\/[^\s<]+)/gi).map((part, index) => {
+    if (index % 2 === 0) return escapeHtml(part);
+    const trailingMatch = part.match(/[.,!?;:'")\]}]+$/);
+    const punctuation = trailingMatch?.[0] || "";
+    const url = punctuation ? part.slice(0, -punctuation.length) : part;
+    return `<a href="${escapeHtml(url)}">${escapeHtml(url)}</a>${escapeHtml(punctuation)}`;
+  }).join("")
     .replace(/\n/g, "<br />");
   return `<div style="font-family:Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:#111827">${body}</div>`;
 }
 
 function uniqueRecipients(recipients, senderEmail, excludedEmails = []) {
   const sender = normalizeEmail(senderEmail);
-  const excluded = new Set((excludedEmails || []).map(normalizeEmail).filter(Boolean));
+  const excluded = new Set([
+    ...(appConfig.suppressedEmailRecipients || []),
+    ...(excludedEmails || [])
+  ].map(normalizeEmail).filter(Boolean));
   const map = new Map();
   (recipients || []).forEach((recipient) => {
     const email = normalizeEmail(recipient.email);

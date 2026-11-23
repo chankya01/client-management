@@ -110,7 +110,10 @@ async function safeFetchRows(path) {
 
 function uniqueRecipients(recipients, senderEmail, excludedEmails = []) {
   const sender = normalizeEmail(senderEmail);
-  const excluded = new Set((excludedEmails || []).map(normalizeEmail).filter(Boolean));
+  const excluded = new Set([
+    ...(appConfig.suppressedEmailRecipients || []),
+    ...(excludedEmails || [])
+  ].map(normalizeEmail).filter(Boolean));
   const map = new Map();
   (recipients || []).forEach((recipient) => {
     const email = normalizeEmail(recipient.email);

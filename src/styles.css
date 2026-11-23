@@ -394,6 +394,14 @@ h2 {
   white-space: normal;
 }
 
+.message-text a,
+.message-preview-body a {
+  color: var(--blue);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
 .message-text.is-collapsed {
   display: -webkit-box;
   -webkit-box-orient: vertical;

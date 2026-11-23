@@ -52,6 +52,13 @@ export function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
 }
 
+function isSuppressedEmail(email) {
+  const normalizedEmail = normalizeEmail(email);
+  return Boolean(normalizedEmail) && (appConfig.suppressedEmailRecipients || [])
+    .map(normalizeEmail)
+    .includes(normalizedEmail);
+}
+
 export function requireSupabaseAdmin() {
   if (!supabaseUrl || !serviceRoleKey) {
     const missing = [
@@ -316,6 +323,9 @@ export async function generatePasswordSetupLink(email) {
 export async function sendAccountSetupEmail({ email, name, reason }) {
   const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail) return { sent: false, reason: "No email address was provided." };
+  if (isSuppressedEmail(normalizedEmail)) {
+    return { sent: false, suppressed: true, reason: "Recipient is suppressed from outbound email delivery." };
+  }
   if (!resendApiKey) {
     const reasonText = "RESEND_API_KEY is not configured.";
     console.warn(`[Clients] ${reasonText} Skipping account setup email.`);
@@ -370,6 +380,9 @@ export async function sendAccountSetupEmail({ email, name, reason }) {
 export async function sendRequestAccessEmail({ email, name, requestLabel }) {
   const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail) return { sent: false, reason: "No email address was provided." };
+  if (isSuppressedEmail(normalizedEmail)) {
+    return { sent: false, suppressed: true, reason: "Recipient is suppressed from outbound email delivery." };
+  }
   if (!resendApiKey) {
     const reasonText = "RESEND_API_KEY is not configured.";
     console.warn(`[Clients] ${reasonText} Skipping request access email.`);
@@ -411,6 +424,9 @@ export async function sendRequestAccessEmail({ email, name, requestLabel }) {
 export async function sendSignatureRequestEmail({ email, name, documentTitle, signingUrl, requiresSignature = true }) {
   const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail) return { sent: false, reason: "No email address was provided." };
+  if (isSuppressedEmail(normalizedEmail)) {
+    return { sent: false, suppressed: true, reason: "Recipient is suppressed from outbound email delivery." };
+  }
   if (!resendApiKey) {
     const reasonText = "RESEND_API_KEY is not configured.";
     console.warn(`[Clients] ${reasonText} Skipping signature request email.`);

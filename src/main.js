@@ -67,6 +67,7 @@ const state = {
   activeRequest: null,
   messages: [],
   messagesByRequest: {},
+  messageAttachmentsLoaded: {},
   unreadCounts: {},
   deliverables: [],
   history: [],
@@ -1036,10 +1037,32 @@ async function setActiveRequest(requestId, { page, markRead = false } = {}) {
   state.selectedRequestId = state.activeRequest?.id || null;
   rememberActiveRequest();
   if (state.activeRequest && pageNeedsMessages(targetPage)) {
-    const cachedMessages = state.messagesByRequest[state.activeRequest.id];
+    const activeRequestId = state.activeRequest.id;
+    const cachedMessages = state.messagesByRequest[activeRequestId];
     const hasFullMessages = cachedMessages?.every((message) => Object.prototype.hasOwnProperty.call(message, "message"));
-    state.messages = hasFullMessages ? cachedMessages : await loadMessages(state.activeRequest.id);
-    state.messagesByRequest[state.activeRequest.id] = state.messages;
+    // Keep request switching responsive: message bodies load first, while the
+    // slower attachment metadata lookup is hydrated after the conversation is
+    // already visible.
+    state.messages = hasFullMessages
+      ? cachedMessages
+      : await loadMessages(activeRequestId, { includeAttachments: false });
+    state.messagesByRequest[activeRequestId] = state.messages;
+    if (!state.messageAttachmentsLoaded[activeRequestId]) {
+      state.messageAttachmentsLoaded[activeRequestId] = "loading";
+      loadMessages(activeRequestId)
+        .then((messages) => {
+          state.messageAttachmentsLoaded[activeRequestId] = true;
+          state.messagesByRequest[activeRequestId] = messages;
+          if (state.activeRequest?.id === activeRequestId && pageNeedsMessages(state.page)) {
+            state.messages = messages;
+            render();
+          }
+        })
+        .catch((error) => {
+          state.messageAttachmentsLoaded[activeRequestId] = false;
+          console.warn(`[${APP_NAME}] Attachment metadata loading failed`, error);
+        });
+    }
   } else {
     state.messages = state.activeRequest ? (state.messagesByRequest[state.activeRequest.id] || []) : [];
   }
@@ -1139,6 +1162,7 @@ async function refreshActiveMessages({ markRead = false } = {}) {
   const previousMessages = state.messagesByRequest[state.activeRequest.id] || [];
   state.messages = await loadMessages(state.activeRequest.id);
   state.messagesByRequest[state.activeRequest.id] = state.messages;
+  state.messageAttachmentsLoaded[state.activeRequest.id] = true;
   notifyForNewMessages(previousMessages, state.messages);
   if (markRead) markRequestRead(state.activeRequest.id);
   calculateUnreadCounts();
@@ -1209,6 +1233,7 @@ async function pollActiveMessages() {
   messagePollInFlight = true;
   try {
     const requestId = state.activeRequest.id;
+    const pageAtStart = state.page;
     const currentMessages = state.messagesByRequest[requestId] || [];
     const incomingMessages = await loadMessages(requestId, {
       after: messageCreatedAt(currentMessages),
@@ -1220,9 +1245,10 @@ async function pollActiveMessages() {
     const previousSignature = messageListSignature(currentMessages);
     const nextSignature = messageListSignature(messages);
     if (previousSignature !== nextSignature) {
+      state.messagesByRequest[requestId] = messages;
+      if (state.activeRequest?.id !== requestId || state.page !== pageAtStart || !isConversationPage(state.page)) return;
       notifyForNewMessages(currentMessages, messages);
       state.messages = messages;
-      state.messagesByRequest[requestId] = messages;
       markRequestRead(requestId);
       calculateUnreadCounts();
       render();
@@ -1237,6 +1263,8 @@ async function pollActiveMessages() {
 async function refreshUnreadCounts({ onlyMissing = false, generation = loadGeneration, allowWhileLoading = false } = {}) {
   if (unreadPollInFlight || !state.session || (!allowWhileLoading && state.loading) || document.visibilityState === "hidden") return;
   const activeConversationRequestId = isConversationPage(state.page) ? state.activeRequest?.id : null;
+  const pageAtStart = state.page;
+  const requestAtStart = state.activeRequest?.id || null;
   const requestsToLoad = state.requests.filter((request) => (
     request.id !== activeConversationRequestId
     && (!onlyMissing || !state.messagesByRequest[request.id])
@@ -1257,7 +1285,11 @@ async function refreshUnreadCounts({ onlyMissing = false, generation = loadGener
     }
     calculateUnreadCounts();
     // Do not replace an active proposal document while it is being reviewed.
-    if (!document.querySelector("[data-proposal-preview-document], [data-proposal-viewer-document]")) render();
+    if (
+      state.page === pageAtStart
+      && (state.activeRequest?.id || null) === requestAtStart
+      && !document.querySelector("[data-proposal-preview-document], [data-proposal-viewer-document]")
+    ) render();
   } catch (error) {
     console.warn(`[${APP_NAME}] Unable to refresh unread counts`, error);
   } finally {
@@ -1378,6 +1410,7 @@ async function loadPortalData() {
   state.selectedRequestId = state.activeRequest?.id || null;
   state.history = isInternal() ? (history || state.requests) : state.requests;
   state.messagesByRequest = {};
+  state.messageAttachmentsLoaded = {};
 
   if (state.activeRequest) {
     calculateUnreadCounts();
@@ -2273,7 +2306,7 @@ function adminTeamPage() {
               ${[0, 1, 2].map((index) => `<input name="responsibilities" value="${escapeHtml(responsibilities[index] || "")}" placeholder="Responsibility ${index + 1}" />`).join("")}
             </fieldset>
             <button class="primary team-form-button" type="submit">${submitText}</button>
-            ${editingMember ? `<button class="primary team-form-button" type="button" data-cancel-team-edit>Cancel Edit</button>` : ""}
+            <button class="secondary team-form-button" type="button" data-cancel-team-form>${editingMember ? "Cancel" : "Close"}</button>
           </form>
         </section>` : ""}
       ` : `
@@ -2461,12 +2494,15 @@ function messageSummaryText(message) {
 }
 
 function formatMessageText(text) {
-  return escapeHtml(text)
-    .replace(/(https?:\/\/[^\s<]+?)([.,!?;:]?)(?=\s|$)/g, (_, url, punctuation) => (
-      `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>${punctuation}`
-    ))
-    .replace(/\r\n/g, "\n")
-    .replace(/\r/g, "\n")
+  const normalized = String(text || "").replace(/\r\n?/g, "\n");
+  const linked = normalized.split(/(https?:\/\/[^\s<]+)/gi).map((part, index) => {
+    if (index % 2 === 0) return escapeHtml(part);
+    const trailingMatch = part.match(/[.,!?;:'")\]}]+$/);
+    const punctuation = trailingMatch?.[0] || "";
+    const url = punctuation ? part.slice(0, -punctuation.length) : part;
+    return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(url)}</a>${escapeHtml(punctuation)}`;
+  }).join("");
+  return linked
     .replace(/\n/g, "<br />");
 }
 
@@ -5472,9 +5508,9 @@ function attachEvents() {
     });
   });
 
-  const cancelTeamEdit = document.querySelector("[data-cancel-team-edit]");
-  if (cancelTeamEdit) {
-    cancelTeamEdit.addEventListener("click", () => {
+  const cancelTeamForm = document.querySelector("[data-cancel-team-form]");
+  if (cancelTeamForm) {
+    cancelTeamForm.addEventListener("click", () => {
       state.editingTeamId = null;
       state.teamFormOpen = false;
       clearTeamDraft();
@@ -5840,6 +5876,7 @@ function resetSessionState() {
   state.activeRequest = null;
   state.messages = [];
   state.messagesByRequest = {};
+  state.messageAttachmentsLoaded = {};
   state.unreadCounts = {};
   state.deliverables = [];
   state.history = [];
