@@ -167,35 +167,6 @@ async function resolveRequestsByTags(subject) {
   }).filter((requestRow) => subjectsMatch(requestRow, subject));
 }
 
-async function requestInboundSenderEmails(requestRow) {
-  const [clients, contacts, teamProfiles] = await Promise.all([
-    supabaseAdminFetch(
-      tablePath("clients", `?select=primary_contact_email&id=eq.${encodeValue(requestRow.client_id)}&limit=1`)
-    ),
-    supabaseAdminFetch(
-      tablePath("request_client_contacts", `?select=email&request_id=eq.${encodeValue(requestRow.id)}`)
-    ),
-    // Team members are trusted senders for tagged request conversations even
-    // when they were not assigned to this particular request. This allows an
-    // owner/admin to reply from their normal mailbox and have the reply land
-    // in the same portal conversation, while the stable subject tags still
-    // constrain which request receives it.
-    supabaseAdminFetch(
-      tablePath("profiles", "?select=email&role=in.(owner,project_manager,developer,reviewer,assignee)")
-    )
-  ]);
-
-  const configuredMailbox = normalizeEmail(
-    process.env.PROTON_MAIL_ADDRESS || process.env.PROTON_MAIL_FROM || ""
-  );
-  return new Set([
-    normalizeEmail(clients?.[0]?.primary_contact_email),
-    configuredMailbox,
-    ...(contacts || []).map((contact) => normalizeEmail(contact.email)),
-    ...(teamProfiles || []).map((profile) => normalizeEmail(profile.email))
-  ].filter(Boolean));
-}
-
 async function ensureInboundProfile(email, name, clientId) {
   const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail) return null;
@@ -330,15 +301,11 @@ export async function POST(request) {
       });
     }
     const requestRow = requestMatches[0];
-    const allowedSenderEmails = await requestInboundSenderEmails(requestRow);
-    if (!allowedSenderEmails.has(sender)) {
-      return apiJson({
-        ok: true,
-        ignored: true,
-        reason: "The sender is not the client, an approved request contact, a team member, or the configured mailbox."
-      });
-    }
-
+    // Subject tags are the routing key. Once the message contains the
+    // company tag and request number for exactly one existing request, allow
+    // any sender (client, support staff, project manager, or another CC
+    // participant) into that conversation. The sender and CC addresses are
+    // recorded as contacts below for future correspondence.
     const discovered = await addDiscoveredContacts(requestRow, [
       senderRecord,
       ...addressRecords(payload.cc)
