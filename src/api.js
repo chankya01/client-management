@@ -1478,6 +1478,13 @@ export async function requestProtonInboundSync(requestId = "") {
   });
 }
 
+export async function askAiAssistant({ messages = [], context = "" } = {}) {
+  return appApi("/ai/chat", {
+    method: "POST",
+    body: JSON.stringify({ messages, context })
+  });
+}
+
 export async function loadMessageSummary(requestId) {
   const query = new URLSearchParams({ requestId, summary: "true" });
   if (useLocalAdminProxy()) return localApi(`/messages?${query.toString()}`);

@@ -1,5 +1,6 @@
 import {
   addRequestClientContact,
+  askAiAssistant,
   completePasswordRecoverySession,
   createClient,
   createClientContact,
@@ -104,6 +105,9 @@ const state = {
   signatureClientSelection: null,
   selectedSignatureDocumentId: null,
   proposalViewer: null,
+  aiAssistantOpen: false,
+  aiAssistantMessages: [],
+  aiAssistantLoading: false,
   editingClientId: null,
   editingRequestId: null,
   editingTeamId: null,
@@ -4250,6 +4254,113 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function aiAssistantContext() {
+  const request = state.activeRequest
+    ? {
+      title: state.activeRequest.title || "",
+      description: state.activeRequest.description || "",
+      serviceType: state.activeRequest.service_type || "",
+      status: state.activeRequest.status || ""
+    }
+    : null;
+  const recentMessages = (state.messages || []).slice(-12).map((message) => ({
+    role: message.is_internal ? "internal" : (message.profiles?.role === "client" ? "client" : "team"),
+    message: String(message.message || "").slice(0, 1200),
+    createdAt: message.created_at || ""
+  }));
+  return JSON.stringify({ request, recentMessages }).slice(0, 12000);
+}
+
+function aiAssistantWidget() {
+  if (!state.session || !internalRoles.includes(state.profile?.role)) return "";
+
+  const messages = state.aiAssistantMessages || [];
+  const body = messages.length
+    ? messages.map((message) => `
+      <div class="ai-assistant-message ${message.role === "user" ? "user" : "assistant"}">
+        <span class="ai-assistant-message-role">${message.role === "user" ? "You" : "AI Assistant"}</span>
+        <p>${escapeHtml(message.content).replaceAll("\n", "<br />")}</p>
+      </div>
+    `).join("")
+    : `<p class="ai-assistant-empty">Ask about a client question, draft a reply, generate a proposal, or review dashboard data.</p>`;
+
+  return `
+    ${state.aiAssistantOpen ? `
+      <aside class="ai-assistant-panel" aria-label="AI Assistant">
+        <header class="ai-assistant-header">
+          <div>
+            <strong>AI Assistant</strong>
+            <span>Drafts only — review before sending</span>
+          </div>
+          <button class="ai-assistant-close" type="button" data-ai-assistant-close aria-label="Close AI Assistant">×</button>
+        </header>
+        <div class="ai-assistant-messages" data-ai-assistant-messages aria-live="polite">
+          ${body}
+          ${state.aiAssistantLoading ? `<div class="ai-assistant-message assistant"><span class="ai-assistant-message-role">AI Assistant</span><p class="ai-assistant-thinking">Thinking…</p></div>` : ""}
+        </div>
+        <form class="ai-assistant-form" data-ai-assistant-form>
+          <label class="sr-only" for="aiAssistantPrompt">Ask the AI Assistant</label>
+          <textarea id="aiAssistantPrompt" rows="3" placeholder="Ask a question or request a draft…" ${state.aiAssistantLoading ? "disabled" : ""}></textarea>
+          <button class="primary" type="submit" ${state.aiAssistantLoading ? "disabled" : ""}>${state.aiAssistantLoading ? "Working…" : "Ask Assistant"}</button>
+        </form>
+      </aside>
+    ` : ""}
+    <button class="ai-assistant-launcher" type="button" data-ai-assistant-toggle aria-expanded="${state.aiAssistantOpen ? "true" : "false"}">
+      <span class="ai-assistant-launcher-icon" aria-hidden="true">✦</span>
+      <span>AI Assistant</span>
+    </button>
+  `;
+}
+
+function attachAiAssistantEvents() {
+  document.querySelector("[data-ai-assistant-toggle]")?.addEventListener("click", () => {
+    state.aiAssistantOpen = !state.aiAssistantOpen;
+    render();
+  });
+
+  document.querySelector("[data-ai-assistant-close]")?.addEventListener("click", () => {
+    state.aiAssistantOpen = false;
+    render();
+  });
+
+  const form = document.querySelector("[data-ai-assistant-form]");
+  if (!form) return;
+  const prompt = form.querySelector("textarea");
+  if (prompt && !state.aiAssistantLoading) prompt.focus();
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const text = String(prompt?.value || "").trim();
+    if (!text || state.aiAssistantLoading) return;
+
+    state.aiAssistantMessages = [
+      ...(state.aiAssistantMessages || []),
+      { role: "user", content: text }
+    ];
+    state.aiAssistantLoading = true;
+    render();
+
+    try {
+      const response = await askAiAssistant({
+        messages: state.aiAssistantMessages,
+        context: aiAssistantContext()
+      });
+      state.aiAssistantMessages = [
+        ...state.aiAssistantMessages,
+        { role: "assistant", content: response.message || "I could not generate a response." }
+      ];
+    } catch (error) {
+      state.aiAssistantMessages = [
+        ...state.aiAssistantMessages,
+        { role: "assistant", content: friendlyErrorMessage(error) }
+      ];
+    } finally {
+      state.aiAssistantLoading = false;
+      render();
+    }
+  });
+}
+
 function render() {
   captureUnsavedFormDrafts();
   const previousWindowScroll = window.scrollY;
@@ -4329,8 +4440,9 @@ function render() {
     "admin-settings": adminSettingsPage
   }[state.page]();
 
-  root.innerHTML = `${navHtml()}<main>${pageHtml}</main>${toastHtml()}${proposalViewerModal()}`;
+  root.innerHTML = `${navHtml()}<main>${pageHtml}</main>${toastHtml()}${proposalViewerModal()}${aiAssistantWidget()}`;
   attachEvents();
+  attachAiAssistantEvents();
   keepActiveNavVisible();
   window.requestAnimationFrame(() => {
     window.scrollTo({ top: previousWindowScroll, behavior: "auto" });
