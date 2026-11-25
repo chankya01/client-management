@@ -1479,10 +1479,26 @@ export async function requestProtonInboundSync(requestId = "") {
 }
 
 export async function askAiAssistant({ messages = [], context = "" } = {}) {
-  return appApi("/ai/chat", {
-    method: "POST",
-    body: JSON.stringify({ messages, context })
-  });
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 30000);
+
+  try {
+    return await appApi("/ai/chat", {
+      method: "POST",
+      body: JSON.stringify({ messages, context }),
+      signal: controller.signal
+    });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error("AI Assistant timed out. Please try a shorter question.");
+    }
+    if (error instanceof TypeError) {
+      throw new Error("AI Assistant could not reach the server. Please check the deployment and try again.");
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+  }
 }
 
 export async function loadMessageSummary(requestId) {

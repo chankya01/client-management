@@ -7,11 +7,16 @@ import {
   tablePath
 } from "../../_supabaseAdmin.js";
 
+export const maxDuration = 30;
+
 const ANTHROPIC_VERSION = "2023-06-01";
 const DEFAULT_MODEL = "claude-3-5-sonnet-20241022";
 const MAX_MESSAGES = 12;
 const MAX_MESSAGE_LENGTH = 6000;
 const MAX_CONTEXT_LENGTH = 12000;
+const HISTORICAL_CONTEXT_LIMIT = 120;
+const HISTORICAL_CONTEXT_TIMEOUT_MS = 3500;
+const ANTHROPIC_TIMEOUT_MS = 25000;
 
 function cleanText(value, maxLength = MAX_MESSAGE_LENGTH) {
   return String(value || "").trim().slice(0, maxLength);
@@ -37,12 +42,18 @@ function searchTerms(value) {
 
 async function relatedConversationContext(prompt) {
   try {
-    const rows = await supabaseAdminFetch(
-      tablePath(
-        "request_messages",
-        "?select=message,is_internal,created_at&is_internal=eq.false&order=created_at.desc&limit=300"
-      )
-    );
+    let timeoutId;
+    const rows = await Promise.race([
+      supabaseAdminFetch(
+        tablePath(
+          "request_messages",
+          `?select=message,is_internal,created_at&is_internal=eq.false&order=created_at.desc&limit=${HISTORICAL_CONTEXT_LIMIT}`
+        )
+      ),
+      new Promise((resolve) => {
+        timeoutId = setTimeout(() => resolve([]), HISTORICAL_CONTEXT_TIMEOUT_MS);
+      })
+    ]).finally(() => clearTimeout(timeoutId));
     const terms = searchTerms(prompt);
     return (rows || [])
       .map((row) => {
@@ -63,6 +74,10 @@ async function relatedConversationContext(prompt) {
     console.warn("[AI Assistant] historical context unavailable", error);
     return "";
   }
+}
+
+function isGreetingPrompt(value) {
+  return /^(?:hi|hello|hey|good\s+(?:morning|afternoon|evening)|howdy)[!.?,\s]*$/i.test(String(value || "").trim());
 }
 
 function assistantSystemPrompt() {
@@ -111,30 +126,51 @@ export async function POST(request) {
 
     const suppliedContext = cleanText(body.context, MAX_CONTEXT_LENGTH);
     const prompt = messages[messages.length - 1].content;
+
+    if (isGreetingPrompt(prompt)) {
+      return apiJson({
+        message: "Hello! How can I help with a client question, reply draft, proposal, or dashboard analysis?",
+        model: "assistant-greeting"
+      });
+    }
+
     const historicalContext = await relatedConversationContext(`${prompt}\n${suppliedContext}`);
     const contextBlock = [
       suppliedContext ? `Current dashboard context:\n${suppliedContext}` : "",
       historicalContext ? `Similar approved conversation examples:\n${historicalContext}` : ""
     ].filter(Boolean).join("\n\n");
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": ANTHROPIC_VERSION,
-        "content-type": "application/json"
-      },
-      body: JSON.stringify({
-        model: process.env.ANTHROPIC_MODEL || DEFAULT_MODEL,
-        max_tokens: 1200,
-        system: assistantSystemPrompt(),
-        messages: [
-          ...(contextBlock ? [{ role: "user", content: `Use this context when relevant:\n${contextBlock}` }] : []),
-          ...messages
-        ]
-      }),
-      cache: "no-store"
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), ANTHROPIC_TIMEOUT_MS);
+    let response;
+    try {
+      response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": ANTHROPIC_VERSION,
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          model: process.env.ANTHROPIC_MODEL || DEFAULT_MODEL,
+          max_tokens: 1200,
+          system: assistantSystemPrompt(),
+          messages: [
+            ...(contextBlock ? [{ role: "user", content: `Use this context when relevant:\n${contextBlock}` }] : []),
+            ...messages
+          ]
+        }),
+        cache: "no-store",
+        signal: controller.signal
+      });
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        return apiJson({ error: "The AI provider took too long to respond. Please try again with a shorter question." }, 504);
+      }
+      return apiJson({ error: "The AI provider could not be reached. Please try again shortly." }, 502);
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
