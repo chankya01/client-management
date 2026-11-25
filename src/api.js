@@ -1450,7 +1450,7 @@ export async function loadMessages(requestId, { after = "", includeAttachments =
 
   const { data, error } = await supabase
     .from("request_messages")
-    .select("id, request_id, sender_id, message, is_internal, created_at, profiles(full_name, role)")
+    .select("id, request_id, sender_id, message, message_html, is_internal, created_at, profiles(full_name, role)")
     .eq("request_id", requestId)
     .gte("created_at", after || "1970-01-01T00:00:00.000Z")
     .order("created_at", { ascending: true });
@@ -1475,6 +1475,13 @@ export async function requestProtonInboundSync(requestId = "") {
   return appApi("/integrations/proton/refresh", {
     method: "POST",
     body: JSON.stringify(payload)
+  });
+}
+
+export async function askAiAssistant({ messages = [], context = "" } = {}) {
+  return appApi("/ai/chat", {
+    method: "POST",
+    body: JSON.stringify({ messages, context })
   });
 }
 
@@ -1608,11 +1615,11 @@ function mergeMessagesAndAttachments(messages, attachments) {
   ));
 }
 
-export async function createMessage(requestId, senderId, message, { notify = true, excludeEmails = [] } = {}) {
+export async function createMessage(requestId, senderId, message, { html = "", notify = true, excludeEmails = [] } = {}) {
   if (useLocalAdminProxy()) {
     return localApi("/messages", {
       method: "POST",
-      body: JSON.stringify({ requestId, senderId, message, notify, excludeEmails })
+      body: JSON.stringify({ requestId, senderId, message, html, notify, excludeEmails })
     });
   }
 
@@ -1623,6 +1630,7 @@ export async function createMessage(requestId, senderId, message, { notify = tru
       request_id: requestId,
       sender_id: senderId,
       message,
+      message_html: html,
       is_internal: false,
       created_at: new Date().toISOString(),
       profiles: { full_name: senderProfile.full_name, role: senderProfile.role }
@@ -1632,7 +1640,7 @@ export async function createMessage(requestId, senderId, message, { notify = tru
 
   return appApi("/messages", {
     method: "POST",
-    body: JSON.stringify({ requestId, senderId, message, notify, excludeEmails })
+    body: JSON.stringify({ requestId, senderId, message, html, notify, excludeEmails })
   });
 }
 

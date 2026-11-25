@@ -8,6 +8,7 @@ import {
   supabaseAdminFetch,
   tablePath
 } from "../../../_supabaseAdmin.js";
+import { sanitizeRichTextHtml } from "../../../../../src/messageFormatting.js";
 
 function configuredSecret() {
   return String(process.env.PROTON_INBOUND_WEBHOOK_SECRET || "").trim();
@@ -276,6 +277,7 @@ export async function POST(request) {
     const sender = senderRecord.email;
     const subject = String(payload.subject || "").trim();
     const body = cleanBody(payload);
+    const bodyHtml = sanitizeRichTextHtml(payload.html || payload.textHtml || payload.text_html || "");
     const receivedAt = normalizedReceivedAt(payload.receivedAt || payload.received_at || payload.date);
     const externalMessageId = String(payload.messageId || payload.message_id || payload.id || headerValue(payload, ["message-id"]) || "").trim();
     const externalThreadId = String(payload.threadId || payload.thread_id || payload.inReplyTo || payload.in_reply_to || headerValue(payload, ["in-reply-to", "references"]) || "").trim();
@@ -327,6 +329,7 @@ export async function POST(request) {
         request_id: requestRow.id,
         sender_id: senderProfile.id,
         message: body,
+        message_html: bodyHtml || null,
         is_internal: false,
         external_message_id: externalMessageId,
         external_thread_id: externalThreadId || null,

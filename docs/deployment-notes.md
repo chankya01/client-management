@@ -2,6 +2,23 @@
 
 This file records manual database migrations and deployment notes so each environment change has a reference in code.
 
+## 2026-11-25 — Rich message editor
+
+- Migration file: [`sql/2026-11-25-rich-message-formatting.sql`](../sql/2026-11-25-rich-message-formatting.sql)
+- Apply the migration in Supabase before testing the new composer.
+- The editor stores the searchable plain text in `request_messages.message` and sanitized formatting in `request_messages.message_html`.
+- The same sanitized HTML is used by the dashboard preview and outbound Proton/Resend email. Links are restricted to `http`, `https`, and `mailto` URLs.
+
+## 2026-11-24 — AI Assistant development branch
+
+- Branch: `dev/ai-assistant`
+- No database migration required for the initial assistant panel.
+- Added a separate bottom-right **AI Assistant** panel; the existing Proposal Assistant remains unchanged.
+- The server-only `/api/ai/chat` route uses Claude for reply drafts and context-aware dashboard questions.
+- Configure `ANTHROPIC_API_KEY` in Vercel for the target environment. `ANTHROPIC_MODEL` is optional.
+- The initial route is read-only: it does not create records or send email. Staff must review generated drafts.
+- Historical client-facing messages are searched for relevant examples and sensitive emails, phone numbers, and links are redacted before being supplied to Claude.
+
 ## 2026-10-03 — Internal signature documents foundation
 
 - Branch: `feature-internal-signatures`

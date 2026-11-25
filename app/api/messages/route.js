@@ -10,6 +10,7 @@ import {
   tablePath
 } from "../_supabaseAdmin.js";
 import { appConfig } from "../../../src/config.js";
+import { sanitizeRichTextHtml } from "../../../src/messageFormatting.js";
 import { emailHtmlFromText, sendProtonOutbound } from "../_protonOutbound.js";
 
 function senderIdsFromMessages(messages) {
@@ -211,7 +212,7 @@ async function requestLabel(requestRow) {
   return storedNumber || requestRow?.title || "the request";
 }
 
-async function sendMessageNotification({ requestRow, senderProfile, message, excludedEmails = [] }) {
+async function sendMessageNotification({ requestRow, senderProfile, message, html = "", excludedEmails = [] }) {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.NOTIFICATION_FROM || "Clients <notifications@example.com>";
   if (!apiKey) {
@@ -240,7 +241,7 @@ async function sendMessageNotification({ requestRow, senderProfile, message, exc
       to: recipients.map((recipient) => recipient.email),
       subject: `Update on ${label}`,
       text,
-      html: emailHtmlFromText(text)
+      html: sanitizeRichTextHtml(html) || emailHtmlFromText(text)
     })
   });
 
@@ -281,7 +282,7 @@ export async function GET(request) {
     const afterFilter = after ? `&created_at=gte.${encodeValue(after)}` : "";
     const select = summary
       ? "id,sender_id,created_at,profiles(role)"
-      : "id,request_id,sender_id,message,is_internal,created_at";
+      : "id,request_id,sender_id,message,message_html,is_internal,created_at";
     const messages = await supabaseAdminFetch(
       tablePath("request_messages", `?select=${select}&request_id=eq.${encodeValue(requestId)}${afterFilter}&order=created_at.asc`)
     );
@@ -302,6 +303,7 @@ export async function POST(request) {
     const body = await request.json();
     const requestId = body.requestId;
     const message = String(body.message || "").trim();
+    const messageHtml = sanitizeRichTextHtml(body.html || "");
     if (!requestId) return apiJson({ error: "Request id is required." }, 400);
     if (!message) return apiJson({ error: "Message is required." }, 400);
 
@@ -321,6 +323,7 @@ export async function POST(request) {
         request_id: requestId,
         sender_id: profile.id,
         message,
+        message_html: messageHtml || null,
         is_internal: false
       })
     });
@@ -334,6 +337,7 @@ export async function POST(request) {
         requestRow,
         senderProfile: profile,
         message,
+        html: messageHtml,
         subject: body.subject,
         messageRowId: messageRows?.[0]?.id
       })
@@ -342,7 +346,7 @@ export async function POST(request) {
     // Proton is the canonical delivery path when configured; avoid sending a
     // duplicate generic notification through the legacy Resend/Onchange path.
     const notification = body.notify !== false && !proton.configured
-      ? await sendMessageNotification({ requestRow, senderProfile: profile, message, excludedEmails: body.excludeEmails || [] })
+      ? await sendMessageNotification({ requestRow, senderProfile: profile, message, html: messageHtml, excludedEmails: body.excludeEmails || [] })
       : { sent: false, reason: proton.configured ? "Proton email delivery used." : "Notification disabled for this message." };
 
     // The database message is already saved at this point. Do not turn a

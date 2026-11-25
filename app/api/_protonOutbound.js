@@ -143,7 +143,7 @@ function outboundMessageId(threadId, hasParent) {
   return `<clients-message-${randomPart}@accessible.org>`;
 }
 
-export async function sendProtonOutbound({ requestRow, senderProfile, message, subject, recipients: explicitRecipients, messageRowId }) {
+export async function sendProtonOutbound({ requestRow, senderProfile, message, html = "", subject, recipients: explicitRecipients, messageRowId }) {
   const endpoint = String(process.env.PROTON_MAIL_OUTBOUND_WEBHOOK_URL || "").trim();
   if (!endpoint) return { sent: false, configured: false, reason: "Proton outbound worker is not configured." };
 
@@ -170,7 +170,7 @@ export async function sendProtonOutbound({ requestRow, senderProfile, message, s
     to: recipients.map((recipient) => recipient.email),
     subject: cleanSubject,
     text: message,
-    html: emailHtmlFromText(message),
+    html: html || emailHtmlFromText(message),
     requestId: requestRow.id,
     requestNumber,
     sentAt: new Date().toISOString(),
