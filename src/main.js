@@ -108,6 +108,7 @@ const state = {
   selectedSignatureDocumentId: null,
   proposalViewer: null,
   aiAssistantOpen: false,
+  aiAssistantExpanded: false,
   aiAssistantMessages: [],
   aiAssistantLoading: false,
   editingClientId: null,
@@ -4346,6 +4347,70 @@ function aiAssistantContext() {
   return JSON.stringify({ request, recentMessages }).slice(0, 12000);
 }
 
+function aiAssistantInlineMarkup(value) {
+  let text = escapeHtml(value);
+  const markdownLinks = [];
+  text = text.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/gi, (_match, label, url) => {
+    const token = `__AI_LINK_${markdownLinks.length}__`;
+    markdownLinks.push(`<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`);
+    return token;
+  });
+  text = text.replace(/`([^`]+)`/g, "<code>$1</code>");
+  text = text.replace(/(https?:\/\/[^\s<]+)/gi, (url) => {
+    if (url.includes('href="') || url.includes('">')) return url;
+    const trailingMatch = url.match(/[.,!?;:'")\]}]+$/);
+    const punctuation = trailingMatch?.[0] || "";
+    const cleanUrl = punctuation ? url.slice(0, -punctuation.length) : url;
+    return `<a href="${cleanUrl}" target="_blank" rel="noopener noreferrer">${cleanUrl}</a>${punctuation}`;
+  });
+  return text
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/__([^_]+)__/g, "<strong>$1</strong>")
+    .replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, "<em>$1</em>")
+    .replace(/(?<!_)_([^_]+)_(?!_)/g, "<em>$1</em>")
+    .replace(/__AI_LINK_(\d+)__/g, (_match, index) => markdownLinks[Number(index)] || "");
+}
+
+function aiAssistantResponseMarkup(value) {
+  const lines = String(value || "").replace(/\r\n?/g, "\n").split("\n");
+  const output = [];
+  let listType = "";
+  const closeList = () => {
+    if (listType) output.push(`</${listType}>`);
+    listType = "";
+  };
+
+  lines.forEach((line) => {
+    const heading = line.match(/^\s*(#{1,3})\s+(.+?)\s*$/);
+    const bullet = line.match(/^\s*[-*]\s+(.+)$/);
+    const numbered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+    if (!line.trim()) {
+      closeList();
+      return;
+    }
+    if (heading) {
+      closeList();
+      const level = Math.min(3, heading[1].length);
+      output.push(`<h${level}>${aiAssistantInlineMarkup(heading[2])}</h${level}>`);
+      return;
+    }
+    if (bullet || numbered) {
+      const nextType = bullet ? "ul" : "ol";
+      if (listType !== nextType) {
+        closeList();
+        listType = nextType;
+        output.push(`<${listType}>`);
+      }
+      output.push(`<li>${aiAssistantInlineMarkup((bullet || numbered)[1])}</li>`);
+      return;
+    }
+    closeList();
+    output.push(`<p>${aiAssistantInlineMarkup(line)}</p>`);
+  });
+  closeList();
+  return output.join("") || `<p>${escapeHtml(value || "")}</p>`;
+}
+
 function aiAssistantWidget() {
   if (!state.session || !internalRoles.includes(state.profile?.role)) return "";
 
@@ -4354,20 +4419,23 @@ function aiAssistantWidget() {
     ? messages.map((message) => `
       <div class="ai-assistant-message ${message.role === "user" ? "user" : "assistant"}">
         <span class="ai-assistant-message-role">${message.role === "user" ? "You" : "AI Assistant"}</span>
-        <p>${escapeHtml(message.content).replaceAll("\n", "<br />")}</p>
+        ${message.role === "user" ? `<p>${escapeHtml(message.content).replaceAll("\n", "<br />")}</p>` : aiAssistantResponseMarkup(message.content)}
       </div>
     `).join("")
     : `<p class="ai-assistant-empty">Ask about a client question, draft a reply, generate a proposal, or review dashboard data.</p>`;
 
   return `
     ${state.aiAssistantOpen ? `
-      <aside class="ai-assistant-panel" aria-label="AI Assistant">
+      <aside class="ai-assistant-panel ${state.aiAssistantExpanded ? "is-expanded" : ""}" aria-label="AI Assistant">
         <header class="ai-assistant-header">
           <div>
             <strong>AI Assistant</strong>
             <span>Drafts only — review before sending</span>
           </div>
-          <button class="ai-assistant-close" type="button" data-ai-assistant-close aria-label="Close AI Assistant">×</button>
+          <div class="ai-assistant-header-actions">
+            <button class="ai-assistant-expand" type="button" data-ai-assistant-expand aria-label="${state.aiAssistantExpanded ? "Restore AI Assistant size" : "Enlarge AI Assistant"}" title="${state.aiAssistantExpanded ? "Restore size" : "Enlarge"}">${state.aiAssistantExpanded ? "⤡" : "⤢"}</button>
+            <button class="ai-assistant-close" type="button" data-ai-assistant-close aria-label="Close AI Assistant">×</button>
+          </div>
         </header>
         <div class="ai-assistant-messages" data-ai-assistant-messages aria-live="polite">
           ${body}
@@ -4395,6 +4463,11 @@ function attachAiAssistantEvents() {
 
   document.querySelector("[data-ai-assistant-close]")?.addEventListener("click", () => {
     state.aiAssistantOpen = false;
+    render();
+  });
+
+  document.querySelector("[data-ai-assistant-expand]")?.addEventListener("click", () => {
+    state.aiAssistantExpanded = !state.aiAssistantExpanded;
     render();
   });
 
