@@ -45,6 +45,7 @@ import {
   uploadRequestAttachment
 } from "./api.js";
 import { supabase } from "./supabase.js";
+import { richTextHtmlFromPlainText, sanitizeRichTextHtml } from "./messageFormatting.js";
 
 const root = document.getElementById("root");
 const APP_NAME = "Clients";
@@ -84,6 +85,7 @@ const state = {
   publicSignatureError: "",
   publicProposalPage: "services",
   messageDrafts: {},
+  messageHtmlDrafts: {},
   messagePreviewOpen: {},
   messageSoundEnabled: typeof window !== "undefined"
     && window.localStorage.getItem("requestManagementMessageSound") === "true",
@@ -748,14 +750,20 @@ function messageDraftValue(requestId) {
   return escapeHtml(state.messageDrafts[requestId] || "");
 }
 
+function messageHtmlDraftValue(requestId) {
+  const savedHtml = sanitizeRichTextHtml(state.messageHtmlDrafts[requestId] || "");
+  return savedHtml || richTextHtmlFromPlainText(state.messageDrafts[requestId] || "");
+}
+
 function messagePreviewIsOpen(requestId) {
   return Boolean(requestId && state.messagePreviewOpen[requestId]);
 }
 
-function messagePreviewBodyMarkup(text) {
+function messagePreviewBodyMarkup(text, html = "") {
   const value = String(text || "").trim();
-  return value
-    ? formatMessageText(value)
+  const richHtml = sanitizeRichTextHtml(html);
+  return value || richHtml
+    ? (richHtml || formatMessageText(value))
     : `<span class="message-preview-empty">Your email preview will appear here.</span>`;
 }
 
@@ -773,7 +781,7 @@ function messagePreviewMarkup(requestId) {
         <strong>${escapeHtml(sender)}${senderEmail}</strong>
         <span>${escapeHtml(requestTitle() || "Request message")}</span>
       </div>
-      <div class="message-preview-body">${messagePreviewBodyMarkup(state.messageDrafts[requestId])}</div>
+      <div class="message-preview-body">${messagePreviewBodyMarkup(state.messageDrafts[requestId], state.messageHtmlDrafts[requestId])}</div>
     </div>
   `;
 }
@@ -781,6 +789,7 @@ function messagePreviewMarkup(requestId) {
 function clearMessageDraft(requestId) {
   if (!requestId) return;
   delete state.messageDrafts[requestId];
+  delete state.messageHtmlDrafts[requestId];
 }
 
 function clearMessageComposer(form, requestId) {
@@ -796,15 +805,42 @@ function clearMessageComposer(form, requestId) {
   form?.reset();
   const textarea = form?.querySelector("textarea[data-message-draft]");
   if (textarea) textarea.value = "";
+  const editor = form?.querySelector("[data-message-editor]");
+  if (editor) editor.innerHTML = "";
 }
 
-function addOptimisticMessage(requestId, message, isInternal = false) {
+function syncMessageEditor(editor) {
+  if (!editor) return { message: "", html: "" };
+  const requestId = editor.dataset.messageEditor;
+  const message = String(editor.innerText || editor.textContent || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  const html = sanitizeRichTextHtml(editor.innerHTML);
+  const textarea = document.getElementById(editor.dataset.messageTextInput);
+  if (textarea) textarea.value = message;
+  if (requestId) {
+    state.messageDrafts[requestId] = message;
+    state.messageHtmlDrafts[requestId] = html;
+  }
+  const preview = editor.closest("form")?.querySelector("[data-message-preview] .message-preview-body");
+  if (preview) preview.innerHTML = messagePreviewBodyMarkup(message, html);
+  return { message, html };
+}
+
+function messageEditorPayload(form) {
+  const editor = form?.querySelector("[data-message-editor]");
+  return syncMessageEditor(editor);
+}
+
+function addOptimisticMessage(requestId, message, isInternal = false, html = "") {
   if (!requestId || !message || !state.profile) return;
   const optimisticMessage = {
     id: `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     request_id: requestId,
     sender_id: state.profile.id,
     message,
+    message_html: sanitizeRichTextHtml(html),
     is_internal: isInternal,
     created_at: new Date().toISOString(),
     profiles: {
@@ -2211,6 +2247,44 @@ function adminRequestDetailPage() {
   `;
 }
 
+function messageEditorToolbar() {
+  return `
+    <div class="message-editor-toolbar" role="toolbar" aria-label="Message formatting">
+      <button type="button" class="message-editor-tool" data-editor-command="bold" title="Bold"><strong>B</strong></button>
+      <button type="button" class="message-editor-tool" data-editor-command="italic" title="Italic"><em>I</em></button>
+      <button type="button" class="message-editor-tool" data-editor-command="underline" title="Underline"><u>U</u></button>
+      <select class="message-editor-style" data-editor-block title="Text style" aria-label="Text style">
+        <option value="p">Paragraph</option>
+        <option value="h2">Heading</option>
+        <option value="h3">Small heading</option>
+      </select>
+      <button type="button" class="message-editor-tool" data-editor-command="insertUnorderedList" title="Bulleted list">• List</button>
+      <button type="button" class="message-editor-tool" data-editor-command="insertOrderedList" title="Numbered list">1. List</button>
+      <button type="button" class="message-editor-tool" data-editor-link title="Add link">Link</button>
+      <button type="button" class="message-editor-tool" data-editor-command="removeFormat" title="Clear formatting">Clear</button>
+    </div>
+  `;
+}
+
+function messageEditorMarkup({ requestId, textareaId, placeholder }) {
+  return `
+    <div class="message-editor-shell">
+      ${messageEditorToolbar()}
+      <div
+        class="message-editor"
+        contenteditable="true"
+        role="textbox"
+        aria-multiline="true"
+        aria-label="Message"
+        data-message-editor="${escapeHtml(requestId)}"
+        data-message-text-input="${escapeHtml(textareaId)}"
+        data-message-placeholder="${escapeHtml(placeholder)}"
+      >${messageHtmlDraftValue(requestId)}</div>
+      <textarea id="${escapeHtml(textareaId)}" name="message" data-message-draft="${escapeHtml(requestId)}" tabindex="-1" aria-hidden="true" hidden>${messageDraftValue(requestId)}</textarea>
+    </div>
+  `;
+}
+
 function adminMessagesPage() {
   const request = state.activeRequest || state.requests[0];
   if (!request) return emptyCard("Messages", "Create a request first, then messages will appear here.");
@@ -2250,7 +2324,7 @@ function adminMessagesPage() {
               <label class="section-label" for="internalMessageText">New Message</label>
               <button class="secondary small-action" type="button" data-action="toggle-message-preview" data-preview-request="${request.id}">${messagePreviewIsOpen(request.id) ? "Hide Preview" : "Preview"}</button>
             </div>
-            <textarea id="internalMessageText" name="message" data-message-draft="${request.id}" placeholder="Write a message to the client or project team">${messageDraftValue(request.id)}</textarea>
+            ${messageEditorMarkup({ requestId: request.id, textareaId: "internalMessageText", placeholder: "Write a message to the client or project team" })}
             ${messagePreviewIsOpen(request.id) ? messagePreviewMarkup(request.id) : ""}
             <div class="selected-file-row" data-selected-file-for="internalAttachmentInput" hidden>
               <span data-selected-file-name></span>
@@ -2420,7 +2494,7 @@ function messagesPage() {
               <label class="section-label" for="messageText">New Message</label>
               <button class="secondary small-action" type="button" data-action="toggle-message-preview" data-preview-request="${state.activeRequest.id}">${messagePreviewIsOpen(state.activeRequest.id) ? "Hide Preview" : "Preview"}</button>
             </div>
-            <textarea id="messageText" name="message" data-message-draft="${state.activeRequest.id}" placeholder="Write a message about ${escapeHtml(requestTitle())}">${messageDraftValue(state.activeRequest.id)}</textarea>
+            ${messageEditorMarkup({ requestId: state.activeRequest.id, textareaId: "messageText", placeholder: `Write a message about ${requestTitle()}` })}
             ${messagePreviewIsOpen(state.activeRequest.id) ? messagePreviewMarkup(state.activeRequest.id) : ""}
             <div class="selected-file-row" data-selected-file-for="attachmentInput" hidden>
               <span data-selected-file-name></span>
@@ -2451,6 +2525,7 @@ function messageCard(message) {
     : (message.profiles?.full_name || "Team Member");
   const attachment = message.attachment;
   const messageText = displayMessageText(message.message);
+  const messageHtml = sanitizeRichTextHtml(message.message_html || "");
   const isLongMessage = messageText.length > 420 || messageText.split(/\r?\n/).length > 8;
   return `
     <article class="message-card ${isClient ? "client" : "team"}">
@@ -2459,7 +2534,7 @@ function messageCard(message) {
         <time class="time">${formatTime(message.created_at)}</time>
       </div>
       ${messageText && messageText !== "Attachment" ? `
-        <div class="message-text ${isLongMessage ? "is-collapsed" : ""}" data-message-text>${formatMessageText(messageText)}</div>
+        <div class="message-text ${isLongMessage ? "is-collapsed" : ""}" data-message-text>${messageHtml || formatMessageText(messageText)}</div>
         ${isLongMessage ? `<button class="message-toggle" type="button" data-action="toggle-message">Show More</button>` : ""}
       ` : ""}
       ${attachment ? attachmentCard(attachment) : ""}
@@ -5681,23 +5756,54 @@ function attachEvents() {
 
   attachFileInputRemovers();
 
-  document.querySelectorAll("[data-message-draft]").forEach((textarea) => {
-    const saveMessageDraft = () => {
-      state.messageDrafts[textarea.dataset.messageDraft] = textarea.value;
-      const preview = textarea.closest("form")?.querySelector("[data-message-preview] .message-preview-body");
-      if (preview) preview.innerHTML = messagePreviewBodyMarkup(textarea.value);
-    };
-    textarea.addEventListener("input", saveMessageDraft);
-    textarea.addEventListener("change", saveMessageDraft);
-    textarea.addEventListener("focusout", saveMessageDraft);
+  document.querySelectorAll("[data-message-editor]").forEach((editor) => {
+    const saveMessageDraft = () => syncMessageEditor(editor);
+    editor.addEventListener("input", saveMessageDraft);
+    editor.addEventListener("change", saveMessageDraft);
+    editor.addEventListener("focusout", saveMessageDraft);
+  });
+
+  document.querySelectorAll("[data-editor-command]").forEach((button) => {
+    button.addEventListener("mousedown", (event) => event.preventDefault());
+    button.addEventListener("click", () => {
+      const editor = button.closest(".message-editor-shell")?.querySelector("[data-message-editor]");
+      if (!editor) return;
+      editor.focus();
+      document.execCommand(button.dataset.editorCommand, false);
+      syncMessageEditor(editor);
+    });
+  });
+
+  document.querySelectorAll("[data-editor-block]").forEach((select) => {
+    select.addEventListener("mousedown", (event) => event.stopPropagation());
+    select.addEventListener("change", () => {
+      const editor = select.closest(".message-editor-shell")?.querySelector("[data-message-editor]");
+      if (!editor) return;
+      editor.focus();
+      document.execCommand("formatBlock", false, select.value);
+      syncMessageEditor(editor);
+    });
+  });
+
+  document.querySelectorAll("[data-editor-link]").forEach((button) => {
+    button.addEventListener("mousedown", (event) => event.preventDefault());
+    button.addEventListener("click", () => {
+      const editor = button.closest(".message-editor-shell")?.querySelector("[data-message-editor]");
+      if (!editor) return;
+      editor.focus();
+      const url = window.prompt("Paste a link (https://...)", "https://");
+      if (!url || !/^https?:\/\//i.test(url.trim())) return;
+      document.execCommand("createLink", false, url.trim());
+      syncMessageEditor(editor);
+    });
   });
 
   document.querySelectorAll("[data-action='toggle-message-preview']").forEach((button) => {
     button.addEventListener("click", () => {
       const requestId = button.dataset.previewRequest;
       if (!requestId) return;
-      const textarea = button.closest("form")?.querySelector("[data-message-draft]");
-      if (textarea) state.messageDrafts[requestId] = textarea.value;
+      const editor = button.closest("form")?.querySelector("[data-message-editor]");
+      if (editor) syncMessageEditor(editor);
       state.messagePreviewOpen[requestId] = !messagePreviewIsOpen(requestId);
       render();
     });
@@ -5709,7 +5815,8 @@ function attachEvents() {
       event.preventDefault();
       const messageForm = event.currentTarget;
       if (messageForm.dataset.submitting === "true") return;
-      const message = document.getElementById("messageText").value.trim();
+      const editorPayload = messageEditorPayload(messageForm);
+      const { message } = editorPayload;
       const file = document.getElementById("attachmentInput").files[0];
 
       if (!message && !file) {
@@ -5721,10 +5828,10 @@ function attachEvents() {
         try {
           messageForm.dataset.submitting = "true";
           const messageResult = message
-            ? await createMessage(state.activeRequest.id, state.profile.id, message)
+            ? await createMessage(state.activeRequest.id, state.profile.id, message, { html: editorPayload.html })
             : null;
           if (file) await uploadRequestAttachment({ request: state.activeRequest, profile: state.profile, file });
-          if (message) addOptimisticMessage(state.activeRequest.id, message, false);
+          if (message) addOptimisticMessage(state.activeRequest.id, message, false, editorPayload.html);
           clearMessageComposer(messageForm, state.activeRequest.id);
           try {
             await refreshActiveMessages({ markRead: true });
@@ -5754,7 +5861,8 @@ function attachEvents() {
       event.preventDefault();
       const messageForm = event.currentTarget;
       if (messageForm.dataset.submitting === "true") return;
-      const message = document.getElementById("internalMessageText").value.trim();
+      const editorPayload = messageEditorPayload(messageForm);
+      const { message } = editorPayload;
       const file = document.getElementById("internalAttachmentInput").files[0];
 
       if (!message && !file) {
@@ -5766,10 +5874,10 @@ function attachEvents() {
         try {
           messageForm.dataset.submitting = "true";
           const messageResult = message
-            ? await createMessage(state.activeRequest.id, state.profile.id, message)
+            ? await createMessage(state.activeRequest.id, state.profile.id, message, { html: editorPayload.html })
             : null;
           if (file) await uploadRequestAttachment({ request: state.activeRequest, profile: state.profile, file });
-          if (message) addOptimisticMessage(state.activeRequest.id, message, true);
+          if (message) addOptimisticMessage(state.activeRequest.id, message, true, editorPayload.html);
           clearMessageComposer(messageForm, state.activeRequest.id);
           try {
             await refreshActiveMessages({ markRead: true });

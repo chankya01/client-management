@@ -2,6 +2,13 @@
 
 This file records manual database migrations and deployment notes so each environment change has a reference in code.
 
+## 2026-11-25 — Rich message editor
+
+- Migration file: [`sql/2026-11-25-rich-message-formatting.sql`](../sql/2026-11-25-rich-message-formatting.sql)
+- Apply the migration in Supabase before testing the new composer.
+- The editor stores the searchable plain text in `request_messages.message` and sanitized formatting in `request_messages.message_html`.
+- The same sanitized HTML is used by the dashboard preview and outbound Proton/Resend email. Links are restricted to `http`, `https`, and `mailto` URLs.
+
 ## 2026-11-24 — AI Assistant development branch
 
 - Branch: `dev/ai-assistant`

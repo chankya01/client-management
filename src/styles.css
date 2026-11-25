@@ -809,6 +809,88 @@ h2 {
   line-height: 1.5;
 }
 
+.message-editor-shell {
+  margin-top: 10px;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.message-editor-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+  background: #f8fafc;
+}
+
+.message-editor-tool,
+.message-editor-style {
+  min-height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 9px;
+  color: var(--blue);
+  background: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.message-editor-tool:hover,
+.message-editor-tool:focus-visible,
+.message-editor-style:focus-visible {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.14);
+  outline: none;
+}
+
+.message-editor-style {
+  font-weight: 600;
+}
+
+.message-editor {
+  min-height: 140px;
+  padding: 18px;
+  color: #111827;
+  font-size: 18px;
+  line-height: 1.5;
+  outline: none;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.message-editor:empty::before {
+  content: attr(data-message-placeholder);
+  color: #9ca3af;
+  pointer-events: none;
+}
+
+.message-editor p,
+.message-editor h2,
+.message-editor h3,
+.message-editor blockquote {
+  margin: 0 0 10px;
+}
+
+.message-editor ul,
+.message-editor ol {
+  margin: 0 0 10px;
+  padding-left: 28px;
+}
+
+.message-editor a,
+.message-preview-body a {
+  color: #2563eb;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
 .composer-heading-row {
   display: flex;
   align-items: center;
