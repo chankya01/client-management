@@ -109,6 +109,7 @@ const state = {
   proposalViewer: null,
   aiAssistantOpen: false,
   aiAssistantExpanded: false,
+  aiAssistantDraft: "",
   aiAssistantMessages: [],
   aiAssistantLoading: false,
   editingClientId: null,
@@ -4443,7 +4444,7 @@ function aiAssistantWidget() {
         </div>
         <form class="ai-assistant-form" data-ai-assistant-form>
           <label class="sr-only" for="aiAssistantPrompt">Ask the AI Assistant</label>
-          <textarea id="aiAssistantPrompt" rows="3" placeholder="Ask a question or request a draft…" ${state.aiAssistantLoading ? "disabled" : ""}></textarea>
+          <textarea id="aiAssistantPrompt" rows="3" placeholder="Ask a question or request a draft…" ${state.aiAssistantLoading ? "disabled" : ""}>${escapeHtml(state.aiAssistantDraft || "")}</textarea>
           <button class="primary" type="submit" ${state.aiAssistantLoading ? "disabled" : ""}>${state.aiAssistantLoading ? "Working…" : "Ask Assistant"}</button>
         </form>
       </aside>
@@ -4474,12 +4475,16 @@ function attachAiAssistantEvents() {
   const form = document.querySelector("[data-ai-assistant-form]");
   if (!form) return;
   const prompt = form.querySelector("textarea");
+  prompt?.addEventListener("input", () => {
+    state.aiAssistantDraft = prompt.value;
+  });
   if (prompt && !state.aiAssistantLoading) prompt.focus();
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const text = String(prompt?.value || "").trim();
     if (!text || state.aiAssistantLoading) return;
+    state.aiAssistantDraft = "";
 
     state.aiAssistantMessages = [
       ...(state.aiAssistantMessages || []),
